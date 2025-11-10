@@ -36,8 +36,8 @@
 
 // Client specific.
 #ifdef CLIENT_DLL
-#include "c_tf_player.h"
 #include "c_baseviewmodel.h"
+#include "c_tf_player.h"
 #include "c_te_effect_dispatch.h"
 #include "c_tf_fx.h"
 #include "soundenvelope.h"
@@ -3135,11 +3135,6 @@ void CTFPlayerShared::ConditionThink( void )
 					}
 #endif
 				}
-			}
-			else
-			{
-				// RocketPack not found, may have been unequipped, or we may be a Medic who inherited the cond
-				RemoveCond( TF_COND_ROCKETPACK );
 			}
 		}
 	}
@@ -12731,6 +12726,16 @@ bool CTFPlayer::Weapon_CanSwitchTo( CBaseCombatWeapon *pWeapon )
 	return bCanSwitch;
 }
 
+void CTFPlayer::PlayStepSound( Vector &vecOrigin, surfacedata_t *psurface, float fvol, bool force )
+{
+#ifdef CLIENT_DLL
+	// Don't make predicted footstep sounds in third person, animevents will take care of that.
+	if ( prediction->InPrediction() && C_BasePlayer::ShouldDrawLocalPlayer() )
+		return;
+#endif
+
+	BaseClass::PlayStepSound( vecOrigin, psurface, fvol, force );
+}
 
 //-----------------------------------------------------------------------------
 // Purpose: Gives the player an opportunity to abort a double jump.
