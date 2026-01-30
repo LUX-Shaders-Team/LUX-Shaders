@@ -1,0 +1,399 @@
+//===================== File of the LUX Shader Project =====================//
+//
+//	Initial D.	:	09.09.2025 DMY
+//	Last Change :	 30.01.2026 DMY
+//
+//==========================================================================//
+
+//==========================================================================//
+//	Declare Static Combos
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Declare Dynamic Combos
+//==========================================================================//
+// DYNAMIC:	"L4D_VOMIT"					"0..1"
+// DYNAMIC:	"CONTRAST"					"0..2"
+// DYNAMIC:	"DEPTH_BLUR"				"0..1"
+// DYNAMIC:	"COLORCORRECT_LOOKUPS"		"0..3"
+// DYNAMIC:	"DESATURATE"				"0..1"
+// DYNAMIC:	"VIGNETTE"					"0..1"
+// DYNAMIC:	"NOISE"						"0..1"
+
+//==========================================================================//
+//	Skipping combos that are unneeded
+//	GIGA IMPORTANT :	The order of the STATIC:'s and the order of the skips
+//						will DRASTICALLY affect compiletime!
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Unpack Combos
+//==========================================================================//
+#if (CONTRAST == 2)
+	#define BLURRED_VIGNETTE 1
+#else
+	#define BLURRED_VIGNETTE 0
+#endif
+ 
+//==========================================================================//
+//	Available Constants
+//==========================================================================//
+
+// Include for all Pixel Shaders
+#include "lux_common_ps_fxc.h"
+
+#define Sampler_VomitParams (Sampler_BaseTexture)
+// sampler	Sampler_VomitParams		: register(s0);
+sampler	Sampler_Frame				: register(s1);
+sampler	Sampler_Bloom				: register(s2);
+sampler	Sampler_ColorCorrection1	: register(s3);
+sampler	Sampler_ColorCorrection2	: register(s4);
+sampler	Sampler_ColorCorrection3	: register(s5);
+sampler	Sampler_ColorCorrection4	: register(s6);
+sampler Sampler_Vignette			: register(s7);
+sampler Sampler_Noise				: register(s8);
+
+// Derive:
+
+// L4D_VOMIT
+const float4 cVomitParams1			: register(c0);
+#define g_f3VomitColor1					(cVomitParams1.rgb)
+#define g_f1VomitRefractStrength		(cVomitParams1.w)
+
+const float4 cVomitParams2			: register(c1);
+#define g_f3VomitColor2					(cVomitParams2.rgb)
+// .w empty
+
+const float4 cViewPortParams1		: register(c2);
+#define g_f2ViewPortScale				(cViewPortParams1.xy)
+#define g_f2ViewPortOffset				(cViewPortParams1.zw)
+
+const float4 cViewPortParams2		: register(c3);
+#define g_f2ViewPortScaleInv			(cViewPortParams2.xy)
+#define g_f2ViewPortOffsetInv			(cViewPortParams2.zw)
+
+// CONTRAST
+const float4 cContrastParams1		: register(c4);
+#define g_f1ContrastStrength			(cContrastParams1.x)
+#define g_f1VignetteStart				(cContrastParams1.y)
+#define g_f1VignetteEnd					(cContrastParams1.z)
+#define g_f1ContrastEdgeStrength		(cContrastParams1.w)
+
+const float4 cContrastParams2		: register(c5);
+#define g_f1BlurredVignetteStrength		(cContrastParams2.x)
+
+// DEPTH_BLUR and BloomFactor
+const float4 cDepthBlurParams		: register(c6);
+#define g_f1BloomLerpFactor				(cDepthBlurParams.x)
+#define g_f1DepthBlurFocalDistance		(cDepthBlurParams.y)
+#define g_f1DepthBlurScale				(cDepthBlurParams.z)
+#define g_f1BloomAmount					(cDepthBlurParams.w)
+
+// View Fade
+const float4 cViewFadeParams1		: register(c7);
+#define g_f3ViewFadeColor				(cViewFadeParams1.rgb)
+#define g_f1ViewFadeFactor				(cViewFadeParams1.w)
+const float4 cViewFadeParams2		: register(c8);
+#define g_f1ViewFadeMode				(cViewFadeParams2.x)
+
+// Color Correction
+float4 cColorCorrectionParams1			: register(c9);
+#define g_f3ColorCorrectionDefaultWeights	(cColorCorrectionParams1.xyz)
+
+float4 cColorCorrectionParams2			: register(c10);
+#define g_f4ColorCorrectionTextureWeights	(cColorCorrectionParams2)
+
+// DESATURATE
+const float4 cDesaturationParams	: register(c11);
+#define g_f1DesaturationFactor			(cDesaturationParams.x)
+
+// NOISE
+const float4 cNoiseParams		: register(c12);
+#define g_f1Time					(cNoiseParams.x)
+#define g_f1NoiseFactor			(cNoiseParams.y)
+#define g_f1NoiseTextureScale		(cNoiseParams.z)
+
+// Fade to Black
+const float4 cExtraParams		: register(c13);
+#define g_f1FadeFactor			(cExtraParams.x)
+
+// Slightly changed Function from Alien-Swarm.
+float3 PerformVomitBlend(float4 f4RefractParams, float4 f4FrameColor, float4 f4BlurredColor)
+{
+	float f1VomitIntensity = f4RefractParams.z;
+    float3 f3VomitColor = lerp(g_f3VomitColor1, g_f3VomitColor2, f1VomitIntensity);
+
+	// Using the Frame Color as a Base here ( already warped/refracted )
+	float3 f3Result = f4FrameColor.rgb;
+
+	// Doing a triple-lerp here. For the most Part, the higher the ColorLerpFactor here, the more Vomit is applied
+	// As the Factor increases, you will get more Vomit Color and more Blur.
+	// The Blur here is actually greyscale! As it comes from the Bloom Rendertarget's Alpha Channel.
+	f3Result *= lerp(1.0f, f3VomitColor, f1VomitIntensity);
+	f3Result = lerp(f3Result, f4BlurredColor.rgb * f3VomitColor, f1VomitIntensity);
+	return f3Result;
+}
+
+float3 PerformColorCorrection(float3 f3Color)
+{
+	if (COLORCORRECT_LOOKUPS > 0)
+	{
+		// "NOTE: This code requires the color correction texture to be 32 units to be correct.
+		// This code will cause (0,0,0) to be read from 0.5f/32
+		// and (1,1,1) to be read from 31.5f/32"
+		float3 f3OffsetColor = f3Color * (31.0f/32.0f) + (0.5f/32.0f);
+
+        f3Color = f3Color.rgb * g_f3ColorCorrectionDefaultWeights;
+        f3Color += tex3D(Sampler_ColorCorrection1, f3OffsetColor).rgb * g_f4ColorCorrectionTextureWeights.x;
+		if (COLORCORRECT_LOOKUPS > 1)
+		{
+            f3Color += tex3D(Sampler_ColorCorrection2, f3OffsetColor).rgb * g_f4ColorCorrectionTextureWeights.y;
+			if (COLORCORRECT_LOOKUPS > 2)
+			{
+                f3Color += tex3D(Sampler_ColorCorrection3, f3OffsetColor).rgb * g_f4ColorCorrectionTextureWeights.z;
+				if (COLORCORRECT_LOOKUPS > 3)
+				{
+                    f3Color += tex3D(Sampler_ColorCorrection4, f3OffsetColor).rgb * g_f4ColorCorrectionTextureWeights.w;
+                }
+			}
+		}
+	}
+
+	return f3Color;
+}
+
+//==========================================================================//
+//	Everything Vertex Shader is outputting, enters here
+//==========================================================================//
+struct PS_INPUT
+{
+    float2 TexCoord : TEXCOORD0;
+};
+ 
+//==========================================================================//
+//	Rendering Start - Entry point
+//
+//	Pipeline:
+//		1. TexCoords ( +Vomit Refraction )
+//		-> Main Samples
+//		-> Vomit Blur
+//		-> Contrast
+//		-> Depth Blur
+//		-> Bloom
+//		-> ViewFade ( Screen Tint basically )
+//		-> Color Correction - On stock it's CC or Desaturation, on LUX it happens before Desaturation
+//		-> Desaturation		- Must happen after all other Color Effects ( Contrast & Vomit )
+//		-> Film Noise		- Must happen after ALL Color Effects ( Including Desaturation )
+//		-> Fade to Black	- Must happen after EVERYTHING else
+//		-> Gamma Corrections
+//==========================================================================//
+float4 main(PS_INPUT i) : COLOR
+{
+	// We have two TexCoords here.
+	// Vomit will affect Warp the View but it shouldn't impact Post-Process Effects like Vignette
+	float2 f2ScreenCoord = i.TexCoord;
+
+	// Note that this used to be a f4, but I stripped the AA Code from the Shader, so .xyxy is no longer necessary!
+	float2 f2WarpedCoord = f2ScreenCoord;
+
+	//==========================================================================//
+	//	Vomit TexCoord Refraction
+	//==========================================================================//
+	// Handle TexCoord Warping (Refraction) through Vomit
+	#if L4D_VOMIT
+
+		// Using a special Texture for getting the Refraction Offsets
+		float4 f4VomitRefractionParams = tex2D(Sampler_VomitParams, f2ScreenCoord);
+		f2WarpedCoord = f2WarpedCoord + g_f1VomitRefractStrength * (f4VomitRefractionParams.xy - 0.5f);
+
+		// Doing a Screen -> ViewPort -> Sreen Transform here.
+		// The 'Mirrored-Repeat' we want to apply only works in normalized Coordinates
+		// Important for Tools
+		//
+		// Scale down to correct Size, then Offset to the real Location
+		float2 f2NormalizedTexCoord = g_f2ViewPortScale * f2WarpedCoord + g_f2ViewPortOffset;
+
+		// This makes the Coordinate go from [0 -> 1 -> 0] or [1 -> 0 -> 1] if horizontally inversed.
+		f2NormalizedTexCoord = min(2.0f - f2NormalizedTexCoord, abs(f2NormalizedTexCoord));
+
+		// Convert back to regular TexCoord
+		f2WarpedCoord = g_f2ViewPortScaleInv * f2NormalizedTexCoord + g_f2ViewPortOffsetInv;
+
+	#endif
+
+	//==========================================================================//
+	//	Scene Samples
+	//==========================================================================//
+	// The View we are applying Post-Process to is comprised of two Textures.
+	// 1. A Bloom RenderTarget with Blurred Luminance in the Alpha
+	// 2. The Scene Result with a limited Depth Buffer in the Alpha
+	// Must use the potentially Refracted TexCoord on both for L4D_VOMIT to work correctly
+	float4 f4BloomSample = tex2D(Sampler_Bloom, f2WarpedCoord);
+	float4 f4FrameSample = tex2D(Sampler_Frame, f2WarpedCoord);
+
+	// Luminance and Depth as their own Variables
+	float f1BlurredLuminance = f4BloomSample.a;
+	float f1SceneDepth = f4FrameSample.a;
+
+	// Prepare this Variable as Luminance is required for three Different Features here.
+	float f1Luminance = PerceptualLuminance(f4FrameSample.rgb);
+
+	//==========================================================================//
+	//	Handle Vomit Blending
+	//==========================================================================//
+	float3 f3Result;
+	#if L4D_VOMIT
+
+		// Apply Vomit Effect to the Color.
+		// ( Blend between Regular Color and Vomit Effect )
+		f3Result = PerformVomitBlend(f4VomitRefractionParams, f4FrameSample, f4BloomSample);
+
+	#else
+		
+		// Input -> Output
+		f3Result = f4FrameSample.rgb;
+
+	#endif
+
+	//==========================================================================//
+	//	Local Contrast
+	//==========================================================================//
+	#if CONTRAST
+	
+		// ShiroDkxtro2: There was a lot of commented Code on the Original Shader I decided to leave out.
+		// If you modify this, perhaps reference Engine_Post from Alien Swarm.
+
+		// Blurred Luminance from the Bloom RT
+		// "This applies the delta contrast derived from the luminance to all color channels. The difference to the
+		// correct way is imperceptible." -ASW Engine Post
+		float f1Contrast = f1Luminance + g_f1ContrastStrength * (f1Luminance - f1BlurredLuminance);
+
+		// NDC Space TexCoord, technically..
+		float2 f2CenterDir = 2.0f * f2ScreenCoord - 1.0f;
+
+		// Vignette based on the Distance between the Center of the Screen and the Edges of the Screen
+		float f1Vignette = smoothstep(g_f1VignetteStart, g_f1VignetteEnd, length(f2CenterDir));
+		float f1Mask = lerp(g_f1ContrastStrength, g_f1ContrastEdgeStrength, f1Vignette);
+
+		// Split into two Variables for better readibility.
+		float f1LumDiff = f1Mask * (f1Luminance - f1BlurredLuminance);
+		f1Mask = -1.0f + step( 0.0f, f1Mask );
+
+		// "If the mask is positive, only brighten pixels. If the mask is negative, don't let it get less than -1.0."
+		f3Result += max(f1LumDiff, f1Mask);
+
+		#if BLURRED_VIGNETTE
+			f3Result = lerp(f3Result, f1BlurredLuminance, f1Vignette * g_f1BlurredVignetteStrength);
+		#endif
+
+	#endif
+
+	//==========================================================================//
+	//	Depth Blur
+	//==========================================================================//
+
+	// "Composite bloom and full-screen + depth blur effects"
+	#if DEPTH_BLUR
+
+		float f1BlurFactor = g_f1BloomLerpFactor + abs( f1SceneDepth - g_f1DepthBlurFocalDistance ) * g_f1DepthBlurScale; 
+
+		// We saturate here but previously we used abs(). Unless the BlurScale is negative this can't be negative.
+		// Perhaps an earlier Version of this Code didn't use abs?
+		f1BlurFactor = saturate(f1BlurFactor);
+
+		f3Result = lerp(f3Result, f4BloomSample.rgb, f1BlurFactor);
+
+	#endif
+
+	//==========================================================================//
+	//	Bloom
+	//==========================================================================//
+
+	// Always doing Bloom. Well unless it's 0.0f of course.
+    f3Result.rgb += g_f1BloomAmount * f4BloomSample.rgb;
+
+	//==========================================================================//
+	//	ViewFade
+	//==========================================================================//
+
+	// "Used to be FADE_TYPE 0..2 combo"
+	// This could be drastically simplified with boolean constants..
+    float3 f3FadeDstColor = lerp(g_f3ViewFadeColor, f3Result * g_f3ViewFadeColor, g_f1ViewFadeMode);
+    f3Result = lerp(f3Result, f3FadeDstColor, g_f1ViewFadeFactor);
+
+	//==========================================================================//
+	//	Color Correction
+	//==========================================================================//
+
+	f3Result = PerformColorCorrection(f3Result);
+
+	//==========================================================================//
+	//	Desaturate
+	//==========================================================================//
+
+	#if DESATURATE
+
+		// The Luminance has changed, recompute it.
+		f1Luminance = PerceptualLuminance(f3Result);
+
+		// NOTE: Inversed the Order in the Lerp here, we now lerp towards Saturation instead of lerping towards Desaturation.
+		f3Result = lerp(saturate(f3Result), f1Luminance, g_f1DesaturationFactor);
+
+	#endif
+
+	//==========================================================================//
+	//	Vignette
+	//==========================================================================//
+
+	#if VIGNETTE
+
+		// Ew, magic Numbers
+		float f1TextureVignette = tex2D(Sampler_Vignette, f2ScreenCoord).r;
+		f1TextureVignette = saturate(f1TextureVignette * 0.55f + 0.46f);
+
+		f3Result *= f1TextureVignette;
+
+	#endif
+
+	//==========================================================================//
+	//	Film Noise
+	//==========================================================================//
+
+	#if NOISE
+
+		// "Additive Noise"
+		// Why .g?
+		float2 f2TexCoord1 = f2ScreenCoord * 10.0f + g_f1Time;
+		float2 f2TexCoord2 = f2ScreenCoord * 20.0f - g_f1Time;
+		float2 f2NoiseCoord;
+		f2NoiseCoord.x = tex2D(Sampler_Noise, f2TexCoord1).g;
+		f2NoiseCoord.y = tex2D(Sampler_Noise, f2TexCoord2).g;
+
+		// That's a lot of Noise.
+		float f1Noise = tex2D(Sampler_Noise, f2NoiseCoord * g_f1NoiseTextureScale).g;
+		
+		// Third time's the Charm
+		f1Luminance = PerceptualLuminance(f3Result);
+
+		// That's a lot of Magic-Numbers.
+		// max() to avoid X3571
+		float f1NoiseScale = 0.2f + 0.8f * saturate(pow(max(1.0f - f1Luminance, 0.0f), 12.0f));
+		f3Result += ((f1Noise * 0.3f) - 0.15f) * g_f1NoiseFactor * f1NoiseScale;
+	#endif
+
+	//==========================================================================//
+	//	Fade to Black
+	//==========================================================================//
+
+	// This could just be combined with ViewFade.. I wonder why it's separate?
+	// Also this could be simplified.. f3Result * (1.0f - f1FadeFactor)
+    f3Result = lerp(f3Result, 0.0f, g_f1FadeFactor);
+
+	//==========================================================================//
+	//	Results
+	//==========================================================================//
+
+	return float4(f3Result, 0.0f);
+}

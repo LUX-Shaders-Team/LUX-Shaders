@@ -1,0 +1,283 @@
+//===================== File of the LUX Shader Project =====================//
+//
+//	Initial D.	:	02.01.2024 DMY
+//	Last Change :	 30.01.2026 DMY
+//
+//==========================================================================//
+
+//==========================================================================//
+//	Declare Static Combos
+//==========================================================================//
+// STATIC:	"ENVMAPMODE"			"0..1"
+// STATIC:	"CORECOLOR"				"0..1"
+// STATIC:	"REFRACTION"			"0..1"
+// STATIC:	"FLOWMAPPING"			"0..1"
+
+//==========================================================================//
+//	Declare Dynamic Combos
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Skipping undesired Combos
+//	The Order of Static Combos and Skips has a drastic Impact on Compile Time!
+//==========================================================================//
+// EnvMap is reserved for Pass1
+// Refraction and Color are only done for Pass0
+// SKIP : ($ENVMAPMODE == 1 && ($CORECOLOR == 1 || $REFRACTION == 1))
+
+//==========================================================================//
+//	Common Definitions
+//==========================================================================//
+
+// Don't want EnvMapFresnel
+#define NO_ENVMAPFRESNEL
+
+#define TONEMAP_SCALE_NONE
+//#define TONEMAP_SCALE_LINEAR
+//#define TONEMAP_SCALE_GAMMA
+
+// Don't write literally anything to the alpha
+#define NO_DEPTHTODESTALPHA
+
+// We want Range/Radial Fog
+// #define NO_FOG
+
+//==========================================================================//
+//	Constants, Functions, Includes
+//==========================================================================//
+
+// Include for all Pixel Shaders
+#include "lux_common_ps_fxc.h"
+
+#include "lux_common_normalmap.h"
+
+// we have an envmap
+#if ENVMAPMODE
+#include "lux_common_envmap.h"
+#endif
+
+//		s0 is Framebuffer
+//		Sampler_BaseTexture		: register(s0);
+sampler Sampler_FlowTexture		: register(s1);
+//		Sampler_NormalMap		: register(s2);
+sampler Sampler_CoreColor		: register(s3);
+
+// c32
+const float3 g_f3RefractTint	: register(c32);
+
+// c33 
+const float4 cControls			: register(c33);
+#define	g_f2FlowMapScrollRate		(cControls.xy)
+#define	g_f1FlowMapUVOffset			(cControls.z)
+#define	g_f1RefractAmount			(cControls.w)
+
+// c34
+const float4 cRadius			: register(c34);
+#define g_f3Radius					(cRadius.xyz)
+#define g_f1Radius					(cRadius.x)
+
+// This is basically just copied from the stock shader
+// This is basically
+// g_f3EyePos, f3ViewDir, f3SphereCenter, f1SphereRadius, Resulting Spherealpha
+float LengthThroughSphere(float3 f3RayOrigin, float3 f3RayDelta, 
+						  float3 f3SphereCenter, float f1SphereRadius, out float f1Alpha)
+{
+	// Solve using the ray equation + the sphere equation
+	// P = Origin + Delta
+	// (x - xc)^2 + (y - yc)^2 + (z - zc)^2 = r^2
+	//
+	// (ox + dx * t - xc)^2 + (oy + dy * t - yc)^2 + (oz + dz * t - zc)^2 = r^2
+	//
+	// (ox - xc)^2 + 2 * (ox-xc) * dx * t + dx^2 * t^2 +
+	// (oy - yc)^2 + 2 * (oy-yc) * dy * t + dy^2 * t^2 +
+	// (oz - zc)^2 + 2 * (oz-zc) * dz * t + dz^2 * t^2 = r^2
+	//
+	// (dx^2 + dy^2 + dz^2) * t^2 + 2 * ((ox-xc)dx + (oy-yc)dy + (oz-zc)dz) t +
+	//		(ox-xc)^2 + (oy-yc)^2 + (oz-zc)^2 - r^2 = 0
+	// or, t = (-b +/- sqrt( b^2 - 4ac)) / 2a
+	// a = DotProduct( vecRayDelta, vecRayDelta );
+	// b = 2 * DotProduct( vecRayOrigin - vecCenter, vecRayDelta )
+	// c = DotProduct(vecRayOrigin - vecCenter, vecRayOrigin - vecCenter) - flRadius * flRadius;
+
+	// Unnormalized Direction Vector from Origin to Center
+	// In our case Eye -> Sphere Center
+	float3 f3SphereToRay = f3RayOrigin - f3SphereCenter;
+
+	float a = dot(f3RayDelta, f3RayDelta);
+	float b = 2.0f * dot(f3SphereToRay, f3RayDelta);
+	
+	// We cannot apply the same trick here since we are dealing with a non-unit vector ( f3SphereToRay )
+	// Also this is not the true sphere radius, its slightly larger
+	float c = dot(f3SphereToRay, f3SphereToRay) - f1SphereRadius * f1SphereRadius;
+	float f1Discriminator = (b * b) - (4 * a * c);
+
+	float f1Hack = f1Discriminator; // Is this required because its not a unit vector?
+		  f1Discriminator = sqrt(f1Discriminator);
+	float oo2a = 0.5f / a;
+
+		  f1Hack = step(0.0f, f1Hack);
+		  f1Alpha = f1Hack;
+
+		  // oo2a is 0.5f, so 2.0f * 0.5f becomes 1.0f, which means 2 less MUL instructions
+	return (f1Hack * (abs(f1Discriminator) * 2.0f * oo2a));
+
+	// f3SphereToRay is a Unit Vector.
+	// This gives us the square of the magnitude of that Vector
+	// That'd be its length -> ||V||²
+	// Which oh hey, for a unit vector, thats always 1.0f...
+	// So this should theoratically be possible, saves like 5 instructions
+	/*
+	float c = dot(f3SphereToRay, f3SphereToRay) - f1SphereRadius*f1SphereRadius;
+	float f1Discriminator = (b * b) - (4 * c);
+	float f1Hack = f1Discriminator;
+		  f1Discriminator = sqrt(f1Discriminator);
+
+		  f1Hack = step(0.0f, f1Hack);
+		  f1Alpha = f1Hack;
+
+	return (f1Hack * abs(f1Discriminator));
+	*/
+}
+
+//==========================================================================//
+//	PS Input
+//==========================================================================//
+struct PS_INPUT
+{
+	float4 WorldPos_ProjPosZ		:	TEXCOORD0;
+	float4 TexCoords				:	TEXCOORD1;
+	float ProjPosW					:	TEXCOORD2;
+
+	float3 Tangent					: TANGENT;
+	float3 Binormal					: BINORMAL;
+	float3 Normal					: NORMAL;
+};
+ 
+//==========================================================================//
+//	PS Entry Point
+//==========================================================================//
+float4 main(PS_INPUT i) : COLOR
+{
+	//	Getting our PS_INPUT
+	//==========================================================================//
+
+	// TEXCOORD0
+	float3 f3WorldPos = i.WorldPos_ProjPosZ.xyz;
+	float  f1Depth = i.WorldPos_ProjPosZ.w;
+
+	// TEXCOORD1
+	float2 f2BumpUV = i.TexCoords.xy;
+	float2 f2ScreenUV = i.TexCoords.zw;
+
+	// TEXCOORD2
+	float f1OoW = 1.0f / i.ProjPosW;
+	f2ScreenUV *= f1OoW;
+
+	// TANGENT, BINORMAL, NORMAL
+	float3x3 TBN_Matrix = float3x3(i.Tangent, i.Binormal, i.Normal);
+	float3 f3WorldNormal = i.Normal;
+
+
+	// Incident ViewVector
+	float3	f3ViewDir = ComputeViewDir(f3WorldPos);
+	
+	// STOCK SHADER :	The Position at which the Center of the Sphere is, is hardcoded to 2688, 12139, 5170
+	//
+	// MAPBASE		:	The Position is determined through a Parameter hooked to a proxy ( requires a modified VMT )
+	//
+	// LUX			:	The Core is a Sphere, we know the (minimum) Radius (it's a prop_scalable)
+	//					The World Normal on a Sphere will always face away from its Center.
+	//					No hardcoded Location, no Proxies, no modified VMT's. Just a single MAD instruction
+	//					It doesn't look entirely identical, but thats perfectly fine with me.
+	float3	f3SphereCenter		= f3WorldPos - f3WorldNormal * g_f3Radius;
+
+	#if FLOWMAPPING
+		// Used to be hardcoded to 430
+		float	f1SphereDiameter = 2.0f * g_f1Radius; // ADD
+	
+		// Stock Shader does *1.05f, however I changed this Value
+		// Magic Number Anyways.
+		float f1IncreasedRadius = g_f1Radius * 1.11f;
+		float f1SphereAlpha;
+		float f1LengthThroughSphere = LengthThroughSphere(g_f3EyePos, f3ViewDir, 
+							  f3SphereCenter, f1IncreasedRadius, f1SphereAlpha);
+
+		// This is basically just Fresnel
+		// The most complicated Fresnel you have EVER seen
+		float f1NormalizedLTS = f1LengthThroughSphere / f1SphereDiameter;
+
+		// abs?
+		float3	f3RealNormal   = abs(f3WorldNormal);
+
+		// This would also be perfectly valid
+//		float3	f3RealNormal   = normalize(f3WorldPos - f3SphereCenter);
+
+		// Compressed Normal ( 0..1 Range - 0.5f is original 0.0f)
+		float3	f3HackedNormal = 0.5f * (f3WorldNormal + 1.0f);
+
+		// Resetting the UV when FlowMapping
+		// We probably don't care about > 0 Values
+		f2BumpUV = float2(0.0f, 0.0f);
+		f2BumpUV.xy  = f3RealNormal.z * tex2D(Sampler_FlowTexture, f3HackedNormal.xy).rg;
+		f2BumpUV.xy += f3RealNormal.y * tex2D(Sampler_FlowTexture, f3HackedNormal.xz).rg;
+		f2BumpUV.xy += f3RealNormal.x * tex2D(Sampler_FlowTexture, f3HackedNormal.yz).rg;
+		f2BumpUV.xy += g_f2FlowMapScrollRate;
+	#endif
+
+	// Perturbed Normal
+	float4 f4NormalTS = tex2D(Sampler_NormalMap, f2BumpUV);
+	float3 f3NormalTS = f4NormalTS.xyz * 2.0f - 1.0f;
+
+    float f1RefractScale = f4NormalTS.a * g_f1RefractAmount;
+	#if FLOWMAPPING
+		f1RefractScale *= f1NormalizedLTS;
+	#endif
+
+	#if (CORECOLOR && FLOWMAPPING)
+		float2 f2HackOffset = f3NormalTS.xy * f1RefractScale;
+	#endif
+
+
+	// Prepare Variable
+	float3 f3Result = float3(0.0f, 0.0f, 0.0f);
+	#if REFRACTION
+
+		// N * s + UV
+		float2 f2RefractUV = f2ScreenUV + f3NormalTS.xy * f1RefractScale;
+
+		// BaseTexture is the Warp Texture
+		float3 f3ColorWarp = g_f3RefractTint * tex2D(Sampler_BaseTexture, f2RefractUV).rgb;
+
+		// Stock Shader forced Blend Value of 1.0f
+		// So this is kinda pointless
+		// The non-warped UV is used later
+		// float3 f3ColorNoWarp = tex2D(Sampler_BaseTexture, f2RefractUV_NonWarped).rgb;
+		// f3Result = lerp(f3ColorNoWarp, f3ColorWarp, 1.0f);
+		f3Result = f3ColorWarp;
+	#endif
+
+	#if ENVMAP
+		float f1EnvMapMask = f4NormalTS.a;
+
+		// Convert from Tangent Space to World Space, using the Tangent Matrix
+		// NOTE: Matrix Vector Components are aligned horizontally, so Matrix goes into the mul() last
+		float3 f3NormalWS = normalize(mul(f3NormalTS, TBN_Matrix));
+
+		f3Result += ComputeEnvMap(f3WorldPos, f3NormalWS, f3ViewDir, f1EnvMapMask);
+	#endif
+
+	float f1Alpha = f4NormalTS.a;
+
+	#if (CORECOLOR && FLOWMAPPING)
+		// Lookup Texture but no tex2Dlod...
+		float4 f4CoreColor = tex2D(Sampler_CoreColor, f2HackOffset + float2(f1NormalizedLTS, g_f1FlowMapUVOffset));
+		f3Result = lerp(f3Result, f4CoreColor.rgb, f4CoreColor.a);
+
+		// We use this Alpha now.
+		// Otherwise we fallback to Normal Map Alpha
+		f1Alpha = f1SphereAlpha;
+	#endif
+
+	return LUX_Finalise(float4(f3Result, f1Alpha), f3WorldPos, f1Depth);
+}

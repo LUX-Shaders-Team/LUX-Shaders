@@ -1,0 +1,189 @@
+//===================== File of the LUX Shader Project =====================//
+//
+//	Initial D.	:	20.11.2024 DMY
+//	Last Change :	 30.01.2026 DMY
+//
+//==========================================================================//
+
+//==========================================================================//
+//	Declare Static Combos
+//==========================================================================//
+//	STATIC:	"CUTOFF"					"0..1"
+//	STATIC: "ENABLEFOG"					"0..1"
+
+//==========================================================================//
+//	Declare Dynamic Combos
+//==========================================================================//
+//	DYNAMIC: "COMPRESSION"				"0..1"
+//  DYNAMIC: "SKINNING"                 "0..1"
+
+//==========================================================================//
+//	Skipping undesired Combos
+//	The Order of Static Combos and Skips has a drastic Impact on Compile Time!
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Constants, Functions, Includes
+//==========================================================================//
+
+// Include for all Vertex Shaders
+#include "lux_common_vs_fxc.h"
+
+// Model specific Functions
+#include "lux_common_vs_model.h"
+
+const float3 cOutlineFactors : register(c50);
+#define g_f1OutlineDistance		(cOutlineFactors.x)
+#define g_f1OutlineMinWorldZ	(cOutlineFactors.y)
+
+// Need View Matrix for the Offset
+const float4x4	cViewMatrix						:	register(c223);
+// 224, 225, 226
+const float4x4	cProjMatrix						:	register(c227);
+// 228, 229, 230
+
+const float3	cViewForward					:	register(c231);
+const float3	cPlanePos						:	register(c232);
+
+//==========================================================================//
+//	VS Input
+//==========================================================================//
+struct VS_INPUT
+{
+    // This is all of the stuff that we ever use
+    float4 vPos                     : POSITION;
+	float4 vBoneWeights             : BLENDWEIGHT;	//	Despite no bones,
+	float4 vBoneIndices             : BLENDINDICES; //	we use these in SkinPositionAndNormal()
+    float4 vNormal                  : NORMAL;
+	float4 vTangent					: TANGENT;
+    float2 vTexCoord0               : TEXCOORD0;
+    float2 vTexCoord1		        : TEXCOORD1;
+    float4 vMorphTexCoord			: TEXCOORD2;
+	float4 vColor                   : COLOR0;
+	float3 vSpecular				: COLOR1;
+
+	// User What now? How can we use that?
+	float4 vUserData				: TANGENT;
+
+	// Position and normal/tangent deltas
+	float4 vPosFlex					: POSITION1;
+	float4 vNormalFlex				: NORMAL1;
+
+	float vVertexID					: POSITION2;
+};
+
+//==========================================================================//
+//	VS Output
+//==========================================================================//
+struct VS_OUTPUT
+{
+    float4 ProjPosSetup				:	POSITION; 
+    float4 WorldPos_ProjPosZ		:	TEXCOORD0;
+	float2 ProjPosZW				:	TEXCOORD1;
+	float3 WorldNormal				:	NORMAL;
+};
+
+// FIXME: Hungarian Notation in this File is terrible
+//==========================================================================//
+//	VS Entry Point
+//==========================================================================//
+VS_OUTPUT main( const VS_INPUT v )
+{
+	VS_OUTPUT o = ( VS_OUTPUT )0;
+
+	//==========================================================================//
+	//	Get the basic Vertex Shader Inputs
+	//==========================================================================//
+
+	// Input normal is actually compressed, we need to decompress it
+	float3 vNormal;
+	#if (TANGENTS == 0)
+		DecompressVertexNormal(v.vNormal, vNormal);
+	#else
+		// Tangents are also compressed onto the Normal
+		// Brushes use TangentS and TangentT Vertex Inputs, Models don't.
+		float4 vTangent_Binormal;
+		DecompressVertexNormal(v.vNormal, v.vTangent, vNormal, vTangent_Binormal);
+	#endif
+
+	// WorldPos is simply Input Pos
+	float3 vPos = v.vPos.xyz;
+
+	//==========================================================================//
+	//	Handle Morphing
+	//==========================================================================//
+	#if (TANGENTS > 0)
+		ApplyMorph( v.vPosFlex, v.vNormalFlex, vPos.xyz, vNormal, vTangent_Binormal.xyz );
+	#else // No Tangents just Pos and Normal
+		ApplyMorph( v.vPosFlex, v.vNormalFlex, vPos.xyz, vNormal );
+	#endif
+
+	//==========================================================================//
+	// Handle Rotations and Offsets
+	// Also directly work on Tangents
+	//==========================================================================//
+	
+	// We use this overloaded function to handle various cases of required outputs
+	// TANGENTS == 0, WorldPos & WorldNormal
+	// TANGENTS == 1, WorldPos & TBN Matrix
+	// TANGENTS == 2, WorldPos & WorldNormal, Tangent + Binormal
+	// 2 is required in case we ever run out of Interpolators
+	// the 1.0f on the vPos f4 here is important for the distance component in the cModel/Blend Matrix
+	float3 WorldNormal, WorldPos;
+	#if (TANGENTS == 1)
+		float3 Tangent, Binormal;
+		AlignVertexInputs(SKINNING, float4(vPos, 1.0f), vNormal, vTangent_Binormal, v.vBoneWeights, v.vBoneIndices, WorldPos, WorldNormal, Tangent, Binormal);
+	
+		// IMPORTANT NOTE
+		// Valve does this on the skin shader :
+		// [0] = float3( TangentS.x, TangentT.x, Normal.x )
+		// [1] = float3( TangentS.y, TangentT.y, Normal.y )
+		// [2] = float3( TangentS.z, TangentT.z, Normal.z )
+		// I have a bunch of theories why they did this
+		// Its important because of the input order in mul()
+		// If you do this to a matrix and don't adjust your mul()
+		// It will mean you try to convert it into the opposite space than the one you actually want
+//		o.TBN_Matrix[0] = float3(Tangent.x, Binormal.x, WorldNormal.x);
+//		o.TBN_Matrix[1] = float3(Tangent.y, Binormal.y, WorldNormal.y);
+//		o.TBN_Matrix[2] = float3(Tangent.z, Binormal.z, WorldNormal.z);
+
+//		o.TBN_Matrix = float3x3(Tangent, Binormal, WorldNormal);
+	#elif (TANGENTS == 2)
+		float4 Tangent_BinormalSign;
+		AlignVertexInputs(SKINNING, float4(vPos,1.0f), vNormal, vTangent_Binormal, v.vBoneWeights, v.vBoneIndices, WorldPos, WorldNormal, Tangent_BinormalSign);
+	
+//		o.Tangent_Binormal = Tangent_BinormalSign;
+	#else
+		AlignVertexInputs(SKINNING, float4(vPos,1.0f), vNormal, v.vBoneWeights, v.vBoneIndices, WorldPos, WorldNormal);
+	#endif
+
+	// Snap to a minimum Height
+	// FIXME: Use max or something why is this a Branch Statement??
+	#if CUTOFF
+		if(WorldPos.z < g_f1OutlineMinWorldZ)
+			WorldPos.z = g_f1OutlineMinWorldZ;
+	#endif
+	
+	// WorldSpace Transformation
+    float3 OutlineWorldPos = WorldPos + WorldNormal * g_f1OutlineDistance;
+
+	// Outline ProjPos
+	float4 OutlineProjPos = mul(float4(OutlineWorldPos, 1.0f), cViewProj);
+	o.ProjPosSetup = OutlineProjPos;
+
+	// We have to manually cull. We want Backfaces to be rendered but not front faces
+	// Source doesn't expose Culling Modes ( Or Winding Order for that matter )
+	// So we have to manually do this! ( Stinks!! )
+	// For that, we give the Pixel Shader:
+	// Position ( For View Dir ) 
+	o.WorldPos_ProjPosZ.xyz = WorldPos;
+	o.WorldPos_ProjPosZ.w = dot(float4(WorldPos, 1), cViewProjZ);
+
+	// Normal ( For NdotL )
+	o.WorldNormal = WorldNormal;
+
+	o.ProjPosZW = float2(OutlineProjPos.z, OutlineProjPos.w);
+
+    return o;
+}

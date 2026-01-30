@@ -1,0 +1,709 @@
+//===================== File of the LUX Shader Project =====================//
+//
+//	Initial D.	:	28.09.2023 DMY
+//	Last Change :	 30.01.2026 DMY
+//
+//==========================================================================//
+
+//==========================================================================//
+//	Declare Static Combos
+//==========================================================================//
+// STATIC:	"PROJTEX"					"0..1"
+// STATIC:	"FLOWMAPPING_MULTITEXTURE"	"0..5"
+// STATIC:	"BASETEXTURELAYER"			"0..2"
+// STATIC:	"REFRACT"					"0..2"
+// STATIC:	"LIGHTMAPWATERFOG"			"0..1"
+// STATIC:	"REFLECT"					"0..1"
+// STATIC:	"ABOVEWATER"				"0..1"
+
+//==========================================================================//
+//	Declare Dynamic Combos
+//==========================================================================//
+// DYNAMIC: "PROJTEXSHADOWS"			"0..1"
+
+//==========================================================================//
+//	Skipping undesired Combos
+//	The Order of Static Combos and Skips has a drastic Impact on Compile Time!
+//==========================================================================//
+// SKIP: ( $PROJTEX == 0 && $PROJTEXSHADOWS == 1 )
+
+//==========================================================================//
+// Unpack Combos
+//==========================================================================//
+#if (FLOWMAPPING_MULTITEXTURE < 5)
+	// == 1 || == 3 is regular FlowMapping
+	// == 2 || == 4 is Flow Debug
+	#if (FLOWMAPPING_MULTITEXTURE == 1 || FLOWMAPPING_MULTITEXTURE == 3)
+		#define FLOWMAPPING 1
+	#elif (FLOWMAPPING_MULTITEXTURE == 2 || FLOWMAPPING_MULTITEXTURE == 4)
+		#define FLOWMAPPING 2
+	#else
+		#define FLOWMAPPING 0
+	#endif
+
+	#if (FLOWMAPPING_MULTITEXTURE > 2)
+		#define FLOWSTOP 1
+	#else
+		#define FLOWSTOP 0
+	#endif
+
+	// Skipped
+	#define MULTITEXTURE 0
+#else
+	
+	// Only MULTITEXTURE
+	#define MULTITEXTURE 1
+
+	// Skipped
+	#define FLOWSTOP 0
+	#define FLOWMAPPING 0
+#endif
+
+//==========================================================================//
+//	Common Definitions
+//==========================================================================//
+
+// This IS a Shader used on BRUSHES
+#define BRUSH
+
+// This is NOT a Shader used on MODELS
+//#define MODEL
+
+#define TONEMAP_SCALE_NONE
+//#define TONEMAP_SCALE_LINEAR
+//#define TONEMAP_SCALE_GAMMA
+
+// We will write current Depth to Alpha
+#define NO_WATERFOGTODESTALPHA
+// #define NO_DEPTHTODESTALPHA
+
+//==========================================================================//
+//	Constants, Functions, Includes
+//==========================================================================//
+
+// Include for all Pixel Shaders
+#include "lux_common_ps_fxc.h"
+
+// Lightmapping related functions
+#if (BASETEXTURELAYER > 0 || LIGHTMAPWATERFOG)
+	#include "lux_common_lightmapped.h"
+#endif
+
+#if PROJTEX
+	#include "lux_common_flashlight.h"
+#endif
+
+// Sampler_BaseTexture (s0)
+sampler Sampler_ReflectTexture		: register(s1);
+sampler Sampler_SurfaceBump			: register(s2);
+sampler Sampler_RefractTexture		: register(s3);
+sampler Sampler_WaterBump			: register(s4);
+sampler Sampler_FlowTexture			: register(s5);
+sampler Sampler_FlowNoiseTexture	: register(s6);
+// Sampler_Lightmap (s11)
+
+const float4 g_MatrixRight				: register(c50);
+const float4 g_MatrixForward			: register(c51);
+// const float4 g_ViewportTransforms	: register(c52); // Intended for Splitscreen, don't have that... bye!
+const float4 g_FlowControls1			: register(c53);
+const float4 g_FlowControls2			: register(c54);
+const float4 g_FlowControls3			: register(c55);
+
+// FlowControls...
+#define f1Flow_WorldUVScale				(g_FlowControls1.x)
+#define f1Flow_NormalUVScale			(g_FlowControls1.y)
+#define f1Flow_BumpStrength				(g_FlowControls1.z)
+#define f1Flow_TimeScale				(g_FlowControls1.w)
+
+#define f1Flow_TimeInterval				(g_FlowControls2.x)
+#define f1Flow_UVScrollDistance			(g_FlowControls2.y)
+#define f1Flow_NoiseScale				(g_FlowControls2.z)
+#define f1ColorFlow_LerpExp				(g_FlowControls2.w)
+
+#define f1ColorFlow_UVScale				(g_FlowControls3.x)
+#define f1ColorFlow_TimeScale			(g_FlowControls3.y)
+#define f1ColorFlow_TimeInterval		(g_FlowControls3.z)
+#define f1ColorFlow_UVScrollDistance	(g_FlowControls3.w)
+
+const float4 g_RefractTint : register(c56);
+#define f3RefractTint				(g_RefractTint.xyz)
+
+const float4 g_ReflectTint			: register(c57);
+#define f3ReflectTint				(g_ReflectTint.xyz)
+// .w empty
+
+const float4 g_FogColor_Start		: register(c58);
+#define f3FogColor					(g_FogColor_Start.xyz)
+#define f1FogStart					(g_FogColor_Start.w)
+
+const float4 g_VariousControls		: register(c59);
+#define f1FogRange					(g_VariousControls.x)
+#define f1OverbrightFactor			(g_VariousControls.y)
+#define f1FresnelMultiplier			(g_VariousControls.z)
+#define f1FresnelAdditive			(g_VariousControls.w)
+
+const float4 g_UVScalars			: register(c60);
+
+const float4 g_ProjTexTint			: register(c61);
+#define f1Flow_Stop					(g_ProjTexTint.w)
+
+// ShiroDkxtro2 :
+// Flowmaps used sqrt() to compute the .z component of the normal
+// sqrt() is rather expensive so we will be using this one instead.
+// This is a specially modified version of the Newton square root approximation
+// The values are adjusted to fit better into 0-1 range
+// MSE should be somewhere at <= 0.1%
+float LUX_LinearFastSqrt(float x)
+{
+	float f1Approx;
+	
+	// We add 1.1f to "simulate" the first iteration
+	// well.. sqrt(0) is still 0. so we REALLY don't want that... >.>
+	// I did some math and found this one, follows the curve up until 0 very closely
+	if(x <= 0.115f)
+		f1Approx = x * 2.0f;
+	else
+		f1Approx = x + 1.1f;
+
+	f1Approx = 0.35f * (f1Approx + x / f1Approx); // 0.35f instead of 0.5f
+
+	// 0.49733 instead of 0.5f to near 1 again
+	f1Approx = 0.49733f * (f1Approx + x / f1Approx);
+
+	return f1Approx;
+}
+
+//==========================================================================//
+//	PS Input
+//==========================================================================//
+struct PS_INPUT
+{
+	// lux_water_vs30
+	float4 WorldPos_ProjPosZ			: TEXCOORD0;
+    float4 BumpCoords					: TEXCOORD1;
+	float4 ReflectXYRefractYX			: TEXCOORD2;
+
+#if (BASETEXTURELAYER > 0 || LIGHTMAPWATERFOG)
+	float4 LightmapTexCoord				: TEXCOORD3;
+
+	#if (BASETEXTURELAYER > 0)
+		float4 LightmapTexCoord2and3	: TEXCOORD4;
+	#endif
+#endif
+
+	float ProjPosW						: TEXCOORD5;
+#if MULTITEXTURE
+	float4 MultiTextureCoords			: TEXCOORD6;
+#endif
+
+	// Reached the Limit with this!
+	float3 Tangent				: TANGENT;
+	float3 Binormal				: BINORMAL;
+	float3 Normal				: NORMAL;
+};
+
+//==========================================================================//
+//	PS Entry Point
+//==========================================================================//
+float4 main(PS_INPUT i) : COLOR
+{
+	//	Getting our PS_INPUT
+	//==========================================================================//
+	float3	f3WorldPos = i.WorldPos_ProjPosZ.xyz;
+	float4	f4RefrReflScale = g_UVScalars;
+	float	f1OoW = 1.0f / i.ProjPosW;
+	float	f1Depth = i.WorldPos_ProjPosZ.w;
+	float4	f4ReflRefrUVs = i.ReflectXYRefractYX * f1OoW;
+
+	// Forward Declarations for Surface Layers and FlowMapping
+	float4	f4SurfaceBase = 0.0f;
+    float4 f4SurfaceBump = float4(0.0f, 0.0f, 1.0f, 0.0f); // Flat Normal
+
+	//	Sample a non-warped version of the screen 
+	//==========================================================================//
+
+	#if (ABOVEWATER && REFRACT > 0)
+		float2 f2NonWarpedRefrUV = f4ReflRefrUVs.zw;
+
+		// Don't need RGB from unrefracted View
+		float f1WaterFogDepthValue = tex2D(Sampler_RefractTexture, f2NonWarpedRefrUV).a;
+		
+		// ShiroDkxtro2: HACK HACK, the ASW Water FogFactor is too weak, this accounts for that ( slightly )
+		#if defined(ALIENSWARM_HEIGHTFOGFACTOR)
+			f1WaterFogDepthValue = saturate(f1WaterFogDepthValue * 3.5f);
+		#endif
+
+		// Not on Blurry-Refract, Stock-Consistency
+		#if (!BASETEXTURELAYER && REFRACT == 1)
+			f4RefrReflScale *= f1WaterFogDepthValue.xxxx;
+		#endif
+	#else
+		// "We don't actually have valid depth values in alpha when we are underwater looking out, so
+		// just set to farthest value."
+		float f1WaterFogDepthValue = 1.0f;
+	#endif
+
+	//==========================================================================//
+	//	Surface Layer & Normal Maps
+	//==========================================================================//
+	float4 f4NormalTS;
+	#if (FLOWMAPPING > 0)
+
+		// Stretch the UV by the desired amount...
+		float2 f2WorldUV = i.BumpCoords.xy * f1Flow_WorldUVScale;
+
+		// Why the .x and -.y specifically?
+		// If the compiler does anything weird due to the -.y,
+		// like a MOV instruction to bundle up the -.y with a positive .x :
+		// then turn the NormalUV Scale into a float2 * [1, -1] and use the following Code
+		// f2WorldPosXnY = f3WorldPos.xy * f2Flow_NormalUVScale
+		float2 f2WorldPosXnY = float2(f3WorldPos.x, -f3WorldPos.y);
+		float2 f2FlowUV = f2WorldPosXnY * f1Flow_NormalUVScale;
+
+		// ASW declared a second UV as the above one, but it was used the same way as the above one.
+		// So we skip it...
+
+		float f1FlowNoise = tex2D(Sampler_FlowNoiseTexture, f2WorldPosXnY * f1Flow_NoiseScale).g;
+
+		// Flow Texture has 2D UV-Offset in the red and green channel.
+		float4 f4FlowTexel = tex2D(Sampler_FlowTexture, f2WorldUV);
+
+		// FLOWDEBUG
+		// This is missing the Noise Preview, might add it if someone notices..
+		#if (FLOWMAPPING == 2)
+			#if FLOWSTOP
+				return float4(lerp(f4FlowTexel.rg, f4FlowTexel.ba, f1Flow_Stop), 0.0f, 1.0f);
+			#else
+				return float4(f4FlowTexel.rg, 0.0f, 1.0f);
+			#endif
+		#endif
+		
+		#if FLOWSTOP
+			// lerp to .ba of the flowmap.
+			// The idea here is that its a more "calm" version, if not total standstill.
+			// Should make it easier to fake water effects like a river getting blocked or a change in its trajectory
+			// Could be used for making water more turbulent at times. Giant Blender that stops spinning etc
+			float2 f2FlowVectorTs = lerp(f4FlowTexel.rg, f4FlowTexel.ba, f1Flow_Stop) * 2.0f - 1.0f; // MAD
+		#else
+			float2 f2FlowVectorTs = f4FlowTexel.rg * 2.0f - 1.0f; // MAD
+		#endif
+		
+
+		// ASW Shader does :
+		// ( ( g_flTime * flTimeScale ) + flNoise ) / ( flFlowTimeIntervalInSeconds * 2.0f );
+		// Well too bad ASW Shader, but I precomputed the reciprocal of the 2*Interval and CurrentTime*TimeScale, before sending it to the shader
+		// (ADD, MUL) instead of (MAD, MUL, RCP, MUL )
+		float f1TimeInIntervals = (f1Flow_TimeScale + f1FlowNoise) * f1Flow_TimeInterval;
+
+		float f1ScrollTime1 = frac(f1TimeInIntervals);
+		float f1ScrollTime2 = frac(f1TimeInIntervals + 0.5f); // "Half an interval off from texture 1"
+
+		// "Every interval has a unique offset so we don't see the same bump texels repeating continuously"
+		float f1Offset1 = floor(f1TimeInIntervals) * 0.311f;
+		float f1Offset2 = floor(f1TimeInIntervals + 0.5f) * 0.311f + 0.5f;  // "The +0.5 is to match the phase offset"
+
+		// "Final flow uv is originalUv + interval offset + ( flowvector * scroll"
+		float2 f2FlowUV1 = f2FlowUV + f1Offset1 + (f1ScrollTime1 * (f1Flow_UVScrollDistance * f2FlowVectorTs));
+		float2 f2FlowUV2 = f2FlowUV + f1Offset2 + (f1ScrollTime2 * (f1Flow_UVScrollDistance * f2FlowVectorTs));
+
+		// Lerp values to blend between the two layers of bump
+		// f1Weight Moved to BASETEXTURE section
+		float f1Weight2 = abs((2.0f * frac(f1TimeInIntervals)) - 1.0f);
+
+		// Finally looking up the Normal Map...
+		float4 f4NormalTexel1 = tex2D(Sampler_WaterBump, f2FlowUV1);
+		float4 f4NormalTexel2 = tex2D(Sampler_WaterBump, f2FlowUV2);
+
+		// "Combine both layers" - ASW Water Shader
+		// *2-1 part is perturbed normals. ( making them go from -1 to +1 )
+		f4NormalTS.xy = lerp( f4NormalTexel1.xy, f4NormalTexel2.xy, f1Weight2 ) * 2.0f - 1.0f;
+
+		// "Change bump strength based on the length of the flow vector"
+		// Previously -- f2FlowVectorTs.x * f2FlowVectorTs.x + f2FlowVectorTs.y * f2FlowVectorTs.y --
+		// Now just a dot, because its the same thing. Would be interesting to see if the compiler optimised the previous one...
+		float f1FdotF = dot(f2FlowVectorTs, f2FlowVectorTs); // Later reused for Computing Z component of the normal
+		f4NormalTS.xy *= (f1FdotF + 0.1f ) * f1Flow_BumpStrength;
+
+		// Compute z. component from X and Y.
+		#if 0
+			// sqrt()... this makes me queasy..
+			f4NormalTS.z = sqrt( saturate( 1.0 - f1FdotF ) );
+		#else
+			// Tested Brook Taylor Series, very cheap but rather inaccurate
+			// Tested Hyberbolic estimatition | -190/(x+20)+10. But too inaccurate
+			// This should be fast and ok
+			f1FdotF = saturate( 1.0 - f1FdotF );
+			f4NormalTS.z = LUX_LinearFastSqrt(f1FdotF);
+		#endif
+
+		// For some reason we override to 1.0f
+		// This later gets used for scaling reflect/refract coords
+		f4NormalTS.w = 1.0f;
+
+		#if (BASETEXTURELAYER > 0)
+
+			float2 f2FlowColorUV = f2WorldPosXnY * f1ColorFlow_UVScale;
+
+			// ASW Shader does :
+			// ( ( g_flTime * flTimeScale ) + flNoise ) / ( g_flColorFlowTimeIntervalInSeconds * 2.0f );
+			// Well too bad ASW Shader, but I precomputed the reciprocal of the 2*Interval and CurrentTime*TimeScale, before sending it to the shader
+			// (ADD, MUL) instead of (MAD, MUL, RCP, MUL )
+			float f1CTimeInIntervals = (f1ColorFlow_TimeScale + f1FlowNoise) * f1ColorFlow_TimeInterval;
+			float f1CScrollTime1 = frac(f1CTimeInIntervals) - 0.5f;
+			float f1CScrollTime2 = frac(f1CTimeInIntervals + 0.5f) - 0.5f; // "Half an interval off from texture 1"
+
+			float f1COffset1 = floor(f1CTimeInIntervals) * 0.311f;
+			float f1COffset2 = floor(f1CTimeInIntervals + 0.5f) * 0.311f + 0.5f;  // "The +0.5 is to match the phase offset"
+
+			// "Final flow uv is originalUv + interval offset + ( flowvector * scroll"
+			float2 f2CFlowUV1 = f2FlowColorUV + f1COffset1 + (f1CScrollTime1 * (f1ColorFlow_UVScrollDistance * f2FlowVectorTs));
+			float2 f2CFlowUV2 = f2FlowColorUV + f1COffset2 + (f1CScrollTime2 * (f1ColorFlow_UVScrollDistance * f2FlowVectorTs));
+
+			// Pow...?! Oof!
+			float f1CWeight1 = pow( abs( (2.0f * frac ( f1CTimeInIntervals + 0.5f ) ) - 1.0f ), f1ColorFlow_LerpExp);
+			float f1CWeight2 = pow( abs( (2.0f * frac ( f1CTimeInIntervals ) ) - 1.0f ), f1ColorFlow_LerpExp);
+
+			// Finally looking up the BaseTexture...
+			// 0.235f is a magic number?
+			f4SurfaceBase =	tex2D(Sampler_BaseTexture, f2FlowUV1 * 0.235f) * f1CWeight1;
+			f4SurfaceBase += tex2D(Sampler_BaseTexture, f2FlowUV2 * 0.235f) * f1CWeight2;
+
+			#if (BASETEXTURELAYER == 2)
+				// Separate Bumpmap
+				f4SurfaceBump = tex2D(Sampler_SurfaceBump, f2FlowUV1 * 0.235f) * f1CWeight1;
+				f4SurfaceBump += tex2D(Sampler_SurfaceBump, f2FlowUV2 * 0.235f) * f1CWeight2;
+			#endif
+		#endif
+	#elif MULTITEXTURE
+	// stock
+	/*
+		float4 vNormal  = tex2D(Sampler_WaterBump, i.vBumpTexCoord );
+		float4 vNormal1 = tex2D(Sampler_WaterBump, i.vExtraBumpTexCoord.xy );
+		float4 vNormal2 = tex2D(Sampler_WaterBump, i.vExtraBumpTexCoord.zw );
+		vNormal = 0.33 * ( vNormal + vNormal1 + vNormal2 );
+		vNormal.xyz = 2.0 * vNormal.xyz - 1.0;
+	*/
+
+				f4NormalTS	= tex2D(Sampler_WaterBump, i.BumpCoords.xy);
+		float4	f4NormalTS1 = tex2D(Sampler_WaterBump, i.MultiTextureCoords.xy);
+		float4	f4NormalTS2 = tex2D(Sampler_WaterBump, i.MultiTextureCoords.zw);
+
+		// This includes the Alpha of the Normal Maps
+		f4NormalTS = (1.0f / 3.0f) * (f4NormalTS + f4NormalTS1 + f4NormalTS2);
+		f4NormalTS.xyz = f4NormalTS.xyz * 2.0f - 1.0f; // MAD
+	#else
+
+		f4NormalTS = tex2D(Sampler_WaterBump, i.BumpCoords.xy);
+		f4NormalTS.xyz = f4NormalTS.xyz * 2.0f - 1.0f;
+	#endif
+
+	// We need the BaseTexture pretty early ( this is probably gonna clog temp registers )
+	// And if we didn't use FlowColor we still need Surface BumpMap for Lighting
+	#if (FLOWMAPPING == 0 && BASETEXTURELAYER > 0)
+
+		f4SurfaceBase = tex2D(Sampler_BaseTexture, i.BumpCoords.zw);
+
+		#if (BASETEXTURELAYER == 2)
+
+			f4SurfaceBump = tex2D(Sampler_SurfaceBump, i.BumpCoords.zw);
+		#endif
+	#endif
+
+	// Set this to == 2 if FlowColor looks absolutely broken
+	// Since this isn't something the Stock Shader actually considered
+	// It WILL look different, the Question is does it look better
+	#if (BASETEXTURELAYER > 0)
+
+		// Tinting Support
+		f4SurfaceBase.rgb *= g_f3DefaultTint;
+
+		// BumpMap still in compressed Range.
+		f4SurfaceBump.xyz = f4SurfaceBump.xyz * 2.0f - 1.0f;
+
+		// We want to lerp from Water Normal to Surface Normal
+		// This is important for Bumped Lighting
+		// We use the same .a * 2 as stock here
+		f4NormalTS.xyz = lerp(f4NormalTS.xyz, f4SurfaceBump.xyz, saturate(f4SurfaceBase.aaa * 2.0f));
+	#endif
+	
+	//==========================================================================//
+	//	Refraction and Reflection Samples
+	//==========================================================================//
+	// "vectorize the dependent UV calculations (reflect = .xy, refract = .wz)"
+	// We don't wz here, just xyxy
+	float4 f4PixelOffset = f4NormalTS.xyxy;
+	float4 f4DependentCoords = f4PixelOffset * f4NormalTS.wwww * f4RefrReflScale;
+
+	// Add the actual Screen UV
+	f4DependentCoords += f4ReflRefrUVs;
+	float2 f2ReflUV = f4DependentCoords.xy;
+	float2 f2RefrUV = f4DependentCoords.zw;
+
+	// Original Shader had no if here. ReflectColor is never used without so it should be there
+	#if REFLECT
+		float4 f4ReflectColor = tex2D(Sampler_ReflectTexture, f2ReflUV);
+		f4ReflectColor.xyz *= f3ReflectTint;
+	#endif
+
+	float4 f4RefractColor;
+	float f1WarpedAlpha = 0.0f;
+	#if (REFRACT > 0)
+		// == 2 is Blurry Refract
+		#if (REFRACT == 2)
+			// "Sample Reflection and Refraction"
+			// We only Sample Refraction..
+			// Stock Offsets for Consistency
+			float2 ddx1=float2(0.005,0);
+			float2 ddy1=float2(0,0.005);
+
+			float f1SumWeights=0;
+			for(int ix = -2; ix <= 2; ix++)
+			{
+				for(int iy = -2; iy <= 2; iy++)
+				{
+					// NOTE: Need to use tex2Dlod or it will complain about Gradient Instructions
+					// This should be fine for Refract since you are usually using RT's that don't have mips
+					f4RefractColor += tex2Dlod(Sampler_RefractTexture, float4(f2RefrUV + ix * ddx1 + iy * ddy1, 0.0f, 0.0f));
+					f1SumWeights += 1.0f;
+				}
+			}
+			f4RefractColor /= f1SumWeights;
+
+			// This is weird, we only apply this for Blurry Refract..
+			f4RefractColor.rgb *= f1OverbrightFactor;
+		#else
+
+			f4RefractColor = tex2D(Sampler_RefractTexture, f2RefrUV);
+			f1WarpedAlpha = f4RefractColor.a;
+
+			// We use the Depth Value for Fog later,
+			// If we are underwater we wouldn't want that since there is practically no Depth
+		#endif
+
+		// Pass on refracted WaterFog
+		#if ABOVEWATER
+			f1WaterFogDepthValue = f4RefractColor.a; // tex2D(Sampler_RefractTexture, f2RefrUV).a;
+		
+			// ShiroDkxtro2: HACK HACK, the ASW Water FogFactor is too weak, this accounts for that ( slightly )
+			// NOTE: This causes very apparent Banding near the Water Surface
+			#if defined(ALIENSWARM_HEIGHTFOGFACTOR)
+				f1WaterFogDepthValue = saturate(f1WaterFogDepthValue * 3.5f);
+			#endif
+		#endif
+	#endif
+	
+	//==========================================================================//
+	//	Prepare Fresnel
+	//==========================================================================//
+	
+	// Need Normals in WorldSpace
+	// Don't do this and your Normal will be flipped since Binormal dictates the handedness here
+    float3 f3NormalWS = normalize(mul(f4NormalTS.xyz, float3x3(i.Tangent, i.Binormal, i.Normal)));
+	
+	// Fresnel done using PS ViewDir (ASW) instead of ViewDirTS from the Vertex Shader (SDK)
+	float3 f3ViewDir = ComputeViewDir(f3WorldPos);
+    float f1NdotV = saturate(dot(f3NormalWS, -f3ViewDir));
+	float f1Fresnel = pow(1.0f - f1NdotV, 5.0f);
+
+	// Stock-Consistency
+	#if (REFRACT != 0 && BASETEXTURELAYER == 0)
+		f1Fresnel *= saturate((f1WaterFogDepthValue - 0.05f) * 20.0f);
+	#endif
+
+	// Alien Swarm forced reflectance Values
+	// Disabled because it makes Water look too different from Stock.
+	#if 0
+		float f1Reflectance = 0.2f;
+		f1Fresnel = f1Reflectance + ((1.0f - f1Reflectance) * f1Fresnel);
+	#endif
+
+	// ASW Feature ( FORCEFRESNEL )
+	// Should replicate NOFRESNEL and FORCEFRESNEL Behaviours by doing it after Reflectance
+	// Should be a single MAD / FMA Instruction which is cheap enough to avoid an the static combo	
+    f1Fresnel = f1Fresnel * f1FresnelMultiplier + f1FresnelAdditive;
+	
+	//==========================================================================//
+	//	LightmapWaterFog and Lightmaps for Surface Layers
+	//==========================================================================//
+	// Always need Fog eventually
+    float3 f3Fog = f3FogColor * LINEAR_LIGHT_SCALE; // No linear light scale! otherwise fog is too colorful...
+
+	// Lightmapping
+	#if (!PROJTEX && (BASETEXTURELAYER > 0 || LIGHTMAPWATERFOG))
+		float3 f3Lightmap;
+
+		// BaseTexture wants a Lightmap, we want it bumped
+		// Fog also wants a Lightmap, but usually not bumped
+		// But with a BaseTexture this gets a little tricky
+		// For Stock-Consistency we use the already Sampled Normal ( which is likely flowing )
+		// But for LUX I want the possibility to have a static Surface Layer, 
+		// or counter-scrolling, slower-scrollrate, rotating ( use your imagination really )
+		// 
+		// FlowMap + FlowColor uses FlowMapping Coordinates ( which ripple ) to sample surface bump
+		// Just $BaseTexture will use a dedicated second Texcoord that can allow for.. whatever ( IF we want it )
+		// Otherwise we will be using a flat normal and lerping to that using the BaseTexture's Alpha.
+		//
+		// That way water always gets Water Normal for Water Fog, but the Surface gets the correct Lightmap 
+		// Anyways, if we don't have a BaseTexture but Fog, that can be a regular Lightmap where Normal doesn't matter
+		#if (BASETEXTURELAYER > 0)
+			f3Lightmap = ComputeBumpedLightmap(f4NormalTS.xyz, i.LightmapTexCoord, i.LightmapTexCoord2and3);
+		#else
+			f3Lightmap = tex2D(Sampler_Lightmap, i.LightmapTexCoord.xy).xyz;
+		#endif
+
+		// Bumped Lightmap gets Modul.. Not good!
+		#if (BASETEXTURELAYER == 0)
+			// Not sure if this is actually correct.
+			// Why LINEAR_LIGHT_SCALE and LIGHT_MAP_SCALE specifically?
+			// Why not Modul which has the LightmapScaleFactor..?
+			// So many questions, too little answers..
+			// NOTE 10.01.2026: I removed LINEAR_LIGHT_SCALE, it caused issues before and it's almost missing from ASW Code. So this should be fine.
+			f3Lightmap *= LIGHT_MAP_SCALE;
+		#endif
+
+		#if LIGHTMAPWATERFOG
+			f3Fog *= f3Lightmap;
+		#endif	
+	#else
+		float3 f3Lightmap = 1.0f;
+	#endif
+
+	//==========================================================================//
+	//	Above Water blending Effects
+	//==========================================================================//
+	// Blend together refract, reflect and waterfog colors
+	#if ABOVEWATER
+		#if (REFRACT > 0)
+
+			// Great, more Magic-Numbers.
+			// First is SDK
+			// Second is ASW
+			float f1EdgeFadeFactor;
+			f1EdgeFadeFactor = saturate(f1WaterFogDepthValue - 0.05f); // Chose this because it looks closer to the SDK.
+//			f1EdgeFadeFactor = saturate(3.5f * f1WaterFogDepthValue);
+
+			// We should probably do this.
+			// ASW does this.
+			f4RefractColor.rgb = lerp(f4RefractColor.rgb, f4RefractColor.rgb * f3RefractTint, f1EdgeFadeFactor); // No tinting near the center of the water
+
+			// Lerp to Fog
+			// First is ASW consistent, second is SDK
+			// ASW deos not use the EdgeFadeFactor for the Fog Lerp, it uses the unmodified Depth Value!
+//			f4RefractColor.rgb = lerp(f4RefractColor.rgb, f3Fog, f1WaterFogDepthValue); // ASW
+			f4RefractColor.rgb = lerp(f4RefractColor.rgb, f3Fog, f1EdgeFadeFactor); // SDK
+	
+			// "Avoid seeing things in front of the water warped in the water refraction by not warping when that case happens.
+			// Causes a bit of artifacting around foreground objects, but looks better than warping the foreground objects in the water surface."
+//			if ( f1WarpedAlpha < 0.05f )
+//			{
+//				f4RefractColor.xyz = f4NonWarpedRefr.xyz;
+//				f1WaterFogDepthValue = f4NonWarpedRefr.w;
+//			}
+
+		#endif
+
+		// Masks the Reflection Color by the Water Depth
+		// SDK doesn't apply this
+		/*
+		#if REFLECT
+			f4ReflectColor.rgb *= saturate(2.0f * f1WaterFogDepthValue); // WaterFog is already boosted..
+		#endif
+		*/
+	#elif (REFRACT > 0) // No actual depth underwater so do this instead		
+		float f1WaterFogFactor = saturate((f1Depth - f1FogStart) / f1FogRange);
+		f4RefractColor.rgb = lerp(f4RefractColor.rgb, f3Fog, f1WaterFogFactor);
+	#endif
+
+	//==========================================================================//
+	//	Final blending between the Surface Layer, Refract and Reflect Samples
+	//==========================================================================//
+	// This entire section is rewritten because the original did not make sense at all
+	// broke this down to simpler statements.
+	float4 f4Result = float4(0.0f, 0.0f, 0.0f, 1.0f); // .w has to be 1.0f
+
+	// If we use FlowMapping and a Basetexture it implies FlowColor
+	#if !PROJTEX
+		#if (BASETEXTURELAYER > 0)
+			#if (FLOWMAPPING == 0)
+
+				// Always apply the Lightmap
+				f4Result.rgb = f4SurfaceBase.xyz * f3Lightmap;
+
+				#if REFLECT // Mask out reflections. Now also account for Fog
+					#if (REFRACT == 0)
+						f4ReflectColor.xyz = lerp(f3Fog, f4ReflectColor.xyz, f1Fresnel);
+					#endif
+
+					f4Result.rgb += f4ReflectColor.xyz * f4SurfaceBase.aaa * f1Fresnel; // *.a sounds inoptimal. Reflections on the sludge now...
+				#endif
+				
+				#if (REFRACT > 0)
+					// Lerp out underwater regions using the alpha
+					// This behaviour was previously entirely missing from the Water shader
+					f4Result.rgb += lerp(f4RefractColor.xyz, f4SurfaceBase.xyz, saturate(f4SurfaceBase.a * 2.0f));
+				#endif
+			#else // else Flowmapping
+				// Always apply the Lightmap
+				float3 f3SurfaceColor = f4SurfaceBase.xyz * f3Lightmap;
+
+				// Refract here is Refraction that happens ***under*** the surface layer + Fog
+				// No Refract = Only Fog. Lerp out underwater regions using the alpha
+				#if (REFRACT > 0)
+					float3 f3UnderWater	= lerp(f4RefractColor.xyz, f3SurfaceColor, saturate(f4SurfaceBase.aaa * 2.0f));
+				#else
+					float3 f3UnderWater	= lerp(f3Fog, f3SurfaceColor, saturate(f4SurfaceBase.aaa * 2.0f));
+				#endif
+
+				#if REFLECT
+					// They used a similar trick in l4d2 for sharpening borders of blood on the infected shader.
+					// This is probably done to make sure there is no 'capillary action'
+					// ( It would look like the reflection is creeping up the sides of the sludge like water creeps up the walls of a capillary )
+					float f1SludgeAboveWater = smoothstep(0.5f, 0.7f, f4SurfaceBase.a);
+
+					// f3UnderWater has the, we don't want to just 'add' it because we only want reflections where there is no sludge on top
+					f4Result.rgb = lerp(f3UnderWater, f4ReflectColor.xyz, saturate(f1Fresnel * (1.0f - f1SludgeAboveWater)));
+				#else
+					// We don't have Reflections, so we only want the underwater Part
+					// This is entirely missing from the ASW Shader!
+					f4Result.rgb = f3UnderWater;
+				#endif
+			#endif // #if !FLOWMAPPING #else .. #endif <-
+		#else // else !BASETEXTURE
+
+			// In case of ABOVEWATER, the RefractColor already includes Water Fog Color.
+			#if (REFRACT > 0 && REFLECT)
+
+				// Both means lerp. Looking down should grant no Reflections
+				f4Result.rgb = lerp(f4RefractColor.rgb, f4ReflectColor.rgb, f1Fresnel);
+
+			#elif (REFRACT > 0)
+
+				// If only Refract, only Refract
+				f4Result.rgb = f4RefractColor.rgb;
+			#elif REFLECT
+				// Fog would usually be computed into Refract, well -- no Refract here --
+				// This will probably look very weird since it's a Mirror with Fog
+				f4Result.rgb = lerp(f3Fog, f4ReflectColor.xyz, f1Fresnel);
+			#endif
+		#endif
+	#else
+
+		//==========================================================================//
+		//	Projected Texture Sample
+		//==========================================================================//
+
+		float3 f3ProjTexTint = LINEAR_LIGHT_SCALE * g_ProjTexTint.xyz;
+		#if (ABOVEWATER && REFRACT > 0)
+			f3ProjTexTint *= f1EdgeFadeFactor;
+		#endif
+
+		// Projected Textures only applies Fog.
+		f4Result.rgb = f3FogColor * f3ProjTexTint * ComputeProjectedTextureDiffuse(f3WorldPos, f3NormalWS, PROJTEXSHADOWS);
+	#endif
+
+	//==========================================================================//
+	//	Results
+	//==========================================================================//
+
+	return LUX_Finalise(f4Result, f3WorldPos, f1Depth);
+}

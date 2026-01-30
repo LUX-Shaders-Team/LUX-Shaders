@@ -1,0 +1,123 @@
+//===================== File of the LUX Shader Project =====================//
+//
+//	Initial D.	:	28.02.2023 DMY
+//	Last Change :	 30.01.2026 DMY
+//
+//==========================================================================//
+
+//==========================================================================//
+//	Declare Static Combos
+//==========================================================================//
+// STATIC: "ENABLEFOG"		"0..1"
+// STATIC: "WRITETOALPHA"	"0..1"
+
+//==========================================================================//
+//	Declare Dynamic Combos
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Skipping undesired Combos
+//	The Order of Static Combos and Skips has a drastic Impact on Compile Time!
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Common Definitions
+//==========================================================================//
+
+// No Fog unless asked for
+#if !ENABLEFOG
+#define NO_FOG
+#endif
+
+// No Depth to Alpha unless asked for
+#if !WRITETOALPHA
+#define NO_DEPTHTODESTALPHA
+#endif
+
+//#define TONEMAP_SCALE_NONE
+#define TONEMAP_SCALE_LINEAR
+//#define TONEMAP_SCALE_GAMMA
+
+//==========================================================================//
+//	Constants, Functions, Includes
+//==========================================================================//
+
+// Include for all Pixel Shaders
+#include "lux_common_ps_fxc.h"
+
+// FIXME: Macros
+const float4 cControls		: register(c0);
+#define g_f3OutlineColor		(cControls.rgb)
+#define g_f1OutlinePower		(cControls.w)
+
+const float4 cControls2		: register(c1);
+#define g_f3CameraPos			(cControls2.xyz)
+#define g_f1CullFactor			(cControls2.w)
+
+const float4 cControls3		: register(c2);
+#define g_f1CullPower2			(cControls3.x)
+#define g_f1CullFactor2			(cControls3.y)
+#define g_f1DepthBias			(cControls3.z)
+
+//==========================================================================//
+//	PS Input
+//==========================================================================//
+struct PS_INPUT
+{
+	// The legendary vFace Register foretold by Microsoft Documentation
+	// This is a SM3.0 Feature that tells us the Normal Direction of this Pixel.
+	// ( Basically a Backface Indicator )
+	float Facing					: VFACE;
+
+	float4 WorldPos_ProjPosZ		: TEXCOORD0;
+	float2 ProjPosZW				: TEXCOORD1;
+	float3 WorldNormal				: NORMAL;
+};
+ 
+//==========================================================================//
+//	Everything the Pixel Shader will be outputting
+//==========================================================================//
+struct PS_OUTPUT
+{
+	float4 Color : COLOR;
+	float Depth : DEPTH;
+};
+
+//==========================================================================//
+//	PS Entry Point
+//==========================================================================//
+PS_OUTPUT main(PS_INPUT i)
+{
+	// Kill Front Facing Surfaces
+	if(i.Facing > 0.0f)
+		clip(-1);
+
+	float3	f3WorldPos = i.WorldPos_ProjPosZ.xyz;
+	float	f1Depth = i.WorldPos_ProjPosZ.w;
+
+	float3 f3WorldNormal = i.WorldNormal;
+
+	float3 f3ViewDir = ComputeViewDir(f3WorldPos);
+
+	// Inverted for outgoing Fresnel
+	float f1NdotL = saturate(dot(f3WorldNormal, -f3ViewDir));
+
+	// Raise to a power
+	f1NdotL = pow(f1NdotL, g_f1OutlinePower);
+
+	// If we are rendering a FrontFace, Discard.
+	// We can approximate this with NdotL
+	// Culling Mode is not exposed in pShaderShadow, unfortunately
+	if(f1NdotL >= g_f1CullFactor)
+		discard;
+
+    float4 f4ColorResult = LUX_Finalise(float4(g_f3OutlineColor, 1.0f), f3WorldPos, f1Depth);
+	float f1RealDepth = i.ProjPosZW.x / i.ProjPosZW.y;
+
+	PS_OUTPUT o;
+	o.Color = f4ColorResult;
+	o.Depth = f1RealDepth + g_f1DepthBias; // Small increase in written Depth.
+	return o;
+}

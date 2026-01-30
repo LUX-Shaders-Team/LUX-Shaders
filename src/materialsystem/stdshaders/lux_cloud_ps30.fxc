@@ -1,0 +1,69 @@
+//===================== File of the LUX Shader Project =====================//
+//
+//	Initial D.	:	19.11.2024 DMY
+//	Last Change :	 30.01.2026 DMY
+//
+//==========================================================================//
+
+//==========================================================================//
+//	Declare Static Combos
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Declare Dynamic Combos
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Skipping undesired Combos
+//	The Order of Static Combos and Skips has a drastic Impact on Compile Time!
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Common Definitions
+//==========================================================================//
+
+//#define TONEMAP_SCALE_NONE
+#define TONEMAP_SCALE_LINEAR
+//#define TONEMAP_SCALE_GAMMA
+
+//==========================================================================//
+//	Constants, Functions, Includes
+//==========================================================================//
+
+// Include for all Pixel Shaders
+#include "lux_common_ps_fxc.h"
+
+// BaseTexture Sampler always defined
+sampler Sampler_CloudAlpha : register(s1);
+
+//==========================================================================//
+//	PS Input
+//==========================================================================//	
+struct PS_INPUT
+{
+	float4 WorldPos_ProjPosZ	: TEXCOORD0;
+	float4 TexCoords			: TEXCOORD1;
+};
+ 
+//==========================================================================//
+//	PS Entry Point
+//==========================================================================//
+float4 main(PS_INPUT i) : COLOR
+{
+	//	Getting our PS_INPUT
+	//==========================================================================//
+
+	// TEXCOORD0
+	float3 f3WorldPosition = i.WorldPos_ProjPosZ.xyz;
+	float  f1Depth = i.WorldPos_ProjPosZ.w;
+
+	// TEXCOORD1
+	float4 f4BaseTexture = tex2D(Sampler_BaseTexture, i.TexCoords.xy);
+	float4 f4CloudAlpha = tex2D(Sampler_CloudAlpha, i.TexCoords.zw);
+
+	float4 f4Result = f4BaseTexture * f4CloudAlpha;
+	return LUX_Finalise(f4Result, f3WorldPosition, f1Depth);
+}

@@ -1,0 +1,379 @@
+//===================== File of the LUX Shader Project =====================//
+//
+//	Initial D.	:	04.03.2023 DMY
+//	Last Change :	 30.01.2026 DMY
+//
+//==========================================================================//
+
+//==========================================================================//
+//	Declare Static Combos
+//==========================================================================//
+// STATIC:	"BLENDMODULATETEXTURE"		"0..1"
+// STATIC:	"ENVMAPMODE"				"0..4"
+// STATIC:	"SELFILLUMMODE"				"0..2"
+// STATIC:	"XBYBASEALPHA"				"0..2"
+// STATIC:	"DETAILTEXTURE"				"0..2"
+// STATIC:	"SSBUMP"					"0..1"
+
+//==========================================================================//
+//	Declare Dynamic Combos
+//==========================================================================//
+// No Bicubic here, the Shader is expensive enough as it is.
+
+//==========================================================================//
+//	Skipping undesired Combos
+//	The Order of Static Combos and Skips has a drastic Impact on Compile Time!
+//==========================================================================//
+// SKIP: ( ($ENVMAPMODE != 2 && $ENVMAPMODE != 4) && $SELFILLUMMODE == 2 )
+// SKIP: ( $SELFILLUMMODE == 1 && $XBYBASEALPHA != 0)
+
+//==========================================================================//
+//	Unpack Combos
+//==========================================================================//
+
+// $SelfIllum/$SelfIllumMask & $SelfIllum_EnvMapMask_Alpha
+#if (SELFILLUMMODE > 0)
+	#define SELFILLUM 1
+
+	#if (SELFILLUMMODE == 2)
+		#define SELFILLUM_ENVMAPMASK_ALPHA 1
+	#else
+		#define SELFILLUM_ENVMAPMASK_ALPHA 0
+	#endif
+#else
+	#define SELFILLUM 0
+	#define SELFILLUM_ENVMAPMASK_ALPHA 0
+#endif
+
+// $BlendTintByBaseAlpha and $DesaturateWithBaseAlpha
+#if (XBYBASEALPHA > 0)
+	#if (XBYBASEALPHA == 1)
+		#define BLENDTINTBYBASEALPHA 1
+		#define DESATURATEWITHBASEALPHA 0
+	// == 2
+	#else
+		#define BLENDTINTBYBASEALPHA 0
+		#define DESATURATEWITHBASEALPHA 1		
+	#endif
+#else
+	#define BLENDTINTBYBASEALPHA 0
+	#define DESATURATEWITHBASEALPHA 0
+#endif
+
+// Unpack Detail Combo
+#if (DETAILTEXTURE > 0)
+	#define ANYDETAILTEXTURE 1
+
+	#if (DETAILTEXTURE == 2)
+		#define DETAILTEXTURE2 1
+	#else
+		#define DETAILTEXTURE2 0
+	#endif
+#else
+	#define ANYDETAILTEXTURE 0
+	#define DETAILTEXTURE2 0
+#endif
+
+//==========================================================================//
+//	Common Definitions
+//==========================================================================//
+
+// Define BRUSH for PCC
+#define BRUSH
+
+// Linear Tonemapping
+//#define TONEMAP_SCALE_NONE
+#define TONEMAP_SCALE_LINEAR
+//#define TONEMAP_SCALE_GAMMA
+
+//==========================================================================//
+//	Constants, Functions, Includes
+//==========================================================================//
+
+// Include for all Pixel Shaders
+#include "lux_common_ps_fxc.h"
+
+// Remapped Constants and Samplers, and new Constants
+#include "lux_worldvertextransition.h"
+#include "lux_common_detailtexture.h"
+#include "lux_common_lightmapped.h"
+#include "lux_common_selfillum.h"
+#include "lux_common_envmap.h"
+
+//==========================================================================//
+//	PS Input
+//==========================================================================//	
+struct PS_INPUT
+{
+	// lux_displacement_vs30
+	float4 WorldPos_ProjPosZ		: TEXCOORD0;
+	float4 BaseTexCoords			: TEXCOORD1;
+	float4 TexCoords2				: TEXCOORD2;
+	float4 TexCoords3				: TEXCOORD3;
+	float4 TexCoords4				: TEXCOORD4;
+	float4 TexCoords5				: TEXCOORD5;
+	float3 BlendData				: TEXCOORD6;
+
+#if ENVMAP
+	float3 Tangent		: TANGENT;
+	float3 Binormal		: BINORMAL;
+	float3 Normal		: NORMAL;
+#endif
+};
+
+//==========================================================================//
+//	PS Entry Point
+//==========================================================================//
+float4 main(PS_INPUT i) : COLOR
+{
+	//	Getting our PS_INPUT
+	//==========================================================================//
+
+	// TEXCOORD0
+	float3 f3WorldPos = i.WorldPos_ProjPosZ.xyz;
+	float  f1Depth = i.WorldPos_ProjPosZ.w; 
+
+	// TEXCOORD1
+	float2 f2Base1UV = i.BaseTexCoords.xy;
+	float2 f2Base2UV = i.BaseTexCoords.zw;
+
+	// TEXCOORD2
+	float2 f2Bump1UV = i.TexCoords2.xy;
+	float2 f2Bump2UV = i.TexCoords2.zw;
+
+	// TEXCOORD3
+	#if (ANYDETAILTEXTURE)
+		#if ENVMAPMASK
+			float2 f2Detail1UV = i.TexCoords4.xy;
+			float2 f2Detail2UV = i.TexCoords4.zw;
+		#else
+			float2 f2Detail1UV = i.TexCoords3.xy;
+			float2 f2Detail2UV = i.TexCoords3.zw;
+		#endif
+	#endif
+
+	// TEXCOORD4
+	#if ENVMAPMASK
+		float2 f2EnvMapMask1UV = i.TexCoords3.xy;
+		float2 f2EnvMapMask2UV = i.TexCoords3.zw;
+	#endif
+
+	// TEXCOORD5
+	// Packed Offsets into .zw so we need one less float2
+	float2 f2Lightmap1UV = i.TexCoords5.xy;
+	float2 f2Lightmap2UV = f2Lightmap1UV + i.TexCoords5.zw;
+	float2 f2Lightmap3UV = f2Lightmap2UV + i.TexCoords5.zw;
+
+	// Function expects it like this
+	float4 f4LightmapUVs1 = float4(f2Lightmap1UV, 0.0f, 0.0f);
+	float4 f4LightmapUVs2 = float4(f2Lightmap2UV, f2Lightmap3UV);
+
+	// TEXCOORD6
+	#if BLENDMODULATETEXTURE
+		float2 f2BlendModulateUV = i.BlendData.xy;
+	#endif
+
+	// I saturate this to make sure the Compiler knows it can optimise (a == b)
+	float f1BlendFactor = saturate(i.BlendData.z);
+
+	// TANGENT, BINORMAL, NORMAL
+	#if ENVMAP
+		float3x3 TBN_Matrix = float3x3(i.Tangent, i.Binormal, i.Normal);
+	#endif
+
+	//==========================================================================//
+	// Textures
+	//==========================================================================//
+
+	float4 f4BaseTexture = tex2D(Sampler_BaseTexture, f2Base1UV);
+	float4 f4BaseTexture2 = tex2D(Sampler_BaseTexture2, f2Base2UV);
+	float4 f4NormalTexture = tex2D(Sampler_NormalMap, f2Bump1UV);
+	float4 f4NormalTexture2 = tex2D(Sampler_NormalMap2, f2Bump2UV);
+
+	#if ANYDETAILTEXTURE
+		float4 f4DetailTexture = tex2D(Sampler_DetailTexture, f2Detail1UV);
+		float4 f4DetailTexture2 = f4DetailTexture;
+
+		#if DETAILTEXTURE2
+			f4DetailTexture2 = tex2D(Sampler_DetailTexture2, f2Detail2UV);
+		#endif
+	#endif
+
+	#if BLENDMODULATETEXTURE
+		float4 f4BlendModulateTexture = tex2D(Sampler_BlendModulate, f2BlendModulateUV);
+	#endif
+
+	#if ENVMAPMASK
+		float4 f4EnvMapMask = tex2D(Sampler_EnvMapMask, f2EnvMapMask1UV);
+		float4 f4EnvMapMask2 = tex2D(Sampler_EnvMapMask2, f2EnvMapMask2UV);
+	#endif
+
+	// s13, s15
+	#if (SELFILLUM && !SELFILLUM_ENVMAPMASK_ALPHA)
+		float4 f4SelfIllum = tex2D(Sampler_SelfIllum, f2Base1UV);
+		float4 f4SelfIllum2 = tex2D(Sampler_SelfIllum2, f2Base2UV);	
+	#endif
+
+	//==========================================================================//
+	// Texture Blending
+	//==========================================================================//
+	#if BLENDMODULATETEXTURE
+
+		// Stock-Consistency
+		float f1MinBlend = saturate(f4BlendModulateTexture.g - f4BlendModulateTexture.r);
+		float f1MaxBlend = saturate(f4BlendModulateTexture.g + f4BlendModulateTexture.r);
+		f1BlendFactor = smoothstep(f1MinBlend, f1MaxBlend, f1BlendFactor);
+	#endif
+
+	// Blended Versions of these Textures
+	float4 f4BlendedBase = lerp(f4BaseTexture, f4BaseTexture2, f1BlendFactor);
+
+	// Stock-Consistency: 
+	// Stock Shader allows a singular BumpMap on a Blended-Material
+	// ( See also Cave Walls in Half Life 2 : Episode 2 )
+	// We bind $BumpMap to $BumpMap2 if there wasn't a $BumpMap2.
+	// This wastes a Texture Sample and a LRP, but replicates Stock Behaviour ( Me:Happy )
+	float4 f4BlendedBump = lerp(f4NormalTexture, f4NormalTexture2, f1BlendFactor);
+	float3 f3NormalTS	 = f4BlendedBump.xyz;
+	float  f1NormalAlpha = f4BlendedBump.a;
+
+	#if ANYDETAILTEXTURE
+		float4 f4BlendedDetail = lerp(f4DetailTexture, f4DetailTexture2, f1BlendFactor);
+	#endif
+
+	#if ENVMAPMASK
+		float4 f4BlendedEnvMapMask = lerp(f4EnvMapMask, f4EnvMapMask2, f1BlendFactor);
+	#endif
+
+	#if (SELFILLUM && !SELFILLUM_ENVMAPMASK_ALPHA)
+		float4 f4BlendedSelfIllumMask = lerp(f4SelfIllum, f4SelfIllum2, f1BlendFactor);
+	#endif
+
+	//==========================================================================//
+	//	Tints ( This has to happen AFTER we Modulate! )
+	//==========================================================================//
+
+	// $BlendTintByBaseAlpha and $DesatureWithBaseAlpha
+    ComputeTintAndXByBaseAlpha(f4BlendedBase, g_f3DefaultTint, g_f1DefaultAlphaFactor, BLENDTINTBYBASEALPHA, DESATURATEWITHBASEALPHA);
+
+	#if ANYDETAILTEXTURE
+		int nDetailBlendMode = trunc(g_f1DetailBlendMode);
+	
+		// The Tint has potentially precomputed Information
+		// Apply it now.
+		f4DetailTexture.rgb *= g_f3DetailTextureTint;
+	
+		f4BlendedBase = TextureCombine(f4BlendedBase, f4BlendedDetail, nDetailBlendMode);
+	#endif
+
+	//==========================================================================//
+	// Lighting
+	//==========================================================================//
+
+	#if !SSBUMP
+		// Decompress regular BumpMaps
+		f3NormalTS = f3NormalTS * 2.0f - 1.0f;
+	#endif
+
+	float3 f3DiffuseLighting;
+	#if ANYDETAILTEXTURE
+		f3DiffuseLighting = ComputeBumpedLightmap(f3NormalTS, f4LightmapUVs1,f4LightmapUVs2, nDetailBlendMode, f4DetailTexture.xyz);
+	#else
+		f3DiffuseLighting = ComputeBumpedLightmap(f3NormalTS, f4LightmapUVs1, f4LightmapUVs2);
+	#endif
+	
+	// Apply LightWarpTexture if desired.
+	#if LIGHTWARPTEXTURE
+    if (g_bLightWarpTexture)
+	{
+		f3DiffuseLighting = 2.0f * tex1Dlod(Sampler_LightWarpTexture, float4(0.5f * length(f3DiffuseLighting), 0.0f, 0.0f, 0.0f)).rgb;
+	}
+	#endif
+		
+	// Indirect-Specular Lighting
+	float3 f3IndirectSpecular = 0.0f;
+	#if ENVMAP
+
+		// If we used an SSBump we must convert it or bad Things happen to our Cubemaps...
+		// ShiroDkxtro2: This does not appear to be affected by the SSBumpMathIssue
+		#if SSBUMP
+			// Use the original f4 for the math, as the f3 is being overwritten
+			f3NormalTS  = mxBumpBasis[0] * f4BlendedBump.xxx;
+			f3NormalTS += mxBumpBasis[1] * f4BlendedBump.yyy;
+			f3NormalTS += mxBumpBasis[2] * f4BlendedBump.zzz;
+			f3NormalTS  = normalize(f3NormalTS);
+		#endif
+	
+		// Convert to WorldSpace
+		float3 f3NormalWS = normalize(mul(f3NormalTS, TBN_Matrix));
+
+		// Masking. This get's a little bit tricky.
+		// Since we only get one EnvMap Sample here not two
+		// We simply have to blend the NoEnvMap Factor instead.
+		float bNoEnvMap = lerp(g_f1BaseTextureNoEnvMap, g_f1BaseTexture2NoEnvMap, f1BlendFactor);
+
+		float3 f3ViewDir = ComputeViewDir(f3WorldPos);
+		#if ENVMAPMASK
+			f3IndirectSpecular += bNoEnvMap * ComputeEnvMap(f3DiffuseLighting, f3WorldPos, f3NormalWS, f3ViewDir, f4BlendedEnvMapMask.rgb);
+		#else
+			f3IndirectSpecular += bNoEnvMap * ComputeEnvMap(f3DiffuseLighting, f3WorldPos, f3NormalWS, f3ViewDir, f4BlendedBase.w, f1NormalAlpha);
+		#endif
+	#endif
+	
+	// Need this for SelfIllum and BlendMode 5
+	// Specular shouldn't be affected by SelfIllum
+	float3 f3Result = f4BlendedBase.rgb * f3DiffuseLighting;
+
+	//==========================================================================//
+	// SelfIllumination Methods
+	//==========================================================================//
+
+	// Despite being called EmissiveBlend it does not support Blending
+	// So we can't move this to a second Pass
+	#if ANYDETAILTEXTURE
+		f3Result = TextureCombinePostLighting(f3Result, f4DetailTexture.rgb, nDetailBlendMode);
+	#endif
+
+	// $SelfIllum and $SelfIllumMask
+	#if SELFILLUM
+		#if SELFILLUM_ENVMAPMASK_ALPHA
+			// $SelfIllum_EnvMapMask_Alpha
+			f3Result = lerp(f3Result, f4BlendedBase.rgb * g_f3SelfIllumTint, f4EnvMapMask.w);
+		#else	
+			f4SelfIllum.rgb = lerp(f4BlendedBase.aaa, f4BlendedSelfIllumMask.rgb, g_f1SelfIllumMaskFactor);
+			f3Result = lerp(f3Result, f4BlendedBase.rgb * g_f3SelfIllumTint, f4SelfIllum.rgb);
+		#endif
+	#endif
+
+	//==========================================================================//
+	// Results
+	//==========================================================================//
+
+	// Apply EnvMap
+	f3Result += f3IndirectSpecular;
+
+	// Pass BaseAlpha onwards
+	float f1Alpha;
+
+	// Make a use of the Blue and Alpha Channel in a BlendModulateTexture
+	#if BLENDMODULATETEXTURE
+	if(g_bHasBlendModulateTransparency)
+	{
+		// Suggestion made by MrFunreal!
+		// Alpha of the BaseTexture(s) might be used for BlendTintByBaseAlpha, SelfIllum or AlphaEnvMapMask.
+		// This will allow Artists to use the unused Channels of the BlendModulate Texture for Transparency instead!
+		f1Alpha = lerp(f4BlendModulateTexture.b, f4BlendModulateTexture.a, f1BlendFactor);
+	}
+	else
+	#endif
+	if(true)
+	{
+		f1Alpha = f4BlendedBase.a; // Already Blended!
+	}
+
+	// NOTE: No VertexColors here
+	// We should probably have them for Texture Shaded Polygons
+	// But we don't have the TexCoords for it!!
+
+    return LUX_Finalise(float4(f3Result, f1Alpha), f3WorldPos, f1Depth, g_f1AlphaModulation);
+}

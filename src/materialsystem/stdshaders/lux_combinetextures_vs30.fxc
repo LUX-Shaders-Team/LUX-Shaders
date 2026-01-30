@@ -1,0 +1,146 @@
+//===================== File of the LUX Shader Project =====================//
+//
+//	Initial D.	:	16.07.2025 DMY
+//	Last Change :	 30.01.2026 DMY
+//
+//==========================================================================//
+
+//==========================================================================//
+//	Declare Static Combos
+//==========================================================================//
+//	STATIC:	"TEXCOORDS"					"0..14"
+
+//==========================================================================//
+//	Declare Dynamic Combos
+//==========================================================================//
+//	DYNAMIC: "COMPRESSION"				"0..1"
+//  DYNAMIC: "SKINNING"                 "0..1"
+
+//==========================================================================//
+//	Skipping undesired Combos
+//	The Order of Static Combos and Skips has a drastic Impact on Compile Time!
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Constants, Functions, Includes
+//==========================================================================//
+
+// Include for all Vertex Shaders
+#include "lux_common_vs_fxc.h"
+
+// Model specific Functions
+#include "lux_common_vs_model.h"
+
+// 14 Transform across 28 Registers
+const float4 g_Transforms[28]	: register(LUX_VS_TEXTURETRANSFORM_01);
+
+//==========================================================================//
+//	VS Input
+//==========================================================================//
+struct VS_INPUT
+{
+    // This is all of the stuff that we ever use
+    float4 vPos                     : POSITION;
+	float4 vBoneWeights             : BLENDWEIGHT;	//	Despite no bones,
+	float4 vBoneIndices             : BLENDINDICES; //	we use these in SkinPositionAndNormal()
+    float4 vNormal                  : NORMAL;
+	float4 vTangent					: TANGENT;
+    float2 vTexCoord0               : TEXCOORD0;
+    float4 vUnusedTexCoord	        : TEXCOORD1;
+    float4 vMorphTexCoord			: TEXCOORD2;
+	float4 vColor                   : COLOR0;
+	float3 vSpecular				: COLOR1;
+
+	// User What now? How can we use that?
+	float4 vUserData				: TANGENT;
+
+	// Position and normal/tangent deltas
+	float4 vPosFlex					: POSITION1;
+	float4 vNormalFlex				: NORMAL1;
+
+	float vVertexID					: POSITION2;
+};
+
+//==========================================================================//
+//	VS Output
+//==========================================================================//
+struct VS_OUTPUT
+{
+    float4 ProjPosSetup				:	POSITION; 
+	float4 WorldPos_ProjPosZ		:	TEXCOORD0;
+
+	// GRRR. Can't do float2 TexCoords[14]..
+	// Since it doesn't know we want the zw's filled.
+	// 7 is the Max Amount of TexCoords ( ew magic Number )
+	float4 TexCoords[7]				:	TEXCOORD1;
+};
+
+//==========================================================================//
+//	VS Entry Point
+//==========================================================================//
+VS_OUTPUT main( const VS_INPUT v )
+{
+	VS_OUTPUT o = ( VS_OUTPUT )0;
+
+	//==========================================================================//
+	//	Get the basic Vertex Shader Inputs
+	//==========================================================================//
+
+	// Variable needed for Skinning and Morphing
+	float3 f3ObjectPosition = v.vPos.xyz;
+
+	//==========================================================================//
+	//	Handle Morphing
+	//==========================================================================//
+
+	// Simple Morph
+	ApplyMorph( v.vPosFlex, f3ObjectPosition );
+
+	//==========================================================================//
+	// Handle Rotations and Offsets
+	//==========================================================================//
+
+	float3 f3WorldPos;
+	AlignVertexInputs(SKINNING, float4(f3ObjectPosition, 1.0f),
+		v.vBoneWeights, v.vBoneIndices, f3WorldPos);
+
+	//==========================================================================//
+	//	VS Output
+	//==========================================================================//
+
+	// POSITION	
+	float4 f4ProjPos = mul(float4(f3WorldPos, 1.0f), cViewProj);
+	o.ProjPosSetup = FixHPO(f4ProjPos); // Apply Half-Pixel Offset Fix
+
+	// TEXCOORD0
+	o.WorldPos_ProjPosZ.xyz = f3WorldPos;
+	o.WorldPos_ProjPosZ.w = dot(float4(f3WorldPos, 1), cViewProjZ);
+
+	// TEXCOORD1, TEXCOORD2, TEXCOORD3, TEXCOORD4, TEXCOORD5, TEXCOORD6, TEXCOORD7 
+	#if (TEXCOORDS > 0)
+		// Stuffing 1.0f into .zw so all Components of the TexCoord Transform influence the UV
+		float4 f4UnmodifiedTexCoord = float4(v.vTexCoord0.xy, 1.0f, 1.0f);
+
+		// Array for the Results
+		float2 f2Results[TEXCOORDS];
+
+		// This is the cleanest thing I could come up with that isn't a huge #if Chain.
+		// We have the Compiler Unroll this very neat little thing
+		[unroll]
+		for (int n = 0; n < TEXCOORDS; n++)
+		{
+			f2Results[n].x = dot(f4UnmodifiedTexCoord, g_Transforms[n * 2 + 0]);
+			f2Results[n].y = dot(f4UnmodifiedTexCoord, g_Transforms[n * 2 + 1]);
+		}
+
+		// Fill the Results, 
+		[unroll]
+		for (n = 0; n < (TEXCOORDS/2); n++)
+		{
+			o.TexCoords[n] = float4(f2Results[n * 2], f2Results[n * 2 + 1]);
+		}
+	#endif
+
+    return o;
+}

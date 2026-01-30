@@ -1,0 +1,349 @@
+//===================== File of the LUX Shader Project =====================//
+//
+//	Initial D.	:	25.11.2025 DMY
+//	Last Change :	 30.01.2026 DMY
+//
+//==========================================================================//
+
+//==========================================================================//
+//	Declare Static Combos
+//==========================================================================//
+// STATIC:	"MASKED"					"0..1"
+// STATIC:	"SILHOUETTEFADE"			"0..1"
+// STATIC:	"REFRACTTINTTEXTURE"		"0..1"
+// STATIC:	"BLUR"						"0..1"
+// STATIC:	"ENVMAPMODE"				"0..4"
+// STATIC:	"SECONDARYNORMAL"			"0..1"
+// STATIC:	"MAGNIFY"					"0..1"
+// STATIC:	"LOCALREFRACT"				"0..1"
+
+//==========================================================================//
+//	Declare Dynamic Combos
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Skipping undesired Combos
+//	The Order of Static Combos and Skips has a drastic Impact on Compile Time!
+//==========================================================================//
+// Masked works with basically nothing, and I'm keeping it that way
+// Magnify, LocalRefract, and SecondaryNormal can be used with 'Masked'
+// They all affect the Refract TexCoord directly in some way.
+// Therefore they are NOT skipped and placed at the end of the Statics
+// SKIP: ($MASKED != 0 && $SILHOUETTEFADE != 0)
+// SKIP: ($MASKED != 0 && $REFRACTTINTTEXTURE != 0)
+// SKIP: ($MASKED != 0 && $BLUR != 0)
+
+//==========================================================================//
+//	Common Definitions
+//==========================================================================//
+
+// Needed for PCC
+#define BRUSH
+
+// Not Implemented yet so disable it..
+#define NO_ENVMAPFRESNEL
+
+// Stock-Consistency: No Tonemap Scale
+#define TONEMAP_SCALE_NONE
+//#define TONEMAP_SCALE_LINEAR
+//#define TONEMAP_SCALE_GAMMA
+
+//==========================================================================//
+//	Constants, Functions, Includes
+//==========================================================================//
+
+// Include for all Pixel Shaders
+#include "lux_common_ps_fxc.h"
+
+#include "lux_common_envmap.h"
+
+// s0 - $BaseTexture ( Rendertarget or Background )
+// s1 - $NormalMap
+// s2 - $NormalMap2 ( SECONDARYNORMAL )
+// s3 - $RefractTintTexture
+sampler Sampler_NormalMap		: register(s1);
+sampler Sampler_NormalMap2		: register(s2);
+sampler Sampler_RefractTint		: register(s3);
+
+const float		cNormalDirFlip				: register(c1);
+#define			g_f1NormalDirFlip				(cNormalDirFlip)
+
+const float4	cRefractParams				: register(c2);
+#define			g_f3RefractTint					(cRefractParams.rgb)
+#define			g_f1RefractScale				(cRefractParams.w)
+
+const float4	cBlurParams					: register(c3);
+#define			g_f1BlurFraction				(cBlurParams.x)
+#define			g_f1HalfBlurFraction			(cBlurParams.y)
+
+const float4	cMagnificationParams		: register(c4);
+#define			g_f2MagnifyCenter				(cMagnificationParams.xy)
+#define			g_f1MagnifyScale				(cMagnificationParams.z)
+
+const float4	cParallaxParams				: register(c5);
+#define			g_f1LocalRefractDepth			(cParallaxParams.x)
+#define			g_f1LocalRefractAspectRatio		(cParallaxParams.y)
+
+//==========================================================================//
+//	PS Input
+//==========================================================================//	
+struct PS_INPUT
+{
+	// lux_refract_vs30
+	float4 WorldPos_ProjPosZ		: TEXCOORD0;
+	float4 TexCoords				: TEXCOORD1;
+	float3 ProjPosXYW				: TEXCOORD2;
+
+	// This is always present to cut down on Static Combos
+	// If Vertex Colors are disabled on the Vertex Shader, this will be 1.0f
+	float4 VertexColor				: COLOR0;
+
+	// TBN
+	float3 Tangent					: TANGENT;
+	float3 Binormal					: BINORMAL;
+	float3 Normal					: NORMAL;
+};
+ 
+//==========================================================================//
+//	PS Entry Point
+//==========================================================================//
+float4 main(PS_INPUT i) : COLOR
+{
+	//	Getting our PS_INPUT
+	//==========================================================================//
+
+	// TEXCOORD0
+	float3 f3WorldPos = i.WorldPos_ProjPosZ.xyz;
+	float  f1Depth = i.WorldPos_ProjPosZ.w; 
+
+	// TEXCOORD1, TEXCOORD2
+	float2 f2SurfaceCoord = i.TexCoords.xy;
+	float2 f2Bump2Coord = i.TexCoords.zw;
+
+	// Local Refract causes the Texture Coordinate of the Mesh to be used for the Refraction Effect instead of Screen Position
+	#if LOCALREFRACT
+		float2 f2UnwarpedCoord = f2SurfaceCoord;
+	#else
+		float2 f2UnwarpedCoord = i.ProjPosXYW.xy / i.ProjPosXYW.z; // Perspective Divide
+	#endif
+
+//	return float4(tex2D(Sampler_BaseTexture, f2UnwarpedCoord).rgb, 1.0f);
+
+	// TANGENT, BINORMAL, NORMAL
+	float3x3 TBN_Matrix = float3x3(i.Tangent, i.Binormal, i.Normal);
+
+	// COLOR
+	// Always. If Vertex Colors are disables this will be 1.0f
+	float4 f4VertexColors = i.VertexColor;
+
+	//==========================================================================//
+	//	Texture Coordinates
+	//==========================================================================//
+
+	// Incident View Vector
+	float3 f3ViewDir = ComputeViewDir(f3WorldPos);
+
+	// Normal Maps
+	float4 f4NormalTS = tex2D(Sampler_NormalMap, f2SurfaceCoord);
+	
+	// Decompress first Normal
+	f4NormalTS.xyz = f4NormalTS.xyz * 2.0f - 1.0f;
+	
+	// Format to new Variable that can contain both Normals
+	float3 f3NormalTS = f4NormalTS.xyz;
+
+	// Secondary Normal Map ($NormalMap2)
+	// BUG, Stock-Consistency: $NormalMap2 has no Effect on the Alpha Channel of the final Normal Variable
+	// $NormalMap2 will affect the 'Shape' of the Refraction but not the Intensity. ( Alpha contains the Mask for Refraction )
+	// Since Normal2 uses it's own Transform, unless it is the same as Normal1, the Mask cannot be precomputed into Normal1.a
+	#if SECONDARYNORMAL
+		float4 f4Normal2TS = tex2D(Sampler_NormalMap2, f2Bump2Coord);
+
+		// Decompress second Normal
+		f4Normal2TS.xyz = f4Normal2TS.xyz * 2.0f - 1.0f;
+
+		// Add together and normalize
+		// There are better ways to do this but this is Stock-Consistency
+		f3NormalTS = normalize(f3NormalTS + f4Normal2TS.xyz);
+	#endif
+
+	// Scale Factor for Normal Offset
+	// Normal Map Alpha will double as EnvMapMask Later.
+    float f1RefractFactor = f4NormalTS.a * g_f1RefractScale;
+
+	// Applying VertexAlpha to Scale the Distortion.
+	// Is Refract usable with Displacements?
+	// If Vertex Colors are disables this will be 1.0f
+	f1RefractFactor *= i.VertexColor.a;
+
+	// ASW Tells us how to do Magnify, but not $LocalRefract
+	// I'm assuming here that LocalRefract requires the regular Refraction Offset to happen first.
+	// Applying the Offset after Parallax invalidates the Scale of the Offset ( Scale isn't parallaxed )
+	// I ran into this specific Issue when testing Parallax Mapping on other Shaders ( LightmappedGeneric & WorldVertexTransition ),
+	// Detail Textures with Scales larger than the $BaseTexture/$BumpMap, would appear floating above the Surface unless the Scale Difference was accounted for
+	// ( Something that is near impossible to account for when you have 12+ separate TexCoord Transforms on WVT.. )
+	#if MAGNIFY
+		// Starting with the Offset
+		float2 f2RefractedTexCoord = f3NormalTS.xy * f1RefractFactor;
+
+		// This is a little bit too complicated to explain but essentially Pixels will move towards the Center-Point
+		f2RefractedTexCoord += 0.5f + g_f2MagnifyCenter;
+		f2RefractedTexCoord += (f2UnwarpedCoord - 0.5f - g_f2MagnifyCenter) * g_f1MagnifyScale; // Inverse Scale
+	#else
+		// Simple Refraction, how it's done on every other Shader with Refractions ( Water, Cloak, Core )
+		float2 f2RefractedTexCoord = f2UnwarpedCoord + f3NormalTS.xy * f1RefractFactor;	
+	#endif
+
+	// Simple Parallax Effect
+	// Adapted from https://github.com/ReactiveDrop/reactivedrop_public_src
+	// Note: Doing this after Magnify, so I compute the Offset first, then apply it to the existing TexCoord
+	// Should be a bit cleaner and allows for using the Offset on other Textures if desired ( $RefractTintTexture maybe )
+	#if LOCALREFRACT
+		
+		// NOTE: Inverted Spaces, so TBN goes first even though it's row-major
+		float3 f3ViewDirTS = mul(TBN_Matrix, f3ViewDir);
+
+		// Parallax Offset courtesy of ASRD
+		// ShiroDkxtro2: This doesn't quite look right.
+		// On glass_lightcover.mdl it appears the Parallax Effect is fading towards the Edges of the Geometry!
+		float2 f2ParallaxOffset = (2.0f - f3NormalTS.z) * f3ViewDirTS.xy / -f3ViewDirTS.z;
+
+		// ShiroDkxtro2: 2.0f is a Magic Number I eyeballed.
+		// Without it, the Sub-Surface is too large ( too close to the Surface ).
+		// Very obvious on glass_lightcover.mdl
+		f2ParallaxOffset *= g_f1LocalRefractDepth * 2.0f;
+		f2ParallaxOffset.x *= g_f1LocalRefractAspectRatio; // What about .y?
+		
+		// Offset the existing Coordinate
+		f2RefractedTexCoord += f2ParallaxOffset;
+
+		// This shouldn't even be necessary.
+		// It should be handled by the Clamp Flags and faded Borders
+		f2RefractedTexCoord = saturate(f2RefractedTexCoord);
+	#endif
+
+	//==========================================================================//
+	//	Refraction
+	//==========================================================================//
+
+	#if SILHOUETTEFADE
+		// Stock-Consistency: BlendFactor for Silhouette Fade made from Vertex Normal [VN]
+		// Stock-Consistency: Outgoing ViewDir for Fresnel
+		// Stock-Consistency: ^3
+		float f1VNdL = saturate(dot(-f3ViewDir, i.Normal * g_f1NormalDirFlip));
+		float f1FresnelFade = f1VNdL * f1VNdL * f1VNdL;
+	#else
+		float f1FresnelFade = 1.0f;
+	#endif
+
+	// Refract Tinting.
+	float3 f3Tint = g_f3RefractTint;
+	#if REFRACTTINTTEXTURE
+		// Why Mod2x?
+		f3Tint = 2.0f * f3Tint * tex2D(Sampler_RefractTint, f2SurfaceCoord).rgb;
+	#endif
+
+	// Always. If Vertex Colors are disables this will be 1.0f
+	f3Tint *= f4VertexColors.rgb;
+
+	float3 f3Diffuse = 0.0f;
+	float f1Alpha = 0.0f;
+	#if BLUR
+		// Original Comment from refract_ps2x.fxc:
+		/*
+			"basic principle behind this transformation:
+			[ A  B  C ]
+			[ D  E  F ]
+			[ G  H  I ]
+			use bilinear filtering hardware to weight upper 2x2 samples evenly (0.25* [A + B + D + E]).
+			scale the upper 2x2 by 4/9 (total area of kernel occupied)
+			use bilinear filtering hardware to weight right 1x2 samples evenly (0.5*[C + F])
+			scale right 1x2 by 2/9
+			use bilinear filtering hardware to weight lower 2x1 samples evenly (0.5*[G + H])
+			scale bottom 2x1 by 2/9
+			fetch last sample (I) and scale by 1/9."
+		*/
+
+		// 1:1 Consistent with Stock
+		float2 f2Upper_2x2_Coord = f2RefractedTexCoord - float2(g_f1HalfBlurFraction, g_f1HalfBlurFraction);
+		float2 f2Right_1x2_Coord = f2RefractedTexCoord + float2(g_f1BlurFraction, -g_f1HalfBlurFraction);
+		float2 f2Lower_2x1_Coord = f2RefractedTexCoord + float2(-g_f1HalfBlurFraction, g_f1BlurFraction);
+		float2 f2Singleton_Coord = f2RefractedTexCoord + float2(g_f1BlurFraction, g_f1BlurFraction);
+		f3Diffuse  = tex2D(Sampler_BaseTexture, f2Upper_2x2_Coord).rgb * 0.4444444f;
+		f3Diffuse += tex2D(Sampler_BaseTexture, f2Right_1x2_Coord).rgb * 0.2222222f;
+		f3Diffuse += tex2D(Sampler_BaseTexture, f2Lower_2x1_Coord).rgb * 0.2222222f;
+		f3Diffuse += tex2D(Sampler_BaseTexture, f2Singleton_Coord).rgb * 0.1111111f;
+
+		// There is no way to tint the unwarped Target..
+		float3 f3NoWarp = tex2D(Sampler_BaseTexture, f2UnwarpedCoord).rgb;
+		f3Diffuse = lerp(f3NoWarp, f3Diffuse * f3Tint, f1FresnelFade);
+	#elif MASKED
+		// This gets no Tint and no Fresnel. It should be getting Tint since this is the *refracted* Result
+		// NOTE: This is supposed to just return now, but I want this Path to support Cubemaps, so it doesn't return yet
+		float4 f4Warped = tex2D(Sampler_BaseTexture, f2RefractedTexCoord);
+		f3Diffuse = f4Warped.rgb;
+		f1Alpha = f4Warped.a; // Used for Alpha Blending
+	#else
+		float3 f3NoWarp = tex2D(Sampler_BaseTexture, f2UnwarpedCoord).rgb;
+		float3 f3Warped = tex2D(Sampler_BaseTexture, f2RefractedTexCoord).rgb;
+		f3Warped *= f3Tint;
+
+		// There is no way to tint the unwarped Target..
+		f3Diffuse = lerp(f3NoWarp, f3Warped, f1FresnelFade);
+	#endif
+
+	// Need Normal Map in WS for EnvMap and Local Refract
+	#if (LOCALREFRACT || ENVMAP)
+
+		// Normal Map(s) hasn't been transformed to WS yet.
+		float3 f3NormalWS = normalize(mul(f3NormalTS, TBN_Matrix));
+		f3NormalWS *= g_f1NormalDirFlip;
+
+		// ShiroDkxtro2:
+		// The Fade we use above is only from the Vertex Normals, it doesn't consider the Surface Details of the BumpMap..
+		// It causes the Surface to become the raw BaseTexture Color.
+		// By applying Fresnel here based on the Normal Map we get a LOT closer to how this looks like in Portal 2.
+		// It is still not perfect, but atleast close enough for me to say I can move on to the next Task.
+		#if LOCALREFRACT
+			float f1NdL = saturate(dot(f3NormalWS, -f3ViewDir)); // Outgoing ViewDir or Fresnel becomes 0.0f
+			f3Diffuse *= f1NdL;
+		#endif
+	#endif
+
+	//==========================================================================//
+	//	Cubemaps
+	//==========================================================================//
+
+	// EnvMap Bracket Part of the above Bracket
+	#if ENVMAP
+		float3 f3Specular = 0.0f;
+
+		#if ENVMAPMASK
+			float4 f4EnvMapMask	= tex2D(Sampler_EnvMapMask, f2SurfaceCoord);
+			f3Specular = ComputeEnvMap(f3WorldPos, f3NormalWS, f3ViewDir, f4EnvMapMask.rgb);
+		#else
+			f3Specular = ComputeEnvMap(f3WorldPos, f3NormalWS, f3ViewDir, f4NormalTS.a);
+		#endif
+
+		f3Diffuse += f3Specular;
+	#endif
+
+	//==========================================================================//
+	//	Results
+	//==========================================================================//
+
+	// Stock-Consistency:
+	// Masked gets no special Alpha.
+	#if !MASKED
+
+		// Normal Map Alpha is already used for Refract Scale but it's going to be the Alpha Output anyways..
+		// Oh yeah, also: This doesn't consider the Alpha of $NormalMap2.
+		f1Alpha = f4NormalTS.a;
+
+		// Always. If Vertex Colors are disables this will be 1.0f
+		f1Alpha *= f4VertexColors.a;
+	#endif
+
+    return LUX_Finalise(float4(f3Diffuse, f1Alpha), f3WorldPos, f1Depth, g_f1AlphaModulation);
+}

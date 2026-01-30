@@ -1,0 +1,368 @@
+//===================== File of the LUX Shader Project =====================//
+
+//==========================================================================//
+//	Available Static Combos to the Shader
+//	Do not change anything here!
+//==========================================================================//
+//	STATIC:	"NORMALS"					"0..2"
+//	STATIC:	"VERTEXCOLORS"				"0..1"
+//  STATIC: "BUMPMAPPED"				"0..2"
+//	STATIC: "PROJTEX"					"0..1"
+//	STATIC:	"DECALMODE"					"0..2"
+
+//==========================================================================//
+//	Available Dynamic Combos to the Shader
+//	Do not change anything here!
+//==========================================================================//
+//	DYNAMIC: "STATICPROPLIGHTING"		"0..1"
+//	DYNAMIC: "DYNAMICPROPLIGHTING"		"0..1"
+//	DYNAMIC: "COMPRESSION"				"0..1"
+//  DYNAMIC: "SKINNING"                 "0..1"
+
+//==========================================================================//
+//	Skipped Combinations
+//==========================================================================//
+
+// Flashlight means no other lighting
+// SKIP: ($PROJTEX != 0 && $STATICPROPLIGHTING == 1)
+// SKIP: ($PROJTEX != 0 && $DYNAMICPROPLIGHTING == 1)
+
+//==========================================================================//
+//	Decompress Combos
+//==========================================================================//
+
+#if (NORMALS > 0)
+	#define VERTEX_NORMAL 1
+
+	#if(NORMALS >= 2)
+		#define VERTEX_TANGENTS 1
+	#else
+		#define VERTEX_TANGENTS 0
+	#endif
+#else
+	#define VERTEX_NORMAL 0
+	#define VERTEX_TANGENTS 0
+#endif
+
+#if (BUMPMAPPED > 0)
+
+	// Always
+	#define BUMPMAPPING 1
+
+	#if (BUMPMAPPED >= 2)
+		#define WRINKLEMAPPING 1
+	#else
+		#define WRINKLEMAPPING 0
+	#endif
+#else
+	#define BUMPMAPPING 0
+	#define WRINKLEMAPPING 0
+#endif
+
+#if (DECAL > 0)
+	#define DECAL_OR_OVERLAY 1
+
+	#if (DECALMODE == 2)
+		#define TF2SDK_OVERLAY 1
+	#else
+		#define TF2SDK_OVERLAY 0
+	#endif
+#else
+	#define DECAL_OR_OVERLAY 0
+	#define TF2SDK_OVERLAY 0
+#endif
+
+//==========================================================================//
+//	Constants, Functions, Includes
+//==========================================================================//
+
+// Include for all Vertex Shaders
+#include "lux_custom_common_vs.h"
+#include "lux_common_vs_model.h"
+
+//==========================================================================//
+//	Everything the Vertex Shader can receive and when
+//==========================================================================//
+struct VS_INPUT
+{
+	// Position is always needed for ProjPos on any Mesh.
+    float4 vPos					: POSITION;
+
+	// Used for Skinning ( Bone Animation )
+	float4 vBoneWeights			: BLENDWEIGHT;
+	float4 vBoneIndices			: BLENDINDICES;
+
+	// For Regular Models:
+	// When COMPRESSION, vNormal contains both the Normal, Tangent and Binormal Sign.
+	// In a compressed Format. Usually all Static Props, Dynamic Props, Physics Props.
+	float4 vNormal				: NORMAL;
+
+	// When !COMPRESSION vNormal contains just the Normal.
+	// vUserData will contain the Tangent and Binormal Sign on .w
+	// This usually only happens when the Model contains Face Flexes or $SoftwareSkin was set.
+	float4 vUserData			: TANGENT;
+
+	// For Special Models:
+	// Tangent and Binormal may come in their own Stream,
+	// Although unlikely, such Meshes do exist. Cables/Rpoes are an Example to this.
+	float4 vTangent				: TANGENT;
+	float4 vBinormal			: BINORMAL;
+
+	// Position and Normal/Tangent Deltas
+	// Used for Morphing
+	float4 vPosFlex				: POSITION1;
+	float4 vNormalFlex			: NORMAL1;
+
+	// Hammer uses Vertex Colors for tinting some Objects ( Sprites ) with the RenderColor KeyValue
+	// It also uses them for the Texture Shaded Polygons View.
+	// Vertex Colors are used by Particles for Distance based Fades.
+	float4 vColor				: COLOR0;
+
+	// Static Prop Lighting comes through the COLOR1 Stream
+	// Using $BumpMap disables this on the Engine Side
+	// You can override this by using $Texture1 and $Texture2 instead
+	// Just be aware the Engine blocks you from doing this, not the Shader
+	float3 vSpecular			: COLOR1;
+
+	// TexCoord0 is the UV of the BaseTexture.
+	float2 vTexCoord0			: TEXCOORD0;
+
+	// TexCoord1 is the second UV of the Mesh.
+	// This is usually only supported by Meshes build with the Mesh Builder
+	// TF2 HUD Elements use this. It's known on ULG/VLG as $SeparateDetailUVs
+	float2 vTexCoord1			: TEXCOORD1;
+};
+ 
+//==========================================================================//
+//	Output of the Vertex Shader
+//==========================================================================//
+struct VS_OUTPUT
+{
+	// ProjPos is -1 to +1 Coordinates on the RT
+	// ( The actual Screenspace Position of the Vertices )
+    float4 ProjPosSetup				: POSITION;
+
+	// Vertex Fog is not required. Allows us to do +1 TexCoord
+//  float  Fog						: FOG;
+
+	// VertexColors are used by Hammer and Particles ( Distance based Fades )
+	float4 VertexColors				: COLOR0;
+
+	// Always Output WorldPos_ProjPosZ for Fog ( Radial and Range Fog )
+	float4 WorldPos_ProjPosZ		: TEXCOORD0;
+};
+
+//==========================================================================//
+//	Configurable Compiletime Constants
+//==========================================================================//
+
+// Set this to true if you know for certain, Normals and Tangents use their own Stream ( TANGENT and BINORMAL )
+#define SEPARATE_TANGENT_STREAMS false
+
+// Set to false to receive Tangent Space Everything
+#define APPLY_MODEL_MATRIX 1
+
+// Set to false to disable Vertex Lighting for unbumped Models
+#define COMPUTE_VERTEX_LIGHTING 1
+
+// Set to false to disable computation of Light Attenuation for BumpMapped Models
+#define COMPUTE_LIGHT_ATTENUATION false
+
+//==========================================================================//
+//	Shader Entry point
+//==========================================================================//
+VS_OUTPUT main( const VS_INPUT v )
+{
+	//==========================================================================//
+	//	Unpacking existing Data
+	//==========================================================================//
+
+	// Input normal is actually compressed, we need to decompress it
+	float3 f3NormalTS = 0.0f;
+	float4 f4Tangent_BinormalTS = 0.0f;
+
+	// Only set when SEPARATE_TANGENT_STREAMS
+	float3 f3TangentTS = 0.0f;
+	float3 f3BinormalTS = 0.0f;
+
+	// Decompressed NORMAL Stream
+	#if (!VERTEX_TANGENTS && VERTEX_NORMAL)
+		DecompressVertexNormal(v.vNormal, f3NormalTS);
+	#else
+		#if VERTEX_TANGENTS
+			#if SEPARATE_TANGENT_STREAMS
+				f3NormalTS = v.vNormal.xyz;
+				f3TangentTS = v.vTangent.xyz;
+				f3BinormalTS = v.vBinormal.xyz;
+			#else
+				DecompressVertexNormal(v.vNormal, v.vUserData, f3NormalTS, f4Tangent_BinormalTS);
+			#endif
+		#endif
+	#endif
+
+	float f1WrinkleWeights_tmp = 0.0f;
+	float3 f3PositionTS = v.vPos.xyz;
+
+	// Morphing
+	// Not supported with Separate Streams ( No Function for it )
+	#if !SEPARATE_TANGENT_STREAMS
+		#if VERTEX_TANGENTS
+			#if WRINKLEMAPPING
+				ApplyMorph( v.vPosFlex, v.vNormalFlex, f3PositionTS, f3NormalTS, f4Tangent_BinormalTS.xyz, f1WrinkleWeights_tmp );
+			#else
+				ApplyMorph( v.vPosFlex, v.vNormalFlex, f3PositionTS, f3NormalTS, f4Tangent_BinormalTS.xyz);
+			#endif
+		#else 
+			ApplyMorph( v.vPosFlex, v.vNormalFlex, f3PositionTS, f3NormalTS );
+		#endif
+    #endif
+	
+	// Position
+	float3 f3Position_tmp = 0.0f;
+
+	// Tangents
+	float3 f3Tangent_tmp = 0.0f;
+	float3 f3Binormal_tmp = 0.0f;
+	float3 f3Normal_tmp = 0.0f;
+
+	#if APPLY_MODEL_MATRIX
+		#if VERTEX_TANGENTS
+            AlignVertexInputs(SKINNING, float4(f3PositionTS, 1.0f), f3NormalTS, f4Tangent_BinormalTS,
+				v.vBoneWeights, v.vBoneIndices, f3Position_tmp, f3Normal_tmp, f3Tangent_tmp, f3Binormal_tmp);
+		
+		// else even when !VERTEX_NORMAL
+		#else
+            AlignVertexInputs(SKINNING, float4(f3PositionTS, 1.0f), f3NormalTS, v.vBoneWeights, v.vBoneIndices, f3Position_tmp, f3Normal_tmp);
+		#endif
+	#else
+		#if VERTEX_TANGENTS
+			f3Normal_tmp = f3NormalTS;
+			f3Tangent_tmp = f4Tangent_BinormalTS.xyz;
+			f3Binormal_tmp = cross(f3Normal_tmp, f3Tangent_tmp) * f4Tangent_BinormalTS.www; // Math out Binormal and apply Sign Value
+		#elif VERTEX_NORMAL
+			f3Normal_tmp = f3NormalTS;
+		#endif
+
+		f3Position_tmp = f3PositionTS;
+	#endif
+	
+	//==========================================================================//
+	//	Test
+	//==========================================================================//
+
+	// Rotate the Model around an Axis using the Normal
+//	#define g_f3ModelPosition	(cReg_15.xyz)
+//	#define g_f1Time			(cReg_15.w)
+	
+	//==========================================================================//
+	//	Lighting
+	//==========================================================================//
+
+	float4 f4LightAttenuation_tmp = 0.0f;
+	float3 f3VertexLighting_tmp = 0.0f;
+
+	// BumpMapping implies Per-Pixel Lighting, which requires an Attenuation Factor
+	// It gets computed on the Vertex Shader, and replaces regular Vertex Lighting
+	#if !PROJTEX
+		#if (BUMPMAPPING && COMPUTE_LIGHT_ATTENUATION)
+			f4LightAttenuation_tmp.x = ComputeLightAttenuation(f3Position_tmp, 0);
+			f4LightAttenuation_tmp.y = ComputeLightAttenuation(f3Position_tmp, 1);
+			f4LightAttenuation_tmp.z = ComputeLightAttenuation(f3Position_tmp, 2);
+			f4LightAttenuation_tmp.w = ComputeLightAttenuation(f3Position_tmp, 3);
+'		#elif (!BUMPMAPPING && COMPUTE_VERTEX_LIGHTING)
+			bool bHalfLambert = false;
+		    f3VertexLighting_tmp = ComputeVertexLighting(f3Position_tmp, f3Normal_tmp, v.vSpecular, bStaticPropLighting, bDynamicPropLighting, bHalfLambert);
+		#endif
+	#endif
+
+	float4 f4VertexColor_tmp = 0.0f;
+	#if VERTEXCOLORS
+		f4VertexColor_tmp = v.vColor;
+	#endif
+
+	//==========================================================================//
+	//	Finished Variables usable in Custom Shaders
+	//==========================================================================//
+
+	// Always
+	float3 f3Position = f3Position_tmp;
+
+	// Only with VERTEX_NORMAL or VERTEX_TANGENTS
+	float3 f3Normal = f3Normal_tmp;
+	
+	// Only with VERTEX_TANGENTS
+	float3 f3Tangent = f3Tangent_tmp;
+	float3 f3Binormal = f3Binormal_tmp;
+
+	// Only with VERTEX_TANGENTS && WRINKLEMAPPING
+	float f1WrinkleWeights = f1WrinkleWeights_tmp;
+
+	// Finished TBN Matrix for output to the Pixel Shader
+	// Only with VERTEX_TANGENTS
+	float3x3 TBN_Matrix = float3x3(f3Tangent, f3Binormal, f3Normal);
+
+	// Lighting.
+
+	// Attenuation only with (!PROJTEX && BUMPMAPPING && COMPUTE_LIGHT_ATTENUATION)
+	float4 f4LightAttenuation = f4LightAttenuation_tmp;
+
+	// Vertex Lighting only with (!PROJTEX && !BUMPMAPPING && COMPUTE_VERTEX_LIGHTING)
+	float3 f3VertexLighting	 = f3VertexLighting_tmp;
+
+	// Vertex Color. Only with VERTEXCOLORS
+	// Lighting comes through this Stream for Detail Sprites
+	float4 f4VertexColor = f4VertexColor_tmp;	
+
+	// Main UV
+	float4 f4TexCoord0 = float4(v.vTexCoord0, 1.0f, 1.0f);
+
+	// Secondary UV ( only if enabled in VMT and the Mesh Supports it )
+	float4 f4TexCoord1 = float4(v.vTexCoord1, 1.0f, 1.0f);
+
+	// Provided Vertex Shader Registers from lux_custom_common_vs.h
+	// float4 TransformMatrix0[2]
+	// float4 TransformMatrix1[2]
+	// float4 TransformMatrix2[2]
+	// float4 TransformMatrix3[2]
+	// float4 cReg_56
+	// float4 cReg_57
+
+	//==========================================================================//
+	//	Basic Setup for Shaders
+	//==========================================================================//
+
+	VS_OUTPUT o = ( VS_OUTPUT )0;
+	
+	// This will flatten the geometrical Position into a 2D-Plane
+	// The GPU uses it and clips any Pixels outside of the -1 to +1 Range
+	// Look up Clip Space and 'Normalized Device Coordinates' for more Information on how this works
+	//
+	// xy will be Screen Position ( -1 to +1 )
+	// z will be Depth
+	// w is the divisor for perspective divide ( a homogeneous Coordinate )
+	float4 f4ProjPos = mul(float4(f3Position, 1.0f), cViewProj);
+	o.ProjPosSetup = f4ProjPos;
+
+	float f1Depth = dot(float4(f3Position, 1.0f), cViewProjZ);;
+
+	// Always 
+	o.WorldPos_ProjPosZ.xyz = f3Position;
+	o.WorldPos_ProjPosZ.w = f1Depth;
+
+	#if VERTEXCOLORS
+		o.VertexColors = f4VertexColor;
+	#endif
+	
+	//==========================================================================//
+	//	Custom Code
+	//==========================================================================//
+
+	// Your Custom Code here
+    o.VertexColors.rgb = f3VertexLighting;
+	
+	//==========================================================================//
+	//	Return the filled Struct
+	//==========================================================================//
+
+	return o;
+}

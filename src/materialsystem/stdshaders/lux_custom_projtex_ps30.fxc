@@ -1,0 +1,148 @@
+//===================== File of the LUX Shader Project =====================//
+
+//==========================================================================//
+//	Available Static Combos to the Shader
+//	Do not change anything here!
+//==========================================================================//
+// STATIC:	"PROJTEXFILTER"		"0..2"
+// STATIC:	"BRUSH"				"0..1"
+// STATIC:	"BUMPMAPPED"		"0..1"
+// STATIC:	"VERTEXCOLORS"		"0..1"
+
+//==========================================================================//
+//	Available Dynamic Combos to the Shader
+//	Do not change anything here!
+//==========================================================================//
+// DYNAMIC:	"PROJTEXSHADOWS"	"0..1"
+
+//==========================================================================//
+//	Skipped Combinations
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Remapping of Statics
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Common Definitions
+//==========================================================================//
+
+// Select the desired Tonemap Scale.
+// TONEMAP_SCALE_NONE
+// TONEMAP_SCALE_LINEAR
+// TONEMAP_SCALE_GAMMA
+#define TONEMAP_SCALE_LINEAR
+
+// Projected Textures don't allow AlphaWrites
+// They do allow Fog however ( FogToBlack )
+// We fade to black so the proj. Tex. disappears into the Fog
+#define NO_DEPTHTODESTALPHA
+#define NO_WATERFOGTODESTALPHA
+
+// This messes with Particles when writing DepthToDestAlpha
+// Only use this if you really know what you are doing
+// #define DEPTH_RANGE_NEAR_Z 7
+// #define DEPTH_RANGE_FAR_Z 4096
+// #define CUSTOM_DEPTH_RANGE (1.0f / (DEPTH_RANGE_FAR_Z - DEPTH_RANGE_NEAR_Z))
+
+// Enables Radial Fog
+#define RADIALFOG
+
+//==========================================================================//
+//	Include Files here
+//==========================================================================//
+
+// Includes Constant Register Map available to this Shader
+// And a handy return Function.
+#include "lux_custom_common_ps.h"
+
+//==========================================================================//
+//	PS Input
+//==========================================================================//
+struct PS_INPUT
+{
+	// VertexColors are used by Hammer and Particles ( Distance based Fades )
+	float4	VertexColors			:	COLOR0;
+
+	// Always need WorldPos and Depth for Fog. So it's TEXCOORD0
+	// ( Radial Fog uses WorldPos, Range Fog uses Depth )	
+	float4	WorldPos_ProjPosZ		:	TEXCOORD0;
+	
+	// Can put anything you want here down to TEXCOORD8 / TEXCOORD9
+	
+};
+ 
+//==========================================================================//
+//	Configurable Compiletime Constants
+//==========================================================================//
+
+// You can add Behaviour based on these preprocessor Definitions.
+/*
+	PROJTEXFILTER
+	BRUSH			<- This doubles as DISPLACEMENT
+	BUMPMAPPED
+	VERTEXCOLORS
+
+	PROJTEXSHADOWS
+*/
+
+//==========================================================================//
+//	Shader Entry point
+//==========================================================================//
+float4 main(PS_INPUT i) : COLOR
+{
+	//==========================================================================//
+	//	Getting Data from the PS_INPUT ( Interpolated Vertex Shader Output )
+	//==========================================================================//
+	float3	f3WorldPos		= i.WorldPos_ProjPosZ.xyz;
+	float	f1Depth			= i.WorldPos_ProjPosZ.w;
+	
+	// Displacements use VertexAlpha for the BlendFactor
+	float	f1BlendFactor	= i.VertexColors.a;
+	
+	// If Hammer has a messed up inverted Blending Preview,
+	// the BlendFactor can be flipped within the Editor like so:
+	/*
+	if(bInEditor)
+	{
+		f1BlendFactor = 1.0f - f1BlendFactor;
+	}
+	*/
+	
+	//==========================================================================//
+	//	Custom Code
+	//==========================================================================//
+
+	float3	f3Result = float3(0.25f, 0.0f, 0.75f);
+	float 	f1Alpha = 1.0f; // Alpha goes unused. AlphaWrites disabled!
+
+
+
+	// Your Custom Code here
+
+
+
+	//==========================================================================//
+	//	Results
+	//==========================================================================//
+	// Hammer uses Vertex Colors for the Texture Shaded Polygons View ( at least on Brushes )
+	// Tint your Diffuse with it, if you want it to look correct/consistent with Stock Shaders
+	#if VERTEXCOLORS
+		// Apply Vertex Colors to everything
+		// Regular Meshes :
+		/*
+		f3Result *= i.VertexColors.rgb;	// $VertexColor
+		f1Alpha *= i.VertexColors.a;	// $VertexAlpha
+		*/
+		
+		// Displacements ( which use VertexAlpha for Blending )
+		/*
+		f3Result *= i.VertexColors.rgb;	// $VertexColor
+		*/
+	#endif
+
+	// Return Function handles Fog, DepthToDestAlpha and WaterFogToDestAlpha for you
+	return LUX_Finalise(float4(f3Result, f1Alpha), f3WorldPos, f1Depth);
+}

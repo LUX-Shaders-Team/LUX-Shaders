@@ -1,0 +1,76 @@
+//===================== File of the LUX Shader Project =====================//
+//
+//	Initial D.	:	13.01.2025 DMY
+//	Last Change :	 30.01.2026 DMY
+//
+//==========================================================================//
+
+//==========================================================================//
+//	Declare Static Combos
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Declare Dynamic Combos
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Skipping undesired Combos
+//	The Order of Static Combos and Skips has a drastic Impact on Compile Time!
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Unpack Combos
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Common Definitions
+//==========================================================================//
+
+#define TONEMAP_SCALE_NONE
+//#define TONEMAP_SCALE_LINEAR
+//#define TONEMAP_SCALE_GAMMA
+
+//==========================================================================//
+//	Constants, Functions, Includes
+//==========================================================================//
+
+// Include for all Pixel Shaders
+#include "lux_common_ps_fxc.h"
+
+//==========================================================================//
+//	PS Input
+//==========================================================================//	
+struct PS_INPUT
+{
+	// Only thing we care about
+	float4 WorldPos_ProjPosZ	: TEXCOORD0;
+};
+ 
+//==========================================================================//
+//	PS Entry Point
+//==========================================================================//
+float4 main(PS_INPUT i) : COLOR
+{
+    float f1Depth = i.WorldPos_ProjPosZ.w;
+	
+	// Standard Depth Range in Source is very limited
+	// An extended range can be used, but at larger values will cause inaccuracies near the player
+	// This is here in-case you are doing just that!
+	// NOTE: 4096 fits into the default Framebuffer without issues
+	// Larger values ( such as 16384 ) won't and will require a new Framebuffer Format
+	// See lux_common_depth.h for more information
+#if defined(CUSTOM_DEPTH_RANGE)
+	f1Depth *= CUSTOM_DEPTH_RANGE;
+#else
+	// Forcing the Value into 8 Bits.. 
+    f1Depth *= OO_DESTALPHA_DEPTH_RANGE;
+#endif
+	
+	// Quite simple.
+    return float4(0.0f, 0.0f, 0.0f, f1Depth);
+
+}

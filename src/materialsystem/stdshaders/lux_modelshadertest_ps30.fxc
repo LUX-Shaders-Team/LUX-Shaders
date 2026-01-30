@@ -1,0 +1,208 @@
+//===================== File of the LUX Shader Project =====================//
+
+//==========================================================================//
+//	Available Static Combos to the Shader
+//	Do not change anything here!
+//==========================================================================//
+// STATIC:	"BRUSH"				"0..1"
+// STATIC:	"AMBIENTCUBES"		"0..1"
+// STATIC:	"LIGHTDATA"			"0..1"
+// STATIC:	"ENVMAPCOMBO"		"0..2"
+// STATIC:	"BUMPMAPPED"		"0..1"
+// STATIC:	"VERTEXCOLORS"		"0..1"
+
+//==========================================================================//
+//	Available Dynamic Combos to the Shader
+//	Do not change anything here!
+//==========================================================================//
+// DYNAMIC:	"NUM_LIGHTS"		"0..4"
+// DYNAMIC:	"LIGHTMAPPED_MODEL"	"0..1"
+
+//==========================================================================//
+//	Skipped Combinations
+//==========================================================================//
+
+// Ambient Cubes and LightData are specific to Models
+// SKIP: ($BRUSH != 0 && $AMBIENTCUBES != 0)
+// SKIP: ($BRUSH != 0 && $LIGHTDATA != 0)
+
+// PCC is unavailable for non-Brushes
+// You can remove this skip if you want to manually write out OBB's into the VMT.
+// SKIP: ($BRUSH == 0 && $ENVMAPCOMBO == 2)
+// SKIP: ($BRUSH != 0 && $NUM_LIGHTS != 0)
+// SKIP: ($BRUSH != 0 && $LIGHTMAPPED_MODEL != 0)
+
+//==========================================================================//
+//	Remapping of Statics
+//==========================================================================//
+#if (ENVMAPCOMBO > 0)
+	#define CUBEMAP 1
+	
+	#if (ENVMAPCOMBO == 2)
+		#define PARALLAX_CORRECTED_CUBEMAP 1
+	#else
+		#define PARALLAX_CORRECTED_CUBEMAP 0
+	#endif
+#else
+	// Avoid undefined Constants
+	#define CUBEMAP 0
+	#define PARALLAX_CORRECTED_CUBEMAP 0
+#endif
+
+//==========================================================================//
+//	Common Definitions
+//==========================================================================//
+
+// Select the desired Tonemap Scale.
+// TONEMAP_SCALE_NONE
+// TONEMAP_SCALE_LINEAR
+// TONEMAP_SCALE_GAMMA
+#define TONEMAP_SCALE_LINEAR
+
+// These can be used to remove unused Instructions
+// NO_DEPTHTODESTALPHA
+// NO_FOG
+// NO_WATERFOGTODESTALPHA
+
+// This messes with Particles when writing DepthToDestAlpha
+// Only use this if you really know what you are doing
+// #define DEPTH_RANGE_NEAR_Z 7
+// #define DEPTH_RANGE_FAR_Z 4096
+// #define CUSTOM_DEPTH_RANGE (1.0f / (DEPTH_RANGE_FAR_Z - DEPTH_RANGE_NEAR_Z))
+
+// Enables Radial Fog
+#define RADIALFOG
+
+//==========================================================================//
+//	Include Files here
+//==========================================================================//
+
+// Includes Constant Register Map available to this Shader
+// And a handy return Function.
+#include "lux_custom_common_ps.h"
+
+#define g_f3ModelPosition (cReg_00.xyz)
+#define g_f1Time (cReg_00.w)
+#define g_f1Strength (cReg_02.x)
+
+//==========================================================================//
+//	PS Input
+//==========================================================================//
+struct PS_INPUT
+{
+	// VertexColors are used by Hammer and Particles ( Distance based Fades )
+	float4	VertexColors			:	COLOR0;
+
+	// Always need WorldPos and Depth for Fog. So it's TEXCOORD0
+	// ( Radial Fog uses WorldPos, Range Fog uses Depth )	
+	float4	WorldPos_ProjPosZ		:	TEXCOORD0;
+	
+	// Can put anything you want here down to TEXCOORD8 / TEXCOORD9
+    float3 Normal : NORMAL;
+};
+ 
+//==========================================================================//
+//	Configurable Compiletime Constants
+//==========================================================================//
+
+// You can add Behaviour based on these preprocessor Definitions.
+/*
+
+	// This doubles as a bIsDisplacement or otherwise !bIsModel
+	BRUSH 
+
+	AMBIENTCUBES
+	LIGHTDATA
+	CUBEMAP
+	PARALLAX_CORRECTED_CUBEMAP
+	BUMPMAPPED
+
+	NUM_LIGHTS [0..4]
+	LIGHTMAPPED_MODEL
+*/
+
+float3 RotateAroundAxis(float3 v, float3 axis, float angle)
+{
+    float s = sin(angle);
+    float c = cos(angle);
+
+    return v * c
+         + cross(axis, v) * s
+         + axis * dot(axis, v) * (1.0f - c);
+}
+
+//==========================================================================//
+//	Shader Entry point
+//==========================================================================//
+float4 main(PS_INPUT i) : COLOR
+{
+	//==========================================================================//
+	//	Getting Data from the PS_INPUT ( Interpolated Vertex Shader Output )
+	//==========================================================================//
+	float3	f3WorldPos		= i.WorldPos_ProjPosZ.xyz;
+	float	f1Depth			= i.WorldPos_ProjPosZ.w;
+	
+	// Displacements use VertexAlpha for the BlendFactor
+	float	f1BlendFactor	= i.VertexColors.a;
+	
+	// If Hammer has a messed up inverted Blending Preview,
+	// the BlendFactor can be flipped within the Editor like so:
+	/*
+	if(bInEditor)
+	{
+		f1BlendFactor = 1.0f - f1BlendFactor;
+	}
+	*/
+	
+	//==========================================================================//
+	//	Custom Code
+	//==========================================================================//
+
+	float3 f3Result = 0.0f;
+	float f1Alpha = 1.0f;
+	
+	// World-Space Direction from the sphere center
+    float3 f3Dir = normalize(f3WorldPos - g_f3ModelPosition);
+	
+	// Convert ViewDirection into polar coordinates
+    float theta = acos(f3Dir.z);
+
+	// Gives us a circular Coordinate
+	// 2pi range
+    float phi = atan2(f3Dir.y, f3Dir.x);
+
+	// FIXME: Add rotation to phi instead so we don't mess up when flipping
+
+	// Convert polar coordinates into UV coordinates
+    float SphereU = phi / (2 * 3.14159265f); // + 0.5f // Phi is in 2pi range
+    float SphereV = theta / 3.14159265f;
+
+    SphereU += 0.5f;
+    float2 SphereUV = float2(SphereU, SphereV); // invert Y for the Texture
+
+	// Clamped in VMT to 0..1
+	// Texture has ClampT but not ClampS
+        SphereUV.x += g_f1Time * g_f1Strength;
+ 
+	if (SphereUV.x > 1.0f)
+        SphereUV.x -= 1.0f;
+
+    if (SphereUV.x < 0.0f)
+        return float4(0.0f, 1.0f, 0.0f, 1.0f);
+	
+    float4 f4BaseTexture = tex2D(Sampler_Texture0, SphereUV);
+	
+	// Apply Vertex Lighting via Vertex Colors
+    f3Result = f4BaseTexture.rgb;
+	
+	f1Alpha = 1.0f;
+	
+	//==========================================================================//
+	//	Results
+	//==========================================================================//
+
+	// Return Function handles Fog, DepthToDestAlpha and WaterFogToDestAlpha for you
+	// g_f1AlphaModulation is set to $Alpha/$Alpha2 ( see Return Function for more Information )
+	// It will automatically be applied to the Alpha Output unless it is removed.
+    return LUX_Finalise(float4(f3Result, f1Alpha), f3WorldPos, f1Depth, g_f1AlphaModulation);
+}

@@ -1,0 +1,88 @@
+//===================== File of the LUX Shader Project =====================//
+//
+//	Initial D.	:	18.11.2024 DMY
+//	Last Change :	 30.01.2026 DMY
+//
+//==========================================================================//
+
+//==========================================================================//
+//	Declare Static Combos
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Declare Dynamic Combos
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Skipping undesired Combos
+//	The Order of Static Combos and Skips has a drastic Impact on Compile Time!
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Constants, Functions, Includes
+//==========================================================================//
+
+// Include for all Vertex Shaders
+#include "lux_common_vs_fxc.h"
+
+// Need 6 Registers for this, using Set1
+const float2 g_f2BlurOffsets[6] : register (LUX_VS_FLOAT_SET1_0);
+
+//==========================================================================//
+//	VS Input
+//==========================================================================//
+struct VS_INPUT
+{
+	// This is all of the stuff that we ever use
+	float4 vPos				: POSITION;
+	float2 vTexCoord0		: TEXCOORD0;
+};
+
+//==========================================================================//
+//	VS Output
+//==========================================================================//
+struct VS_OUTPUT
+{
+	// Stuff that isn't seen by the pixel shader
+	// This is used by the GPU to determine what's actually rendered on-screen ( The actual screenspace position of our triangles )
+	float4 ProjPosSetup				: POSITION; 
+
+	// This actually uses the same amount of Interpolators as the original Shader :)
+	float4 TexCoord_12				: TEXCOORD0;
+	float4 TexCoord_34				: TEXCOORD1;
+	float4 TexCoord_56				: TEXCOORD2;
+	float4 TexCoord_78				: TEXCOORD3;
+	float4 TexCoord_910				: TEXCOORD4;
+	float4 TexCoord_1112			: TEXCOORD5;
+	float2 TexCoord_13				: TEXCOORD6;
+};
+
+//==========================================================================//
+//	VS Entry Point
+//==========================================================================//
+VS_OUTPUT main( const VS_INPUT v )
+{
+	VS_OUTPUT o = ( VS_OUTPUT )0;
+
+	float4 f4ProjPos = float4(v.vPos.xyz, 1.0f);
+	o.ProjPosSetup = FixHPO(f4ProjPos);;
+
+	o.TexCoord_12.xy		= v.vTexCoord0.xy;
+	o.TexCoord_12.zw		= v.vTexCoord0.xy + g_f2BlurOffsets[0];
+	o.TexCoord_34.xy		= v.vTexCoord0.xy + g_f2BlurOffsets[1];
+	o.TexCoord_34.zw		= v.vTexCoord0.xy + g_f2BlurOffsets[2];
+	o.TexCoord_56.xy		= v.vTexCoord0.xy - g_f2BlurOffsets[0];
+	o.TexCoord_56.zw		= v.vTexCoord0.xy - g_f2BlurOffsets[1];
+	o.TexCoord_78.xy		= v.vTexCoord0.xy - g_f2BlurOffsets[2];
+	o.TexCoord_78.zw		= v.vTexCoord0.xy + g_f2BlurOffsets[3];
+	o.TexCoord_910.xy		= v.vTexCoord0.xy + g_f2BlurOffsets[4];
+	o.TexCoord_910.zw		= v.vTexCoord0.xy + g_f2BlurOffsets[5];
+	o.TexCoord_1112.xy		= v.vTexCoord0.xy - g_f2BlurOffsets[3];
+	o.TexCoord_1112.zw		= v.vTexCoord0.xy - g_f2BlurOffsets[4];
+	o.TexCoord_13.xy		= v.vTexCoord0.xy - g_f2BlurOffsets[5];
+
+	return o;
+}

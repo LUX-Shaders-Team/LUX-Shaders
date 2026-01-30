@@ -1,0 +1,33 @@
+//
+// vs 3.0   ps 3.0   shaders collection
+//
+//  These shaders are forced to compile as shader model 3.0
+//  using the new compiler.
+//	    _ps30.vcs
+//	    _vs30.vcs
+//
+//	ShiroDkxtro2 :	You must add the filename WITH extension. Example :
+//					lux_newshader_ps30.fxc
+
+//============================================
+// All fxc Files needed for VLG
+//============================================
+
+lux_model_simplified_vs30.fxc
+lux_model_vs30.fxc
+lux_model_bump_vs30.fxc
+lux_vertexlitgeneric_simple_ps30.fxc
+lux_vertexlitgeneric_bump_ps30.fxc
+lux_vertexlitgeneric_phong_ps30.fxc
+lux_vertexlitgeneric_flashlight_ps30.fxc
+
+// Used for DetailBlendMode 5 and 6
+lux_emissive_ps30.fxc
+lux_emissive_vs30.fxc
+
+// Used for other Renderpasses
+lux_cloak_vs30.fxc
+lux_cloak_ps30.fxc
+lux_sheenpass_ps30.fxc
+lux_meshoutline_vs30.fxc
+lux_meshoutline_ps30.fxc

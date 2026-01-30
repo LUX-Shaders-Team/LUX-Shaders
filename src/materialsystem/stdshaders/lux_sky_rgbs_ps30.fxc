@@ -1,0 +1,146 @@
+//===================== File of the LUX Shader Project =====================//
+//
+//	Initial D.	:	25.03.2025 DMY
+//	Last Change :	 30.01.2026 DMY
+//
+//==========================================================================//
+
+//==========================================================================//
+//	Declare Static Combos
+//==========================================================================//
+
+//==========================================================================//
+//	Declare Dynamic Combos
+//==========================================================================//
+// DYNAMIC:	"FILTER"			"0..2"
+
+//==========================================================================//
+//	Skipping undesired Combos
+//	The Order of Static Combos and Skips has a drastic Impact on Compile Time!
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Common Definitions
+//==========================================================================//
+
+// Fog is handled somewhere else
+#define NO_FOG
+
+// Consistent with Stock
+//#define TONEMAP_SCALE_NONE
+#define TONEMAP_SCALE_LINEAR
+//#define TONEMAP_SCALE_GAMMA
+
+//==========================================================================//
+//	Constants, Functions, Includes
+//==========================================================================//
+
+// Include for all Pixel Shaders
+#include "lux_common_ps_fxc.h"
+
+#include "lux_common_bicubic.h"
+
+// Not using c32 for this one
+// NOTE: Don't use c0, something is being put onto it!
+const float3 g_f3Tint : register(c1);
+const float4 g_f4BicubicRes : register(c2);
+
+//==========================================================================//
+//	PS Input
+//==========================================================================//
+struct PS_INPUT
+{
+	// HACKHACK: For some reason Scell's compiler allows the use of SV_POSITION
+	// We can abuse this so we don't need to pass ProjPos separately!!
+	float2 ProjPos					:	SV_POSITION;
+
+	#if (FILTER == 0)
+    float4	TexCoords1				:	TEXCOORD0;
+    float4	TexCoords2				:	TEXCOORD1;
+	float4	TexCoordExtra			:	TEXCOORD2;
+	#else
+	float2	TexCoord				:	TEXCOORD0;
+	#endif
+};
+ 
+//==========================================================================//
+//	PS Entry Point
+//==========================================================================//
+float4 main(PS_INPUT i) : COLOR
+{
+	float3 f3FinalColor;
+	#if (FILTER == 0) // Bilinear
+		
+		float4 s00 = tex2D(Sampler_BaseTexture, i.TexCoords1.xy);
+		float4 s10 = tex2D(Sampler_BaseTexture, i.TexCoords1.zw);
+		float4 s01 = tex2D(Sampler_BaseTexture, i.TexCoords2.xy);
+		float4 s11 = tex2D(Sampler_BaseTexture, i.TexCoords2.zw);
+
+		float2 f2FracCoord = frac(i.TexCoordExtra.xy);
+
+		s00.rgb *= s00.a;
+		s10.rgb *= s10.a;
+		s00.rgb = lerp(s00.rgb, s10.rgb, f2FracCoord.x);
+
+		s01.rgb *= s01.a;
+		s11.rgb *= s11.a;
+		s01.rgb = lerp(s01.rgb, s11.rgb, f2FracCoord.x);
+
+		f3FinalColor = lerp(s00.rgb, s01.rgb, f2FracCoord.y);
+
+	#elif (FILTER == 1) // Bicubic
+		
+		float2 Texcoord = (i.TexCoord * g_f4BicubicRes.xy); // + float2(1.0f, 1.0f)
+		float2 TexCoord_Floored = floor(Texcoord);
+		float2 TexCoord_Fraction = frac(Texcoord);
+
+		float g0x = g0( TexCoord_Fraction.x );
+		float g1x = g1( TexCoord_Fraction.x );
+		float h0x = h0( TexCoord_Fraction.x );
+		float h1x = h1( TexCoord_Fraction.x );
+		float h0y = h0( TexCoord_Fraction.y );
+		float h1y = h1( TexCoord_Fraction.y );
+
+		// The four Texture Coordinates
+		float2 TexCoord0 = ( float2( TexCoord_Floored.x + h0x, TexCoord_Floored.y + h0y ) - float2( 0.5f, 0.5f ) ) * g_f4BicubicRes.zw;
+		float2 TexCoord1 = ( float2( TexCoord_Floored.x + h1x, TexCoord_Floored.y + h0y ) - float2( 0.5f, 0.5f ) ) * g_f4BicubicRes.zw;
+		float2 TexCoord2 = ( float2( TexCoord_Floored.x + h0x, TexCoord_Floored.y + h1y ) - float2( 0.5f, 0.5f ) ) * g_f4BicubicRes.zw;
+		float2 TexCoord3 = ( float2( TexCoord_Floored.x + h1x, TexCoord_Floored.y + h1y ) - float2( 0.5f, 0.5f ) ) * g_f4BicubicRes.zw;
+
+		float4 s00 = tex2D(Sampler_BaseTexture, TexCoord0);
+		float4 s10 = tex2D(Sampler_BaseTexture, TexCoord1);
+		float4 s01 = tex2D(Sampler_BaseTexture, TexCoord2);
+		float4 s11 = tex2D(Sampler_BaseTexture, TexCoord3);
+
+		// Decompress Later vs Decompress First
+		// Chose this one because its faster
+#if 1
+		float4 BicubicSkyColor =
+		( g0( TexCoord_Fraction.y ) * ( g0x * s00 + g1x * s10 ) ) +
+		( g1( TexCoord_Fraction.y ) * ( g0x * s01 + g1x * s11 ) );
+		f3FinalColor = BicubicSkyColor.rgb * BicubicSkyColor.aaa;
+
+#else
+		s00.rgb *= s00.aaa;
+		s10.rgb *= s10.aaa;
+		s01.rgb *= s01.aaa;
+		s11.rgb *= s11.aaa;
+
+		f3FinalColor = 
+		( g0( TexCoord_Fraction.y ) * ( g0x * s00.rgb + g1x * s10.rgb ) ) +
+		( g1( TexCoord_Fraction.y ) * ( g0x * s01.rgb + g1x * s11.rgb ) );
+#endif
+
+	#else // No Filter
+
+		float4 SkyColor = tex2D(Sampler_BaseTexture, i.TexCoord);
+		f3FinalColor = SkyColor.rgb * SkyColor.aaa;
+	#endif
+
+	// Apply Tint and HDR Scale
+	f3FinalColor.rgb *= g_f3Tint;
+
+	// Force super-high Depth Value in case of WriteToDepthAlpha
+	return LUX_Finalise(float4(f3FinalColor, 1.0f), float3(0.0f, 0.0f, 0.0f), 1e20);
+}

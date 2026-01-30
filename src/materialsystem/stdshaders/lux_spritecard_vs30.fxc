@@ -1,0 +1,345 @@
+//===================== File of the LUX Shader Project =====================//
+//
+//	Initial D.	:	22.05.2024 DMY
+//	Last Change :	 30.01.2026 DMY
+//
+//==========================================================================//
+
+//==========================================================================//
+//	Available Static Combos to the Shader
+//==========================================================================//
+//	STATIC:		"DUALSEQUENCE"				"0..1"
+//	STATIC:		"ZOOM_ANIMATE_SEQ2"			"0..1"
+//	STATIC:		"EXTRACTGREENALPHA"			"0..1"
+//	STATIC:		"ADDBASETEXTURE2"			"0..1"
+
+//==========================================================================//
+//	Available Dynamic Combos to the Shader
+//==========================================================================//
+//	DYNAMIC:	"ORIENTATION"				"0..2"
+
+//==========================================================================//
+//	Skipped Combinations
+//==========================================================================//
+// Instructions not there when DualSequence 0
+//	SKIP: ($DUALSEQUENCE == 0 && $ZOOM_ANIMATE_SEQ2 == 1)
+
+//==========================================================================//
+//	Decompress Combos
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Constants, Functions, Includes
+//==========================================================================//
+
+// Include for all Vertex Shaders
+#include "lux_common_vs_fxc.h"
+
+const float4 g_f4ViewportTransform	: register(LUX_VS_FLOAT_SET0_0);
+const float4x3 cModelView			: register(LUX_VS_FLOAT_SET1_0);
+const float4x4 cProj				: register(LUX_VS_FLOAT_SET1_3);
+#if ZOOM_ANIMATE_SEQ2
+const float4 cScaleParams			: register(LUX_VS_FLOAT_SET1_7);
+#define OLDFRM_SCALE_START	(cScaleParams.x)
+#define OLDFRM_SCALE_END	(cScaleParams.y)
+#endif
+const float4 cSizeParams			: register(LUX_VS_FLOAT_SET1_8);
+#define MINIMUM_SIZE_FACTOR				(cSizeParams.x)
+#define MAXIMUM_SIZE_FACTOR				(cSizeParams.y)
+#define START_FADE_SIZE_FACTOR			(cSizeParams.z)
+#define END_FADE_SIZE_FACTOR			(cSizeParams.w)
+
+const float4 cSizeParams2			: register(LUX_VS_FLOAT_SET1_9);
+// "alpha fade w/ distance"
+#define START_FAR_FADE  (cSizeParams2.x)
+
+// "alpha = 1-min(1,max(0, (dist-start_fade)*factor))"
+#define FAR_FADE_FACTOR (cSizeParams2.y)
+
+//==========================================================================//
+//	VS Input
+//==========================================================================//
+struct VS_INPUT
+{
+    // This is all of the stuff that we ever use
+    float4 vPos                     : POSITION;
+	float4 vBoneWeights             : BLENDWEIGHT;	//	Despite no bones,
+	float4 vBoneIndices             : BLENDINDICES; //	we use these in SkinPositionAndNormal()
+    float4 vNormal                  : NORMAL;
+    float4 vTexCoord0               : TEXCOORD0;
+	float4 vTexCoord1				: TEXCOORD1;
+	float4 vParams					: TEXCOORD2;   // frame blend, rot, radius, yaw
+	float2 vCornerID				: TEXCOORD3;   // 0,0 1,0 1,1 0,1 -- This is float2 when not on a Spline
+	float4 vTexCoord2				: TEXCOORD4;
+#if DUALSEQUENCE
+	float4 vSeq2TexCoord0			: TEXCOORD5;
+	float4 vSeq2TexCoord1			: TEXCOORD6; 
+	float4 vParams1					: TEXCOORD7;  // second frame blend, ?,?,?
+#endif
+	float4 vTint					: COLOR;
+};
+
+#define BLENDFACTOR (v.vParams.x)
+#define ROTATION (v.vParams.y)
+#define RADIUS (v.vParams.z)
+#define YAW (v.vParams.w)
+
+// Copied and adapted from spritecard_vsxx.fxc
+// Must replicate this identically for visual similarity.
+// However, I added indentation so its not absolutely terrible to read.
+#if ( ZOOM_ANIMATE_SEQ2 )
+	float getlerpscaled(float l_in, float s0, float s1, float ts)
+	{
+		float	f1_out = 2.0 * ( l_in - 0.5f );
+				f1_out *= lerp(s0, s1, ts);
+
+		return	0.5f + 0.5f * f1_out;
+	}
+	
+	float getlerpscale_for_old_frame(float l_in, float ts)
+	{
+		return getlerpscaled(l_in, OLDFRM_SCALE_START, OLDFRM_SCALE_END, ts);
+	}
+	
+	float getlerpscale_for_new_frame( float l_in, float ts )
+	{
+		return getlerpscaled(l_in, 1.0, OLDFRM_SCALE_START, ts);
+	}
+#endif // ZOOM_ANIMATE_SEQ2
+
+//==========================================================================//
+//	VS Output
+//==========================================================================//
+struct VS_OUTPUT
+{
+    float4 ProjPosSetup			: POSITION; 
+	float4 WorldPos_ProjPosZ	: TEXCOORD0;
+    float4 TexCoord1And2		: TEXCOORD1;
+	float4 Blendfactor0			: TEXCOORD2;
+	float4 ScreenPos			: TEXCOORD3;
+
+	// We want a more optimised register layout here
+	// So force packed tight!
+	#if EXTRACTGREENALPHA			// 3-[4]
+		float4 Blendfactor1			: TEXCOORD4; // for extracting green/alpha
+		#if DUALSEQUENCE				// 4-[4]
+			float4 Seq2TexCoords		: TEXCOORD5;
+			#if ADDBASETEXTURE2				// 5-[2]
+				float2 TexCoord3			: TEXCOORD6;
+			#endif
+		#elif ADDBASETEXTURE2			// 4-[2]
+			float2 TexCoord3			: TEXCOORD5;
+		#endif
+	#elif DUALSEQUENCE				// 3-[4]
+		float4 Seq2TexCoords		: TEXCOORD4;
+		#if ADDBASETEXTURE2				// 4-[2]
+			float2 TexCoord3			: TEXCOORD5;
+		#endif
+	#elif ADDBASETEXTURE2			// 3-[2]
+		float2 TexCoord3			: TEXCOORD4;
+	#endif
+
+	// Always want ARGB Colors
+	float4 ARGB_Color : COLOR0;
+};
+
+//==========================================================================//
+//	VS Entry Point
+//==========================================================================//
+VS_OUTPUT main( const VS_INPUT v )
+{
+	VS_OUTPUT o = ( VS_OUTPUT )0;
+
+	// ShiroDkxtro2: I shuffled things around a little, hopefully makes it easier to follow!
+	// Renamed some Variables and added some comments.
+	// Removed DX8 / X360 Stuff
+	// Otherwise the Shader is practically untouched.
+
+	// Here we go again with Gamma conversions every vertex
+	float4 f4Tint = v.vTint;
+	f4Tint.rgb = pow(max(f4Tint.rgb, 0.0f), 2.2f);
+
+	// Computing WorldPos, relatively simple on this Shader
+	float3 f3WorldPos;
+	f3WorldPos = mul4x3(v.vPos, cModel[0]);
+
+	// Compute some general variables.
+	float f1Radius = RADIUS;
+    float3 f3EyeToPos = (f3WorldPos - g_f3EyePos);
+	float f1DistanceToSurface = length(f3EyeToPos);
+
+	// Limit the radius to be AT LEAST Length*Factor
+	f1Radius = max(f1Radius, MINIMUM_SIZE_FACTOR * f1DistanceToSurface);
+
+	// "now, perform fade out"
+	// Always! No Shader Model Limitations.
+	float f1StartFadeFactor = START_FADE_SIZE_FACTOR * f1DistanceToSurface;
+	if (f1Radius > f1StartFadeFactor)
+	{
+		float f1EndFadeFactor = END_FADE_SIZE_FACTOR * f1DistanceToSurface; 
+		if (f1Radius > f1EndFadeFactor)
+		{
+			f4Tint = 0.0f;
+			f1Radius = 0.0f; // "cull so we emit 0-sized sprite"
+		}
+		else
+		{
+			// Basic Min/Max Distance Equation
+			// Since we have a Vertex Color Input, we have to multiply by instead of replace.
+			f4Tint *= 1.0f - (f1Radius - f1StartFadeFactor) / (f1EndFadeFactor - f1StartFadeFactor);
+		}
+	}
+
+	// "perform far fade"
+	// Hopefully the Shader Compiler doesn't get ambigious trying to optimise this to a single MAX instruction.
+	float f1FarFade =  1.0f - saturate( (f1DistanceToSurface - START_FAR_FADE) * FAR_FADE_FACTOR );
+	f4Tint *= f1FarFade;
+
+	// We saturated, so it can only be equal to 0, unless Shader Compiler messes with us
+	if (f1FarFade <= 0)
+		f1Radius = 0.0f;
+
+	// if the Maximum Size Factor is smaller use that instead
+	f1Radius = min(f1Radius, MAXIMUM_SIZE_FACTOR * f1DistanceToSurface);
+
+	// Prepare some extra variables for Orientation
+	// {
+		// Why use a rotation matrix, ami right?
+		float2 sc_yaw, sc;
+		sincos( YAW, sc_yaw.y, sc_yaw.x );
+		sincos( ROTATION, sc.y, sc.x );
+
+		// Determine what Corner we are dealing with(?)
+		// Unfortunately documentation for this is rather lacking.
+		float2 ix = 2.0f * v.vCornerID.xy - 1.0f;
+		float x1 = dot(ix, sc);
+		float y1 = sc.x * ix.y - sc.y * ix.x;
+	// }
+
+	float4 ProjPos;
+	#if (ORIENTATION == 2)
+
+		// Z-Plane-Aligned (Simple)
+		float3	wpos = v.vPos.xyz + RADIUS * float3(y1, x1, 0.0f);
+				ProjPos = mul( float4(wpos, 1.0f), cModelViewProj );
+
+	#elif (ORIENTATION == 1)
+
+		// Z-Aligned (Complex)
+		if (f1DistanceToSurface > f1Radius / 2)
+		{
+			// This code would imply that we are viewing directly onto the particle from its side
+			// In which case 'right', is Binormal
+			// Meaning, 'right' is the direction orthogonal from us to the surface
+			float3 up = float3(0,0,1);
+			float3 right = normalize(cross(up, f3EyeToPos));
+
+			// Rotation Calculation of some sort
+			float tmpx = right.x * sc_yaw.x + right.y * sc_yaw.y;
+			right.y = right.y * sc_yaw.x - right.x * sc_yaw.y;
+			right.x = tmpx;
+			
+			f3WorldPos += (x1 * f1Radius) * right;
+			f3WorldPos.z += (y1 * f1Radius) * up.z;
+			
+			if (f1DistanceToSurface < f1Radius * 2)
+			{
+				f4Tint *= smoothstep(f1Radius / 2, f1Radius, f1DistanceToSurface);
+			}
+		}
+
+		ProjPos  = mul(float4(f3WorldPos, 1.0f), cViewProj);
+
+	#else // (ORIENTATION == 0)
+
+		// Screen Aligned
+		// ( Always faces the Camera )
+		float3 f3ViewPos;
+		f3ViewPos = mul4x3( v.vPos, cModelView );
+
+		float3 f3Disp = float3( -x1,y1,0);
+ 		float tmpx = f3Disp.x * sc_yaw.x + f3Disp.z * sc_yaw.y;
+ 		f3Disp.z = f3Disp.z * sc_yaw.x - f3Disp.x * sc_yaw.y;
+ 		f3Disp.x = tmpx;
+
+		f3ViewPos += f3Disp * f1Radius;
+
+		ProjPos  = mul(float4(f3ViewPos, 1.0f), cProj );
+
+	#endif
+
+	// ProjPos done, still need to account for ViewPort Scale however
+	o.ProjPosSetup = ProjPos;
+
+	// Send off the vertex colors
+	o.ARGB_Color = f4Tint;
+
+    o.WorldPos_ProjPosZ.xyz = f3WorldPos;
+    o.WorldPos_ProjPosZ.w = dot(float4(f3WorldPos, 1.0f), cViewProjZ);
+
+	// "Map projected position to the refraction texture"
+	float2 f2ScreenPos;
+	f2ScreenPos.x = ProjPos.x;
+	f2ScreenPos.y = -ProjPos.y; // invert Y
+	f2ScreenPos = (f2ScreenPos + ProjPos.ww) * 0.5f;
+
+	// "Need to also account for the viewport transform, which matters when rendering with mat_viewportscale != 1.0"
+    f2ScreenPos = (f2ScreenPos * g_f4ViewportTransform.xy) + (ProjPos.ww * g_f4ViewportTransform.zw);
+
+	// Pass on Homogenous coordinate as well so we can transform to normalized device coordinates
+	// We will need the Depth for soft particles.
+	o.ScreenPos = float4(f2ScreenPos.xy, ProjPos.z, ProjPos.w);
+
+	// Texcoord shenanigans
+	// No idea what is going on here, would love for someone to spill the beans.
+	o.TexCoord1And2.x	= lerp( v.vTexCoord0.z, v.vTexCoord0.x, v.vCornerID.x );
+	o.TexCoord1And2.y	= lerp( v.vTexCoord0.w, v.vTexCoord0.y, v.vCornerID.y );
+	o.TexCoord1And2.z	= lerp( v.vTexCoord1.z, v.vTexCoord1.x, v.vCornerID.x );
+	o.TexCoord1And2.w	= lerp( v.vTexCoord1.w, v.vTexCoord1.y, v.vCornerID.y );
+	#if ADDBASETEXTURE2
+	o.TexCoord3.x		= lerp( v.vTexCoord2.z, v.vTexCoord2.x, v.vCornerID.x );
+	o.TexCoord3.y		= lerp( v.vTexCoord2.w, v.vTexCoord2.y, v.vCornerID.y );
+	#endif
+
+	// Now we can start with the BlendFactor
+	o.Blendfactor0 = float4( v.vParams.x, 0, 0, 0 );
+	
+	#if ( DUALSEQUENCE )
+		float2 f2LerpOld = v.vCornerID.xy;
+		float2 f2LerpNew = v.vCornerID.xy;
+		
+		#if ( ZOOM_ANIMATE_SEQ2 )
+			f2LerpOld.x = getlerpscale_for_old_frame( v.vCornerID.x, v.vParams1.x );
+			f2LerpOld.y = getlerpscale_for_old_frame( v.vCornerID.y, v.vParams1.x );
+			f2LerpNew.x = getlerpscale_for_new_frame( v.vCornerID.x, v.vParams1.x );
+			f2LerpNew.y = getlerpscale_for_new_frame( v.vCornerID.y, v.vParams1.x );
+		#endif
+		
+		o.Seq2TexCoords.xy	= lerp( v.vSeq2TexCoord0.zw, v.vSeq2TexCoord0.xy, f2LerpOld.xy );
+		o.Seq2TexCoords.zw	= lerp( v.vSeq2TexCoord1.zw, v.vSeq2TexCoord1.xy, f2LerpNew.xy );
+		
+		o.Blendfactor0.z = v.vParams1.x;
+	#endif
+
+	#if ( EXTRACTGREENALPHA )
+		o.Blendfactor1 = float4( 0.0f, 0.0f, 0.0f, 0.0f );	// Input range	|	Output range
+		if ( v.vParams.x < 0.25f )							// 0.0 .. 0.25	|	
+		{													//		\-------|-------\
+			o.Blendfactor0.w = v.vParams.x * 2.0f + 0.5f;	//				|	0.5 .. 1.0
+			o.Blendfactor0.y = 1.0f - o.Blendfactor0.w;		//				|	0.5 .. 0.0
+		}													//
+		else if ( v.vParams.x < 0.75f )						// 0.25 .. 0.75	|
+		{													//		\-------|-------\
+			o.Blendfactor1.y = v.vParams.x * 2.0f - 0.5f;	//				|	0.0 .. 1.0
+			o.Blendfactor0.w = 1.0f - o.Blendfactor1.y;		//				|	1.0 .. 0.0
+		}													//
+		else												// 0.75 .. 1.0	|
+		{													//		\-------|-------\
+			o.Blendfactor1.w = v.vParams.x * 2.0f - 1.5f;	//				|	0.0 .. 0.5
+			o.Blendfactor1.y = 1.0f - o.Blendfactor1.w;		//				|	1.0 .. 0.5
+		}
+	#endif
+
+    return o;
+}

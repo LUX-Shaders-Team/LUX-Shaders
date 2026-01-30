@@ -1,0 +1,186 @@
+//===================== File of the LUX Shader Project =====================//
+//
+//	Initial D.	:	23.11.2024 DMY
+//	Last Change :	 30.01.2026 DMY
+//
+//==========================================================================//
+
+//==========================================================================//
+//	Declare Static Combos
+//==========================================================================//
+// STATIC: "DETAILTEXTURE"	"0..1"
+// STATIC: "ENVMAPMODE"		"0..4"
+// STATIC: "VERTEXCOLORS"	"0..1"
+
+//==========================================================================//
+//	Declare Dynamic Combos
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Skipping undesired Combos
+//	The Order of Static Combos and Skips has a drastic Impact on Compile Time!
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Constants, Functions, Includes
+//==========================================================================//
+
+// Using Brushes, need this for PCC
+#define BRUSH
+
+//#define TONEMAP_SCALE_NONE
+#define TONEMAP_SCALE_LINEAR
+//#define TONEMAP_SCALE_GAMMA
+
+// Include for all Pixel Shaders
+#include "lux_common_ps_fxc.h"
+
+// Surface gets a Lightmap
+#include "lux_common_lightmapped.h"
+
+#if DETAILTEXTURE
+#include "lux_common_detailtexture.h"
+#endif
+
+#if (ENVMAPMODE > 0)
+#include "lux_common_envmap.h"
+#endif
+
+// Custom Constant for overbright
+const float3 g_OverbrightFactor : register(c0);
+#define g_f1MinOverbright (g_OverbrightFactor.y)
+#define g_f1MaxOverbright (g_OverbrightFactor.z)
+
+//==========================================================================//
+//	PS Input
+//==========================================================================//
+struct PS_INPUT
+{
+	float4 WorldPos_ProjPosZ	: TEXCOORD0;
+    float4 TexCoords1			: TEXCOORD1;
+	float4 TexCoords2			: TEXCOORD2;
+
+	#if VERTEXCOLORS
+		float3 VertexColors		: COLOR0;
+	#endif
+
+	#if ENVMAP
+		float3 Normal			: NORMAL;
+	#endif
+};
+ 
+//==========================================================================//
+//	PS Entry Point
+//==========================================================================//
+float4 main(PS_INPUT i) : COLOR
+{
+	//	Getting our PS_INPUT
+	//==========================================================================//
+
+	// TEXCOORD0
+	float3 f3WorldPos = i.WorldPos_ProjPosZ.xyz;
+	float  f1Depth = i.WorldPos_ProjPosZ.w;
+
+	// TEXCOORD1
+	float2 f2FractureUV = i.TexCoords1.xy;
+	float2 f2LightmapUV = i.TexCoords1.zw;
+
+	// TEXCOORD2
+	float2 f2EnvMapMaskUV = i.TexCoords2.xy;
+
+	#if DETAILTEXTURE
+		#if ENVMAPMASK
+			float2 f2FractureDetailUV = i.TexCoords2.zw;
+		#else
+			float2 f2FractureDetailUV = i.TexCoords2.xy;	
+		#endif
+	#endif
+	
+	// COLOR0
+	#if VERTEXCOLORS
+		float3 f3VertexColors = i.VertexColors;
+	#endif
+
+	// NORMAL
+	#if ENVMAP
+	    float3 f3VNormal = i.Normal;
+	#endif
+
+	//==========================================================================//
+	//	Textures
+	//==========================================================================//
+
+	// Fractured Texture uses a different UV Stream than the other Textures
+	// For more information, from the HL2 20th Anniversary:
+	// Josh Weier:
+	// "When designing early levels, where there are fewer mechanics in the players toolkit,
+	// we found that its just as engaging to spotlight new technical features instead.
+	// As we did here with breakable glass. For the shattering effect, glass was divided
+	// into a grid of small squares, allowing us to track which were intact or broken,
+	// and to blow out larger sections once enough squares are no longer connected.
+	// Each square was rendered with a unique Texture
+	// based on the status of its neighbouring squares, creating the sharp jagged edges
+	// between the broken and intact glass. ....."
+	// The unique Texture mentioned is this one.
+	// The UV is specifically made using the MeshBuilder
+	// It's based on the State of nearby Squares ( Referred to as Panels in Code )
+	float4 f4FractureTexture = tex2D(Sampler_BaseTexture, f2FractureUV);
+	f4FractureTexture.rgb *= g_f3DefaultTint;
+
+	// Stock-Consistency
+	// 1.0f Alpha on $BaseAlphaEnvMapMask
+	#if (ENVMAPMODE == 1 || ENVMAPMODE == 3)
+		f4FractureTexture.a = lerp(f4FractureTexture.a, 1.0f, g_f1LerpBaseAlpha);
+	#endif
+	
+	// DetailTextures run a different UV Map
+	#if DETAILTEXTURE
+		float4	f4DetailTexture	= tex2D(Sampler_DetailTexture, f2FractureDetailUV);
+		f4DetailTexture.rgb *= g_f3DetailTextureTint;
+				
+		// Stock Consistency: No Blendmodes
+		// However I added the ability to regulate the intensity of the DetailBlend Multiply
+		f4FractureTexture *= lerp(1.0f, f4DetailTexture, g_f1DetailBlendFactor);
+	#endif
+
+    float3 f3Lightmap = ComputeLightmap(f2LightmapUV) * g_f1LightmapScaleFactor;
+
+	//==========================================================================//
+	//	Lighting
+	//==========================================================================//
+
+	// Stock Consistency. This is basically (1.0f - $UnlitFactor) * Lighting + $UnlitFactor 
+    float3 f3DiffuseLighting = g_f1MaxOverbright * f3Lightmap + g_f1MinOverbright;
+
+	#if VERTEXCOLORS
+		f3DiffuseLighting *= f3VertexColors;
+	#endif
+
+	// Cubemaps
+	float3 f3IndirectSpecular = 0.0f;
+	#if ENVMAP
+
+		float3 f3ViewDir = ComputeViewDir(f3WorldPos);
+		#if ENVMAPMASK
+			float4 f4EnvMapMask	= tex2D(Sampler_EnvMapMask, f2EnvMapMaskUV);
+			f3IndirectSpecular += ComputeEnvMap(f3Lightmap, f3WorldPos, f3VNormal, f3ViewDir, f4EnvMapMask.rgb);
+		#else
+			f3IndirectSpecular += ComputeEnvMap(f3Lightmap, f3WorldPos, f3VNormal, f3ViewDir, f4FractureTexture.w);
+		#endif
+	#endif
+	
+	//==========================================================================//
+	// Results
+	//==========================================================================//
+
+	float3 f3Result;
+	f3Result  = f3DiffuseLighting * f4FractureTexture.rgb;
+	f3Result += f3IndirectSpecular;
+
+	// Pass BaseAlpha onwards
+	float f1Alpha = f4FractureTexture.a;
+
+	return LUX_Finalise(float4(f3Result, f1Alpha), f3WorldPos, f1Depth);
+}

@@ -1,0 +1,204 @@
+//===================== File of the LUX Shader Project =====================//
+//
+//	Initial D.	:	30.09.2023 DMY
+//	Last Change :	 30.01.2026 DMY
+//
+//==========================================================================//
+
+//==========================================================================//
+//	Declare Static Combos
+//==========================================================================//
+//	STATIC:	"MULTITEXTURE"		"0..1"
+//	STATIC:	"LIGHTMAPPING"		"0..2"
+//	STATIC: "SURFACELAYER"		"0..1"
+//	STATIC: "REFLECTIONS"		"0..1" // Not used on Cheap Water
+//	STATIC: "REFRACTIONS"		"0..1" // Also used for Cheap Water
+
+//==========================================================================//
+//	Declare Dynamic Combos
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Skipping undesired Combos
+//	The Order of Static Combos and Skips has a drastic Impact on Compile Time!
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Constants, Functions, Includes
+//==========================================================================//
+
+// Include for all Vertex Shaders
+#include "lux_common_vs_fxc.h"
+
+const float4 cBumpTexCoordTransform[2]			:	register(LUX_VS_TEXTURETRANSFORM_01);
+const float4 cSurfTexCoordTransform[2]			:	register(LUX_VS_TEXTURETRANSFORM_02);
+const float4 cMultiTexCoordOffsets				:	register(LUX_VS_TEXTURETRANSFORM_03);
+
+//==========================================================================//
+//	VS Input
+//==========================================================================//
+struct VS_INPUT
+{
+    // This is all of the stuff that we ever use
+    float4 vPos                     : POSITION;
+    float4 vNormal                  : NORMAL;
+    float4 vTexCoord0               : TEXCOORD0;
+    float2 vLightmapTexCoord        : TEXCOORD1;
+    float2 vLightmapTexCoordOffset  : TEXCOORD2;
+	float3 vTangentS				: TANGENT;
+ 	float3 vTangentT				: BINORMAL0;
+};
+
+//==========================================================================//
+//	VS Output
+//==========================================================================//
+struct VS_OUTPUT
+{
+    float4 ProjPosSetup				:	POSITION;
+
+	float4 WorldPos_ProjPosZ		: TEXCOORD0;
+    float4 BumpTexCoord				: TEXCOORD1;
+	float4 ReflectXY_RefractYX		: TEXCOORD2;
+
+	// Without $BaseTexture we use regular Lightmaps instead
+	// For this we need at minimum one LightmapTexCoord
+	// NOTE: Consistent Register Layout with other Shaders ( Only important for Debugging )
+	float4	LightmapTexCoord		: TEXCOORD3;
+	float4	LightmapTexCoord2and3	: TEXCOORD4;
+	float	ProjPosW				: TEXCOORD5;
+	float4	MultiTextureTexCoords	: TEXCOORD6;
+
+	// Reached the Limit with this!
+	float3 Tangent				: TANGENT;
+	float3 Binormal				: BINORMAL;
+	float3 Normal				: NORMAL;
+};
+
+//==========================================================================//
+//	VS Entry Point
+//==========================================================================//
+VS_OUTPUT main( const VS_INPUT v )
+{
+	VS_OUTPUT o = ( VS_OUTPUT )0;
+
+	// Bumpmapping...
+	float4 UV = float4(v.vTexCoord0.xy, 1.0f, 1.0f);
+	o.BumpTexCoord.x = dot(v.vTexCoord0, cBumpTexCoordTransform[0]);
+	o.BumpTexCoord.y = dot(v.vTexCoord0, cBumpTexCoordTransform[1]);
+
+	// We have a second Transform for Surface Layers
+	#if SURFACELAYER
+		o.BumpTexCoord.z = dot(v.vTexCoord0, cSurfTexCoordTransform[0]);
+		o.BumpTexCoord.w = dot(v.vTexCoord0, cSurfTexCoordTransform[1]);
+	#endif
+		
+	// Transform into projection space
+	float4 vProjPos = mul(float4(v.vPos.xyz, 1.0f), cModelViewProj);
+	o.ProjPosSetup = vProjPos;
+	o.WorldPos_ProjPosZ.w = vProjPos.z;
+	o.ProjPosW = vProjPos.w;
+
+// This is no longer done since ASW
+#if 0
+	float2 f2ProjTangentS = mul(float4(v.vTangentS, 0.0f), cViewProj).xy;
+	float2 f2ProjTangentT = mul(float4(v.vTangentT, 0.0f), cViewProj).xy;
+#endif
+
+	// There's a very neat trick here
+	// Textures start in the Top-Left Corner (0,0)
+	// The Bottom Right Corner is (1,1)
+	// This means the X Coordinate is always Left->Right
+	// But the Y Coordinate is Actually Top->Bottom, its inverted !!!
+	//
+	// Now, ProjPos is in NDC Space.. Meaning (-1, -1) to (+1, +1)
+	// The Refract View is made in the same Orientation as our ProjPos (NDC Space), [MV]
+	// So we MUST flip .y here or the rt will be sampled upside-down
+	// *however*
+	// The Reflect View is also made with a regular Vieworientation
+	// But we actually need it upside-down, so we *don't* flip its .y
+	//
+	// MV.		  .^ Upside Down Reflect
+	//    ^.    .^
+	//	    ^..^
+	//-----------------
+	//     .^  ^.
+	//   .^      ^.
+	// Reflect    Refract
+
+	// Shifting the WorldPos down by a unit here (mostly) solves the Water Edge Skybox Color bug ( glitchy world intersections )
+	// But it causes every Geometry in the rt to clip since we just moved everything down a unit
+	// I played around with added an offset to vProjPos based on the Sign Value of vProjPos
+	// ( Moving the UV Inwards ) That kinda works, not really.. Also still clipping
+//	vProjPos = mul(float4(v.vPos.xyz - float3(0.0f, 0.0f, 1.0f), 1.0f), cModelViewProj);
+
+	// Allow the Compiler to optimise this for us..
+	#if REFLECTIONS
+		float2 f2ReflectPos = (vProjPos.xy + vProjPos.ww) * 0.5f;
+		o.ReflectXY_RefractYX.xy = f2ReflectPos;
+	#endif
+
+	#if REFRACTIONS
+		float2 f2RefractPos;
+		f2RefractPos.x = vProjPos.x;
+		f2RefractPos.y = -vProjPos.y;
+		f2RefractPos   = (f2RefractPos + vProjPos.ww) * 0.5f;
+		o.ReflectXY_RefractYX.zw = f2RefractPos;
+	#endif
+
+	float3 f3WorldPos = mul(v.vPos, cModel[0]);
+	o.WorldPos_ProjPosZ.xyz = f3WorldPos;
+
+	// Always! Needed for Fresnel Shenanigans
+	o.Tangent = v.vTangentS;
+	o.Binormal = v.vTangentT;
+	o.Normal = v.vNormal.xyz;
+
+	#if MULTITEXTURE
+		// 45° rotation of the Texture coordinate.
+		// Goes from this to	this...
+		//						.y.
+		//	y--------+		   /   \
+		//	|		 | --->   /	    \
+		//	|		 |		 +		 +
+		//	|		 |		  \		/
+		//	+--------x		   \   /
+		//						°x°
+		// The Middle of the rotated Square is still (.5 .5)
+
+		// Potentially faster? Should turn it into a single MAD instruction, which should be faster than stacking two ADD's
+		// Not sure if compiler can optimise away negation on the second one... since it's separate
+		// float2 f2_45xy = float2(1.0f, -1.0f) * vTexCoord0.xy + vTexCoord0.yx;
+
+		// 2x ADD since it has to do negation separately?
+		/*
+		float2 f1_45 = float2(v.vTexCoord0.x + v.vTexCoord0.y, v.vTexCoord0.y -	v.vTexCoord0.x);
+
+		o.MultiTextureTexCoords.xy = f1_45 * float2(0.1f, 0.1f) + cMultiTexCoordOffsets.xy;					// MAD
+		o.MultiTextureTexCoords.zw = v.vTexCoord0.yx * float2(0.45f, 0.45f) + cMultiTexCoordOffsets.zw;		// MAD
+		*/
+
+		// STOCK
+		float f45x = v.vTexCoord0.x + v.vTexCoord0.y;
+		float f45y = v.vTexCoord0.y - v.vTexCoord0.x;
+
+		o.MultiTextureTexCoords.x = f45x * 0.1f + cMultiTexCoordOffsets.x;
+		o.MultiTextureTexCoords.y = f45x * 0.1f + cMultiTexCoordOffsets.y;
+		o.MultiTextureTexCoords.z = v.vTexCoord0.y * 0.45f + cMultiTexCoordOffsets.z;
+		o.MultiTextureTexCoords.w = v.vTexCoord0.x * 0.45f + cMultiTexCoordOffsets.w;
+	#endif
+
+	// BaseTexture and LightmapWaterFog
+	#if (LIGHTMAPPING == 2) // For Surface Bump
+		
+		o.LightmapTexCoord.xy = v.vLightmapTexCoord + v.vLightmapTexCoordOffset;
+		o.LightmapTexCoord2and3.xy = o.LightmapTexCoord.xy + v.vLightmapTexCoordOffset;
+		o.LightmapTexCoord2and3.zw = o.LightmapTexCoord2and3.xy + v.vLightmapTexCoordOffset;
+
+	#elif (LIGHTMAPPING == 1)
+		o.LightmapTexCoord.xy = v.vLightmapTexCoord.xy;
+	#endif
+
+    return o;
+}

@@ -1,0 +1,151 @@
+//===================== File of the LUX Shader Project =====================//
+//
+//	Initial D.	:	23.11.2024 DMY
+//	Last Change :	 30.01.2026 DMY
+//
+//==========================================================================//
+
+//==========================================================================//
+//	Declare Static Combos
+//==========================================================================//
+//	STATIC:	"TEXCOORDS"					"0..2"
+//	STATIC: "ENVMAP"					"0..1"
+
+//==========================================================================//
+//	Declare Dynamic Combos
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Skipping undesired Combos
+//	The Order of Static Combos and Skips has a drastic Impact on Compile Time!
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Constants, Functions, Includes
+//==========================================================================//
+
+// Include for all Vertex Shaders
+#include "lux_common_vs_fxc.h"
+
+// Brush specific Functions
+#include "lux_common_vs_brush.h"
+
+const float4 g_TexCoordTransform1[2] : register(LUX_VS_TEXTURETRANSFORM_01);
+const float4 g_TexCoordTransform2[2] : register(LUX_VS_TEXTURETRANSFORM_02);
+const float4 g_TexCoordTransform3[2] : register(LUX_VS_TEXTURETRANSFORM_03);
+
+//==========================================================================//
+//	VS Input
+//==========================================================================//
+struct VS_INPUT
+{
+	// NOTE: This is different from other Shaders
+	// We can see available TexCoords in c_func_breakablesurf.cpp (Client)
+    float4 vPos                     : POSITION;  // Object Vertex Position
+    float4 vNormal                  : NORMAL;    // Object Normal
+    float2 vFracturedGlassTexCoord	: TEXCOORD0; // Per-Window-Square UV
+    float2 vLightmapTexCoord        : TEXCOORD1; // Lightmap UV
+    float2 vActualUV				: TEXCOORD2; // Real UV
+};
+
+//==========================================================================//
+//	VS Output
+//==========================================================================//
+struct VS_OUTPUT
+{
+    float4 ProjPosSetup				: POSITION;
+	float4 WorldPos_ProjPosZ		: TEXCOORD0;
+    float4 TexCoords1				: TEXCOORD1;
+	float4 TexCoords2				: TEXCOORD2;
+	float3 VertexColors				: COLOR0;
+	float3 Normal					: NORMAL;
+};
+
+//==========================================================================//
+//	VS Entry Point
+//==========================================================================//
+VS_OUTPUT main( const VS_INPUT v )
+{
+	VS_OUTPUT o = ( VS_OUTPUT )0;
+	
+	//==========================================================================//
+	//	Handle Decompression
+	//==========================================================================//
+
+	#if ENVMAP
+		float3 f3ObjectNormal;
+		DecompressVertexNormal(v.vNormal, f3ObjectNormal);
+	#endif
+	
+	// Variable needed for Offset and Rotation
+	float3 f3ObjectPosition = v.vPos.xyz;
+
+	//==========================================================================//
+	//	Handle Rotations and Offsets
+	//==========================================================================//
+
+	// "SKINNING"
+    float3 f3WorldPos;
+    AlignInputWithOffset(f3ObjectPosition, f3WorldPos);
+	
+	#if ENVMAP
+	    float3 f3WorldNormal;
+	    AlignInputWithoutOffset(f3ObjectNormal, f3WorldNormal);
+	#endif
+	
+	// Only need Rotation for these
+	#if TANGENTS
+		float3 f3ObjectTangent = v.vTangentS.xyz;
+		float3 f3ObjectBinormal = v.vTangentT.xyz;
+	
+		float3 f3WorldTangent, f3WorldBinormal;
+		AlignInputWithoutOffset(f3ObjectTangent, f3WorldTangent);
+		AlignInputWithoutOffset(f3ObjectBinormal, f3WorldBinormal);
+	#endif
+
+	//==========================================================================//
+	//	VS Output
+	//==========================================================================//
+
+	// POSITION	
+	float4 f4ProjPos = mul(float4(f3WorldPos, 1.0f), cViewProj);
+	o.ProjPosSetup = FixHPO(f4ProjPos); // Apply Half-Pixel Offset Fix
+
+	// TEXCOORD0
+	o.WorldPos_ProjPosZ.xyz = f3WorldPos;
+	o.WorldPos_ProjPosZ.w = dot(float4(f3WorldPos, 1.0f), cViewProjZ);
+
+	// Stuffing 1.0f into .zw so all Components of the TexCoord Transform influence the UV
+	float4 f4ShatterTexCoord = float4(v.vFracturedGlassTexCoord.xy, 1.0f, 1.0f);
+	float4 f4UnmodifiedTexCoord = float4(v.vActualUV.xy, 1.0f, 1.0f);
+
+	// TEXCOORD1
+	// .xy = Fractured Glass ( "$BaseTexture" )
+	// .zw = Lightmap
+	o.TexCoords1.x = dot(f4ShatterTexCoord, g_TexCoordTransform1[0]);
+	o.TexCoords1.y = dot(f4ShatterTexCoord, g_TexCoordTransform1[1]);
+	o.TexCoords1.zw = v.vLightmapTexCoord.xy;
+
+	// TEXCOORD2
+	#if (TEXCOORDS >= 1)
+	o.TexCoords2.x = dot(f4UnmodifiedTexCoord, g_TexCoordTransform2[0]);
+	o.TexCoords2.y = dot(f4UnmodifiedTexCoord, g_TexCoordTransform2[1]);
+
+		#if (TEXCOORDS == 2)
+			o.TexCoords2.z = dot(f4UnmodifiedTexCoord, g_TexCoordTransform3[0]);
+			o.TexCoords2.w = dot(f4UnmodifiedTexCoord, g_TexCoordTransform3[1]);
+		#endif
+	#endif
+
+	// COLOR0
+	o.VertexColors = cModulationColor.xyz;
+
+	// NORMAL
+	#if ENVMAP
+		o.Normal = f3WorldNormal;
+	#endif
+
+    return o;
+}

@@ -1,0 +1,512 @@
+//===================== File of the LUX Shader Project =====================//
+//
+//	Last Change :	 30.01.2026 DMY
+//	Last Change :	 30.01.2026 DMY
+//
+//==========================================================================//
+
+//==========================================================================//
+//	Declare Static Combos
+//==========================================================================//
+// STATIC:	"PROJTEX"					"0..1"
+// STATIC:	"BURNING"					"0..1"
+// STATIC:	"DETAILTEXTURE"				"0..1"
+// STATIC:	"EYEGLOW"					"0..1"
+// STATIC:	"VERTEXCOLORS"				"0..1"
+// STATIC:	"ELLIPSOIDDEBUG"			"0..1"
+
+//==========================================================================//
+//	Declare Dynamic Combos
+//==========================================================================//
+// DYNAMIC: "ELLIPSOIDCULLING"			"0..3"
+// DYNAMIC: "PROJTEXSHADOWS"			"0..1"
+// DYNAMIC: "NUM_LIGHTS_COMBO"			"0..4"
+
+//==========================================================================//
+//	Skipping undesired Combos
+//	The Order of Static Combos and Skips has a drastic Impact on Compile Time!
+//==========================================================================//
+// SKIP: ( $PROJTEX == 0 && $PROJTEXSHADOWS != 0 )	
+// SKIP: ( $PROJTEX != 0 && $BURNING != 0 )	
+// SKIP: ( $PROJTEX != 0 && $NUM_LIGHTS_COMBO != 0 )	
+// SKIP: ( $PROJTEXSHADOWS != 0 && $NUM_LIGHTS_COMBO != 0 )
+
+//==========================================================================//
+//	Common Definitions
+//==========================================================================//
+
+// None of these for Projected Textures
+// FogToBlack and no AlphaWrites!
+#if PROJTEX
+#define NO_WATERFOGTODESTALPHA
+#define NO_DEPTHTODESTALPHA
+#endif
+
+//#define TONEMAP_SCALE_NONE
+#define TONEMAP_SCALE_LINEAR
+//#define TONEMAP_SCALE_GAMMA
+
+//==========================================================================//
+//	Constants, Functions, Includes
+//==========================================================================//
+
+// Include for all Pixel Shaders
+#include "lux_common_ps_fxc.h"
+
+// Specific to this Shader
+#include "lux_infected_ps30.h"
+
+// Want Phong. Includes Lighting and Data Header
+#include "lux_common_phong.h"
+
+#if PROJTEX
+#include "lux_common_phong_flashlight.h"
+#endif
+				
+//==========================================================================//
+//	PS Input
+//==========================================================================//
+struct PS_INPUT
+{
+	// lux_infected_vs30
+	float4 WorldPos_ProjPosZ	: TEXCOORD0;
+	float4 TexCoords			: TEXCOORD1;
+	float4 CullingUVs			: TEXCOORD2;
+	float2 CullingFactors		: TEXCOORD3; // .x Ellipsoid1, .y Ellipsoid2
+	float4 LightAtten			: TEXCOORD4;
+
+	float3 VertexColors			: COLOR0;
+
+	float3 Tangent				: TANGENT;
+	float3 Binormal				: BINORMAL;	
+	float3 Normal				: NORMAL;
+
+};
+ 
+//==========================================================================//
+//	PS Entry Point
+//==========================================================================//
+float4 main(PS_INPUT i) : COLOR
+{
+	//	Getting our PS_INPUT
+	//==========================================================================//
+
+	float3 f3WorldPos = i.WorldPos_ProjPosZ.xyz;
+	float f1Depth = i.WorldPos_ProjPosZ.w;
+
+	float3x3 TBN_Matrix = float3x3(i.Tangent, i.Binormal, i.Normal);
+
+	float2 f2BaseTextureUV = i.TexCoords.xy;
+	float2 f2DetailTextureUV = i.TexCoords.zw;
+
+	float4 f4LightAttenuations = i.LightAtten;
+
+	float3 f3VertexColors = i.VertexColors;
+
+	// No Normal Map at the Moment
+	// So I just pass on VS Normal
+	float3 f3NormalWS = i.Normal;
+
+	//==========================================================================//
+	// Shader Start
+	//==========================================================================//
+
+	// Since this Shader is almost entirely undocumented, let's go Step by Step as to how it should work.
+	// This 2010 Presentation will be used as a Base.
+	// https://steamcdn-a.akamaihd.net/apps/valve/2010/GDC10_ShaderTechniquesL4D2.pdf
+
+	// The BaseTexture is sampled with the regular UV.
+	// The Alpha of the Common Infected Textures contains a Luminance Value on the real Model UV
+	// According to slice 21 of the GDC10 talk, they have two subsequent Texture Lookups for the Randomisation Effect.
+	float4 f4BaseTexture = tex2D(Sampler_BaseTexture, f2BaseTextureUV);
+
+	// The Texture we just sampled is formatted as so:
+	/*
+		Red		= Specularity, Detail				- Mask(?)
+		Green	= Inversed Reflectivity, Blood Mask - Color determined via VMT Parameter ( $BloodColor )
+		Blue	= Cloth / Skin Mask					- Never overlaps! 
+
+		RG is split into 4 Tiles, each one has a Variation of the Texture
+		The Order I listed them as here, doesn't matter.
+
+		Cloth/Skin isn't masked, they don't Overlap. ( I will treat this as two separate Masks however )
+
+				Red Channel						Green Channel					Blue Channel
+		+------------+------------+		+------------+------------+		+-------------------------+
+		| Variation3 | Variation4 |		| Variation3 | Variation4 |		|						  |
+		|			 |			  |		|			 |			  |		|						  |
+		|			 |			  |		|			 |			  |		|						  |
+		|			 |			  |		|			 |			  |		|						  |
+		+------------+------------+		+------------+------------+		|		Cloth/Skin		  |
+		| Variation1 | Variation2 |		| Variation1 | Variation2 |		|						  |
+		|			 |			  |		|			 |			  |		|						  |
+		|			 |			  |		|			 |			  |		|						  |
+		|			 |			  |		|			 |			  |		|						  |
+		+------------+------------+		+------------+------------+		+-------------------------+
+
+		GDC10 refers to Cloth/Skin as 'clothing tint' and 'skin tint'
+	*/
+
+	// 'Luminance' packed into the Alpha Channel
+	float f1Luminance = f4BaseTexture.a;
+
+	// Unpack the Cloth/Skin Mask
+	// Slide 29 talks about "inverting" first, before leveling.
+	// Then ignoring Values above '127'
+	// I previously did 1.0f - saturate(Packed.b * 2.0f) here
+	// but we can apply the same Trick Valve did for WrinkleMaps here
+	float f1FullRange	= f4BaseTexture.b * 2.0f - 1.0f;
+
+	// Very Simple as long as the Compiler doesn't try to optimise with a min/max instruction
+	// ( There are dedicated sat Instructions )
+	float f1ClothMask	= saturate(-f1FullRange);
+	float f1SkinMask	= saturate(f1FullRange);
+
+	// Magic begins
+	/*
+		A Gradient Texture is used to determine the final Color for each Section.
+		Each Gradient Texture is constructed like this:
+
+		16 pixel
+		^
+		|	+---------+---------------+
+		|	|  Skin1  |    Skin2      |
+		|	+---------+--+------------+
+		|	|	Cloth	 |	  Cloth2  |
+		|	+------------+------------+
+		|
+		+-------------------------------> 256 pixel
+
+		According to MrFunreal's Tutorial on common Infected
+		https://steamcommunity.com/sharedfiles/filedetails/?id=1567031703
+		This Texture MUST be 256x16. Larger sizes won't work for *some* Reason.
+		However the Textures don't have to look like the Example above.
+		They can look like this too:
+		And thus also have different Materials, in funreals example, there is a unique palette for pants, shirt, shoes, paper, watch strip and watch face.
+
+		+---------+---------------+
+		|         |               |
+		+-----+---+--+------+-----+
+		|  1  |  2	 |	3   |  4  |
+		+-----+------+------+-----+
+
+		By adding more Segments, and being clever with Colors, you can get many unique Colors
+		In MrFunreal's Example one of the Cloth Segments was used for a Wristwatch.
+		Other Segments can be for the Shirt, Pants, Tie.. Imagination is Key here.
+
+		According to the VDC article the Lookup within the GradientTexture is calculated as such :
+		ClothColor = tex2D(.., float2(Luminance, 1/32 + RandomisationA * 1/16))
+		SkinColor  = tex2D(.., float2(Luminance, 1/32 + RandomisationB * 1/16 + 0.5f))
+
+		Then, the Blue Channel is used to interpolate between the Results.
+		lerp(cloth, skin, bluechannel)
+	*/
+
+	// 1/32 + g_RandomisationX * 1/16 (+ 0.5f) is precomputed on Parameter Init.
+	// According to the GDC10 talk, the 'cloth-tint mask', not sure yet what is meant by that.
+	// 
+	// Constructing the UV's like the VDC Article describes it.
+    float2 f2ClothUV = float2(f1Luminance, g_f1RandomisationOffset1);
+	float2 f2SkinUV	 = float2(f1Luminance, g_f1RandomisationOffset2);
+
+	// Now run it through the Gradient Texture
+	float3 f3ClothColor = tex2D(Sampler_GradientTexture, f2ClothUV).rgb;
+	float3 f3SkinColor	= tex2D(Sampler_GradientTexture, f2SkinUV).rgb;
+
+	// "The blue channel from $basetexture is then used to linearly interpolate between these 2 colors." - VDC
+//	float3 f3SurfaceColor = lerp(f3ClothColor, f3SkinColor, f4BaseTexture.b);
+
+	// This looks more correct to me
+	float3 f3SurfaceColor = f1SkinMask * f3SkinColor + f1ClothMask * f3ClothColor;
+
+	// Next is Detail and Blood/EyeGlow
+	// Texture is quartered so we have to account for that. ( *0.5f )
+	// Then we add a randomisation Factor ( 0.5f * random Bool, 0.5f * random Bool )
+    float2 f2QuarterUV = (f2BaseTextureUV * 0.5f) + g_f2UVRandomisation;
+
+	// This is consistent with Slice 21 of the GDC Talk that mentions they do two Texture Lookups
+	float2 f2Packed = tex2D(Sampler_BaseTexture, f2QuarterUV).rg;
+
+	// Detail is in the upper half of the Red Channel.
+	// 0 on Red would be full specularity, so we have to invert it.
+	// We use the same Trick as before here.
+	f1FullRange = f2Packed.r * 2.0f - 1.0f;
+
+	float f1SpecularMask	= saturate(-f1FullRange);
+	float f1DetailMask		= saturate(f1FullRange);
+
+	// Blood and EyeGlow are in the green Channel.
+	// Can't teach a Horse new Tricks or something like that.
+	f1FullRange = f2Packed.g * 2.0f - 1.0f;
+
+	// **ALWAYS** do the Detail Texture
+	if(true)
+	{
+		// Alpha Channel contains a different kind of Specular Mask, mentioned in Slide 32
+		float4 f4DetailTexture = tex2D(Sampler_DetailTexture, f2DetailTextureUV);
+        f4DetailTexture.rgb *= g_f3DetailTint;
+
+		// Additional Factor for Detail Textures. Since 0 means no Detail, this is ideal.
+        f1DetailMask = saturate(f1DetailMask * g_f1DetailBlendFactor); // I saturate this just in case
+
+		// The GDC doesn't mention what kind of DetailTexture Operation they are using.
+		// This looks correct, so I'll roll with that.
+		f3SurfaceColor = lerp(f3SurfaceColor, f4DetailTexture.rgb, f1DetailMask);
+
+		// Slide 32 tells us "Use specular mask from detail's alpha in detail-masked zones"
+		// Which would be the Equivalent of this
+		f1SpecularMask = lerp(f1SpecularMask, f4DetailTexture.a, f1DetailMask);
+	}
+
+	// GDC Slide 24
+	// Refers to EyeGlow as "retro-reflective effect of tapetum lucidum"
+	// In Slide 25 & 31, referred to as 'Retro-reflectivity'
+	// There are some Construction-Worker Models that use this for Safety Vests.
+	// I will be adapating RetroReflectivity as the Term for this, instead of EyeGlow which this was originally intended for.
+	//
+	// The 1.0f- for Reflectivity makes sense when you consider what Slide 32 says.
+	// "Blood on top of a retro-reflective material damps the retro-reflectivity anyway"
+	// Values > 0.5f would be 1.0f for Blood, and 0.0f for Retro Reflectivity
+	float f1RetroReflectivityMask = saturate(-f1FullRange);
+	float f1BloodMask = saturate(f1FullRange);
+	
+	// According to Slide 33, 'blood patterns' are smoothstepped.
+	// There is a Parameter called $BloodMaskRange that is likely used for the SmoothStep Min/Max
+	// Default values for BloodMaskRange are float2(0.0f , 1.0f)
+	// Looks similar to the comparison on Slide 33
+	// Smoothstep is around 7-8 real Instructions, so this is kinda expensive
+    f1BloodMask = smoothstep(g_f1BloodMaskMin, g_f1BloodMaskMax, f1BloodMask);
+
+	//==========================================================================//
+	// Ellipsoid Culling
+	//==========================================================================//
+	#if (ELLIPSOIDCULLING > 0)
+
+		// Combined Culling Factor
+		float f1CullFactor = 0.0f;
+
+		// Additional Blood
+		float f1BloodSplatterMask = 0.0f;
+
+		// The Presentation didn't indicate how exactly they handle clipping.
+		// Looking at the Images, we have to factor in both the Vertex Cull Factor and Mask at the same Time.
+		// I see 3 Options
+		//
+		// 1. Additive Factor
+		// saturate(VertexCullFactor + BloodSplatterMask)
+		// Then cull if the combined Factor is larger than the Threshold
+		// if(Factor > Bias)
+		//    Discard; 
+		//
+		// 2. Find the larger Factor
+		// min(VertexCullFactor, BloodSplatterMask)
+		// Then add the bias, effectively raising at what point Clipping occurs
+		// clip(Factor + Bias - 1.0f)
+		//
+		// 3. Inverse Clip Bias
+		// min(VertexCullFactor, BloodSplatterMask)
+		// Same as 2 but inverse the Factor, then clip using the Bias ( might be functionally identical to 2)
+		// clip((1.0f - Factor) - Bias)
+
+		// First Ellipsiod
+		#if (ELLIPSOIDCULLING != 2)
+
+			// Get Vertex Shader Inputs
+			float2 f2Ellipsoid1UV = i.CullingUVs.xy;
+			float  f1Ellipsoid1Factor = i.CullingFactors.x;
+
+			// Currently the UV is either very small or very large.
+			// Apply the Mapping Scale
+			f2Ellipsoid1UV *= g_f1Ellipsoid1_UVMappingScale;
+
+			// Center of the Ellipsoid is 0.0f
+			// So move it to 0.5f, where the Center of the Texture is, makes more sense for the existing Textures
+			f2Ellipsoid1UV = f2Ellipsoid1UV * 0.5f + 0.5f; // [0.0f 0.0f] Center to [0.5f 0.5f] Center
+
+			// Saturate to clamp
+			f2Ellipsoid1UV = saturate(f2Ellipsoid1UV);
+
+			// Apply Scaling and WoundType Offsets for LUX
+			f2Ellipsoid1UV *= g_f2Ellipsoid1_UVScale;
+			f2Ellipsoid1UV.x += g_f1Ellipsoid1_UVOffset; 		
+
+			// Sample BloodSplatter Mask. This is a Greyscale Texture so only get .r
+			// The UV of the Ellipsoid is aligned with it's Axis
+			f1BloodSplatterMask = tex2D(Sampler_WoundCutOutTexture, f2Ellipsoid1UV).r;
+
+			// ShiroDkxtro2:
+			// Even with clamp, the Textures have a bunch of border Pixels that stretch infinitely
+			// To fix this, and make existing Textures usable, I'm adding this Factor that will blacken the Mask near the Border
+			// Also ShiroDkxtro2: This doesn't work
+//			f1BloodSplatterMask *= EdgeBlend(f2Ellipsoid2UV, g_f1EllipsoidBorderSize);
+
+			// Whichever is larger
+			f1CullFactor = max(f1Ellipsoid1Factor, f1BloodSplatterMask);
+		#endif
+
+		// Second Ellipsiod
+		#if (ELLIPSOIDCULLING != 1)
+
+			// Get Vertex Shader Inputs
+			float2 f2Ellipsoid2UV = i.CullingUVs.zw;
+			float  f1Ellipsoid2Factor = i.CullingFactors.y;
+
+			// Currently the UV is either very small or very large.
+			// Apply the Mapping Scale
+			f2Ellipsoid2UV *= g_f1Ellipsoid2_UVMappingScale;
+
+			// Center of the Ellipsoid is 0.0f
+			// So move it to 0.5f, where the Center of the Texture is, makes more sense for the existing Textures
+			f2Ellipsoid2UV = f2Ellipsoid2UV * 0.5f + 0.5f; // [0.0f 0.0f] Center to [0.5f 0.5f] Center
+
+			// Saturate to clamp
+			f2Ellipsoid2UV = saturate(f2Ellipsoid2UV);
+
+			// Apply Scaling and WoundType Offsets for LUX
+			f2Ellipsoid2UV *= g_f2Ellipsoid2_UVScale;
+			f2Ellipsoid2UV.x += g_f1Ellipsoid2_UVOffset; 	
+
+			// Sample BloodSplatter Mask. This is a Greyscale Texture so only get .r
+			// The UV of the Ellipsoid is aligned with it's Axis
+			f1BloodSplatterMask = tex2D(Sampler_WoundCutOutTexture, f2Ellipsoid2UV).r;
+
+			// ShiroDkxtro2:
+			// Even with clamp, the Textures have a bunch of border Pixels that stretch infinitely
+			// To fix this, and make existing Textures usable, I'm adding this Factor that will blacken the Mask near the Border
+			// Also ShiroDkxtro2: This doesn't work
+//			f1BloodSplatterMask *= EdgeBlend(f2Ellipsoid2UV, f1EllipsoidBorderSize);
+
+			// Whichever is larger.
+			// Keep the original CullFactor from Ellipsoid1
+			f1CullFactor = max(f1CullFactor, min(f1Ellipsoid2Factor, f1BloodSplatterMask));
+		#endif
+
+		// Displaying the CullFactor just like the GDC
+		#if ELLIPSOIDDEBUG
+			return float4(f1CullFactor, f1CullFactor, f1CullFactor, 1.0f);
+		#endif
+
+		// Method 1
+		if(f1CullFactor > g_f1CutOutTextureBias)
+			discard;
+
+		// Method 2
+//		clip(f1CullFactor + g_f1CutOutTextureBias - 1.0f);
+
+		// Method 3
+		/*
+			clip(1.0f - f1CullFactor + g_f1CutOutTextureBias);
+		*/
+
+		// If we didn't clip. Add the BloodSplatter to the BloodMask
+		f1BloodMask = max(f1BloodMask, f1CullFactor);
+	#endif
+
+	// Blood is added at the End, since it is on top of everything else. That's also what Slide 43 shows
+    f3SurfaceColor = lerp(f3SurfaceColor, g_f3BloodColor, f1BloodMask);
+
+	//==========================================================================//
+	// Phong Data
+	//==========================================================================//
+
+	// We prepare a Struct now with default Values
+	// This will be Setup using a Function, drastically compressing the Code
+	Phong_Data_t PhongData = Phong_Data_FakeConstructor(); // HLSL forced my Hand because it doesn't have constructors
+
+	// Need to construct a single Phong Exponent from these 4 Parameters
+	// 1. $DefaultPhongExponent - ( Basically $ClothExponent )
+	// 3. $SkinExponent
+	// 2. $DetailExponent
+	// 4. $BloodExponent
+	// 5. $ShinyBloodExponent ( This is for $DisableVariation, which is not supported at the Moment )
+	//
+	// I will put them together in the Order listed, since that is the Order that makes the most Sense.
+	// Blood is on top of the Detail Texture in Slide 43, so the Phong Exponent for it should also be
+	// After that is Detail Texture, then Cloth/Skin
+
+	// This could be optimised by lerping Default/Skin at the same time as Detail/Blood
+	// Then lerping (Default/Skin) with (Detail/Blood)
+	float f1PhongExponent;
+    f1PhongExponent = lerp(g_f1DefaultPhongExponent, g_f1SkinPhongExponent, f1SkinMask);
+    f1PhongExponent = lerp(f1PhongExponent, g_f1DetailPhongExponent, f1DetailMask);
+    f1PhongExponent = lerp(f1PhongExponent, g_f1BloodPhongExponent, f1BloodMask);
+	PhongData.f1PhongExponent = f1PhongExponent;
+
+	// Need a Specular Boost Factor separate from PhongTint
+    float f1SpecularBoost = lerp(g_f1PhongBoost, g_f1BloodPhongBoost, f1BloodMask);
+    PhongData.f3PhongModulation = g_f3PhongTint * f1SpecularBoost;
+
+	// Apply Mask
+	PhongData.f3PhongModulation *= f1SpecularMask;
+
+	// Need this for Phong Fresnel
+	float3 f3ViewDir = ComputeViewDir(f3WorldPos);
+	float f1NdotV = dot(f3NormalWS, -f3ViewDir); // Unsaturated!!	
+
+	// Phong needs some special fresnel functions to look correctly
+	SetupPhongFresnel(PhongData, f1NdotV);
+
+	// Now saturate.
+	// Not needed thought at the Moment.
+	f1NdotV = saturate(f1NdotV);
+
+	//==========================================================================//
+	// Lighting
+	//==========================================================================//
+
+	// Prepare some Variables
+	float3 f3DirectDiffuse		= 0.0f;
+	float3 f3IndirectDiffuse	= 0.0f;
+	float3 f3DirectSpecular		= 0.0f;
+	float3 f3IndirectSpecular	= 0.0f;
+
+	// No Indirect Specular for this Shader!
+	// Keep at 0.0f
+	#if !PROJTEX
+		f3DirectDiffuse = ComputeDirectDiffuse(f3WorldPos, f3NormalWS, f4LightAttenuations);
+		f3IndirectDiffuse = ComputeIndirectDiffuse(f3NormalWS);
+		f3DirectSpecular = ComputeDirectSpecular(PhongData, f3WorldPos, f3NormalWS, f3ViewDir, f4LightAttenuations);
+	#else
+		f3DirectDiffuse = ComputeProjectedTextureDiffuse(f3WorldPos, f3NormalWS, PROJTEXSHADOWS);
+		f3DirectSpecular = ComputeProjectedTextureSpecular(PhongData, f3WorldPos, f3NormalWS, reflect(f3ViewDir, f3NormalWS), f3DirectDiffuse);
+	#endif
+
+	// ShiroDkxtro2: This isn't correct!!
+	// RetroReflectivity should use:
+	// saturate(dot(f3LightDir, f3ViewDir)) * f1RetroReflectivityMask * f3EyeGlowColor * f3LightColor * f1LightAttenuation
+	// Alternative:
+	// saturate(dot(f3NormalWS, f3ViewDir)) * .. missing Light Attenuation !
+	// 
+	// Here however I'm simply assuming that Projected Textures shining onto the Model always reflect back!
+	#if (EYEGLOW && PROJTEX)
+		f3DirectSpecular *= lerp(1.0f, g_f3EyeGlowColor, f1RetroReflectivityMask);
+	#endif
+
+	//==========================================================================//
+	// Results
+	//==========================================================================//
+
+	// Consistent Diffuse Lighting with Stock Shaders
+	float3 f3Result = f3SurfaceColor.rgb * (f3DirectDiffuse + f3IndirectDiffuse);
+
+	// Additive Lighting
+	f3Result += f3DirectSpecular;
+	f3Result += f3IndirectSpecular;
+
+	//==========================================================================//
+	// Burn Effect
+	//==========================================================================//
+	#if BURNING
+		
+		// Should this be using the DetailTextureUV?
+		// Would require UV Transform to be enabled for both Detail Textures.
+		float3 f3BurnTexture = tex2D(Sampler_BurnDetailTexture, f2BaseTextureUV).rgb;
+
+		// This is identical to DetailBlendMode 6
+		f3Result += BurnFactor(f3BurnTexture);
+	#endif
+
+	// No Alpha = No Transparency. Too bad.
+	// Best Solution to this would be a dedicated Alpha Texture
+	return LUX_Finalise(float4(f3Result, 1.0f), f3WorldPos, f1Depth);
+}

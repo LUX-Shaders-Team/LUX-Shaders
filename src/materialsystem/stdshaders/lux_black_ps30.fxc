@@ -1,0 +1,66 @@
+//===================== File of the LUX Shader Project =====================//
+//
+//	Initial D.	:	08.07.2025 DMY
+//	Last Change :	 30.01.2026 DMY
+//
+//==========================================================================//
+
+//==========================================================================//
+//	Declare Static Combos
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Declare Dynamic Combos
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Skipping undesired Combos
+//	The Order of Static Combos and Skips has a drastic Impact on Compile Time!
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Common Definitions
+//==========================================================================//
+
+// This is used to disable features automatically.
+#include "lux_common_defines.h"
+
+// This should be correct with Linear Fog
+//#define TONEMAP_SCALE_NONE
+#define TONEMAP_SCALE_LINEAR
+//#define TONEMAP_SCALE_GAMMA
+
+//==========================================================================//
+//	Constants, Functions, Includes
+//==========================================================================//
+
+// Include for all Pixel Shaders
+#include "lux_common_ps_fxc.h"
+
+//==========================================================================//
+//	PS Input
+//==========================================================================//
+struct PS_INPUT
+{
+	float4	WorldPos_ProjPosZ		:	TEXCOORD0;
+};
+ 
+//==========================================================================//
+//	PS Entry Point
+//==========================================================================//
+float4 main(PS_INPUT i) : COLOR
+{
+	//	Getting our PS_INPUT
+	//==========================================================================//
+	// .xyz's in case we need to pack something later
+	float3 f3WorldPos		= i.WorldPos_ProjPosZ.xyz;
+	float  f1Depth			= i.WorldPos_ProjPosZ.w;
+
+	// I.. I don't think we need to do much more than this
+	// That should really be it, this Shader is.. Very simple
+
+	return LUX_Finalise((float4)0.0f, f3WorldPos, f1Depth);
+}

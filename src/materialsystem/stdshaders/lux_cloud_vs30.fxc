@@ -1,0 +1,86 @@
+//===================== File of the LUX Shader Project =====================//
+//
+//	Initial D.	:	19.11.2024 DMY
+//	Last Change :	 30.01.2026 DMY
+//
+//==========================================================================//
+
+//==========================================================================//
+//	Declare Static Combos
+//==========================================================================//
+//	STATIC: "ALPHATEX_USE_TEX0"	"0..1"
+
+//==========================================================================//
+//	Declare Dynamic Combos
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Skipping undesired Combos
+//	The Order of Static Combos and Skips has a drastic Impact on Compile Time!
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Constants, Functions, Includes
+//==========================================================================//
+
+// Include for all Vertex Shaders
+#include "lux_common_vs_fxc.h"
+
+const float4 g_BaseTexCoordTransform[2] : register(LUX_VS_TEXTURETRANSFORM_01);
+const float4 g_CloudTexCoordTransform[2] : register(LUX_VS_TEXTURETRANSFORM_02);
+
+//==========================================================================//
+//	VS Input
+//==========================================================================//
+struct VS_INPUT
+{
+    float3 vPos                     : POSITION;
+    float4 vTexCoord0               : TEXCOORD0;
+    float4 vTexCoord1               : TEXCOORD1;
+};
+
+//==========================================================================//
+//	VS Output
+//==========================================================================//
+struct VS_OUTPUT
+{
+    float4 ProjPosSetup			: POSITION; 
+	float4 WorldPos_ProjPosZ	: TEXCOORD0;
+	float4 TexCoords			: TEXCOORD1;
+};
+
+//==========================================================================//
+//	VS Entry Point
+//==========================================================================//
+VS_OUTPUT main( const VS_INPUT v )
+{
+	VS_OUTPUT o = ( VS_OUTPUT )0;
+
+	float3 f3WorldPos = mul(float4(v.vPos, 1.0f), cModel[0]);
+
+	// POSITION	
+	float4 f4ProjPos = mul(float4(f3WorldPos, 1.0f), cViewProj);
+	o.ProjPosSetup = FixHPO(f4ProjPos); // Apply Half-Pixel Offset Fix
+
+	// TEXCOORD0
+	o.WorldPos_ProjPosZ.xyz = f3WorldPos;
+	o.WorldPos_ProjPosZ.w = dot(float4(f3WorldPos, 1), cViewProjZ);
+
+	// Stuffing 1.0f into .zw so all Components of the TexCoord Transform influence the UV
+	float4 f4UnmodifiedTexCoord = float4(v.vTexCoord0.xy, 1.0f, 1.0f);
+
+    o.TexCoords.x = dot(v.vTexCoord0, g_BaseTexCoordTransform[0]);
+    o.TexCoords.y = dot(v.vTexCoord0, g_BaseTexCoordTransform[1]);
+
+	#if !ALPHATEX_USE_TEX0
+		o.TexCoords.z = dot(v.vTexCoord1, g_CloudTexCoordTransform[0]);
+		o.TexCoords.w = dot(v.vTexCoord1, g_CloudTexCoordTransform[1]);
+	#else
+		o.TexCoords.z = dot(v.vTexCoord0, g_CloudTexCoordTransform[0]);
+		o.TexCoords.w = dot(v.vTexCoord0, g_CloudTexCoordTransform[1]);
+	#endif
+
+    return o;
+}

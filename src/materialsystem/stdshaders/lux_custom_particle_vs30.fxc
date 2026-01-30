@@ -1,0 +1,507 @@
+//===================== File of the LUX Shader Project =====================//
+
+//==========================================================================//
+//	Available Static Combos to the Shader
+//	Do not change anything here!
+//==========================================================================//
+//	STATIC: "DUALSEQUENCE"				"0..1"
+//	STATIC: "ZOOM_ANIMATE_SEQ2"			"0..1"
+//	STATIC:	"ADDBASETEXTURE2"			"0..1"
+//	STATIC:	"EXTRACTGREENALPHA"			"0..1"
+//	STATIC:	"SPLINE"					"0..1"
+
+//	You may add 6 different Modes to your Shader
+//	STATIC: "ALTERNATIVE_MODE"			"0..5"
+
+//==========================================================================//
+//	Available Dynamic Combos to the Shader
+//	Do not change anything here!
+//==========================================================================//
+//	DYNAMIC: "ORIENTATION"				"0..3"
+
+//==========================================================================//
+//	Skipped Combinations
+//==========================================================================//
+// SKIP: ($DUALSEQUENCE == 0 && $ZOOM_ANIMATE_SEQ2 == 1)
+
+//==========================================================================//
+//	Decompress Combos
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Constants, Functions, Includes
+//==========================================================================//
+
+// Include for all Vertex Shaders
+#include "lux_custom_common_vs.h"
+
+// Spline Functions
+#include "lux_common_spline.h"
+
+//==========================================================================//
+//	Everything the Vertex Shader can receive and when
+//==========================================================================//
+struct VS_INPUT
+{
+	// Tried to add support via $Shader_Normal and $Shader_Tangent
+	// Might not work, this is uncharted territory.
+	float4 vNormal						: NORMAL;
+	float4 vTangent						: TANGENT;
+	float4 vBinormal					: BINORMAL;
+
+	// Particles have distance based fading in the Vertex Colors
+	float4 vColor						: COLOR;
+
+	#if SPLINE
+		float4 vParams			: POSITION;		// T V side_id
+		float4 vSplinePt0		: TEXCOORD0;	// x y z rad
+		float4 vSplinePt1		: TEXCOORD1;	// x y z rad
+		float4 vSplinePt2		: TEXCOORD2;	// x y z rad
+		float4 vSplinePt3		: TEXCOORD3;	// x y z rad
+	#else
+		// Position is always needed for ProjPos on any Mesh.
+		float4 vPos						: POSITION;
+
+
+		float4 vTexCoord0               : TEXCOORD0; // Sheet bounding UVs, Frame0
+		float4 vTexCoord1				: TEXCOORD1; // Sheet bounding UVs, Frame1
+		float4 vParams					: TEXCOORD2; // Frame Blend Factor, Rotation, Radius, Yaw
+		float2 vCornerID				: TEXCOORD3; // Corner Identifier ( 0/0,1/0,1/1, 1/0 ), float4 on Splines otherwise float2
+		float4 vTexCoord2				: TEXCOORD4; // Texture 2 bounding UVs
+
+		// DUALSEQUENCE only
+		float4 vSeq2TexCoord0			: TEXCOORD5; // Second Sequence bounding UVs, Frame0
+		float4 vSeq2TexCoord1			: TEXCOORD6; // Second Sequence bounding UVs, Frame1 
+		float4 vParams1					: TEXCOORD7; // Second Frame Blend Factor.
+	#endif
+};
+
+#if !SPLINE
+// Stock Definitions
+#define BLENDFACTOR (v.vParams.x)
+#define ROTATION	(v.vParams.y)
+#define RADIUS		(v.vParams.z)
+#define YAW			(v.vParams.w)
+#endif
+
+// C++ sets a Size of 4 for TEXCOORD7, but it is unclear if separate Rot, Rad, Yaw are available on TEXCOORD7.
+// Uncharted Territory!
+ 
+//==========================================================================//
+//	Functions
+//==========================================================================//
+
+// ZOOM_ANIMATE_SEQ2 Functions
+//
+// Copied and adapted from spritecard_vsxx.fxc
+// Must replicate this identically for visual similarity.
+// However, I added indentation so its not absolutely terrible to read.
+float getlerpscaled(float l_in, float s0, float s1, float ts)
+{
+	float	f1_out = 2.0 * ( l_in - 0.5f );
+			f1_out *= lerp(s0, s1, ts);
+
+	return	0.5f + 0.5f * f1_out;
+}
+
+float getlerpscale_for_old_frame(float l_in, float ts)
+{
+	return getlerpscaled(l_in, OLDFRM_SCALE_START, OLDFRM_SCALE_END, ts);
+}
+
+float getlerpscale_for_new_frame( float l_in, float ts )
+{
+	return getlerpscaled(l_in, 1.0, OLDFRM_SCALE_START, ts);
+}
+
+//==========================================================================//
+//	Output of the Vertex Shader
+//==========================================================================//
+struct VS_OUTPUT
+{
+	// ProjPos is -1 to +1 Coordinates on the RT
+	// ( The actual Screenspace Position of the Vertices )
+    float4 ProjPosSetup				: POSITION;
+
+	// Vertex Fog is not required. Allows us to do +1 TexCoord
+//  float  Fog						: FOG;
+
+	// Always Output WorldPos_ProjPosZ for Fog ( Radial and Range Fog )
+	float4 WorldPos_ProjPosZ		: TEXCOORD0;
+
+	// Can put anything you want here down to TEXCOORD8 / TEXCOORD9
+};
+
+//==========================================================================//
+//	Configurable Compiletime Constants
+//==========================================================================//
+
+// You can add Behaviour based on these preprocessor Definitions.
+/*
+	DUALSEQUENCE
+	ZOOM_ANIMATE_SEQ2
+	ADDBASETEXTURE2
+	EXTRACTGREENALPHA
+	SPLINE
+	ORIENTATION			[0..3]
+	ALTERNATIVE_MODE	[0..5]
+*/
+
+//==========================================================================//
+//	Shader Entry point ( SplineCard )
+//==========================================================================//
+#if SPLINE
+VS_OUTPUT main( const VS_INPUT v )
+{
+	// I shuffled things around a little, hopefully makes it easier to follow!
+	// Renamed some Variables and added some comments.
+	// Removed DX8 / X360 Stuff
+	// Otherwise this is near-identical to the SpriteCard Shader.
+
+	//==========================================================================//
+	//	Unpacking existing Data
+	//==========================================================================//
+
+	// Reference Code does not convert from Gamma on SplineCard
+	// Only happens on SpriteCard
+	float4 f4VertexColor_tmp = v.vColor;
+
+	float4 f4PosRad = CatmullRomSpline(v.vSplinePt0, v.vSplinePt1, v.vSplinePt2, v.vSplinePt3, v.vParams.x);
+	float3 f3ViewDir = f4PosRad.xyz - g_f3EyePos;
+	float3 f3Tangent = DCatmullRomSpline3(v.vSplinePt0.xyz, v.vSplinePt1.xyz, v.vSplinePt2.xyz, v.vSplinePt3.xyz, v.vParams.x);
+
+	float3 f3Right = normalize(cross(f3ViewDir, normalize(f3Tangent)));
+	f4PosRad.xyz += f3Right * (f4PosRad.w * (v.vParams.z - 0.5f));
+
+	float4 f4ProjPos_tmp = mul(float4(f4PosRad.xyz, 1.0f), cViewProj);
+
+	float2 f2TexCoord_tmp = float2(1.0f - v.vParams.z, v.vParams.y);
+
+	//==========================================================================//
+	//	Finished Variables usable in Custom Shaders
+	//==========================================================================//
+
+	// Self-Explanatory
+	float4 f4ProjPos = f4ProjPos_tmp;
+
+	// Always
+	float3 f3Position = f4PosRad.xyz;
+
+	// UV Map
+	float2 f2TexCoord = f2TexCoord_tmp;
+
+	// Vertex Color can contain Distance Falloff
+	float4 f4VertexColor = f4VertexColor_tmp;	
+
+	// Provided Vertex Shader Registers from lux_custom_common_vs.h
+	// float4 TransformMatrix0[2]
+	// float4 TransformMatrix1[2]
+	// float4 TransformMatrix2[2]
+	// float4 TransformMatrix3[2]
+	// float4 cReg_56
+	// float4 cReg_57
+
+	//==========================================================================//
+	//	Basic Setup for Shaders
+	//==========================================================================//
+
+	VS_OUTPUT o = ( VS_OUTPUT )0;
+
+	// Always need to set this
+	o.ProjPosSetup = f4ProjPos;
+
+	// Better Depth than ProjPos.z
+	float f1Depth = dot(float4(f3Position, 1.0f), cViewProjZ);;
+
+	// Always 
+	o.WorldPos_ProjPosZ.xyz = f3Position;
+	o.WorldPos_ProjPosZ.w = f1Depth;
+
+	//==========================================================================//
+	//	Custom Code
+	//==========================================================================//
+
+
+
+	// Your Custom Code here
+
+
+
+	//==========================================================================//
+	//	Return the filled Struct
+	//==========================================================================//
+
+	return o;
+}
+#else
+//==========================================================================//
+//	Shader Entry point ( SpriteCard )
+//==========================================================================//
+VS_OUTPUT main( const VS_INPUT v )
+{
+	// I shuffled things around a little, hopefully makes it easier to follow!
+	// Renamed some Variables and added some comments.
+	// Removed DX8 / X360 Stuff
+	// Otherwise this is near-identical to the SpriteCard Shader.
+
+	//==========================================================================//
+	//	Unpacking existing Data
+	//==========================================================================//
+
+	// VertexColor comes in Gamma, so convert to Linear
+	float4 f4VertexColor_tmp = v.vColor;
+	f4VertexColor_tmp.rgb = pow(max(f4VertexColor_tmp.rgb, 0.0f), 2.2f);
+
+	// Very temporary WorldPos
+	float3 f3PositionWS_tmp = mul4x3( v.vPos, cModel[0] );
+
+	// General Variables
+	float f1Radius = RADIUS;
+	float3 f3ViewDir = f3PositionWS_tmp - g_f3EyePos;
+	float f1DistanceToSurface = length(f3ViewDir);
+
+	// Limit the radius to be AT LEAST Length*Factor
+	f1Radius = max(f1Radius, MINIMUM_SIZE_FACTOR * f1DistanceToSurface);
+
+	// "now, perform fade out"
+	// Always! No Shader Model Limitations.
+	float f1StartFadeFactor = START_FADE_SIZE_FACTOR * f1DistanceToSurface;
+	if (f1Radius > f1StartFadeFactor)
+	{
+		float f1EndFadeFactor = END_FADE_SIZE_FACTOR * f1DistanceToSurface; 
+		if (f1Radius > f1EndFadeFactor)
+		{
+			f1Radius = 0.0f; // "cull so we emit 0-sized sprite"
+			f4VertexColor_tmp = 0.0f;
+		}
+		else
+		{
+			// Basic Min/Max Distance Equation
+			// Since we have a Vertex Color Input, we have to multiply instead of replace.
+			f4VertexColor_tmp *= 1.0f - (f1Radius - f1StartFadeFactor) / (f1EndFadeFactor - f1StartFadeFactor);
+		}
+	}
+
+	// "perform far fade"
+	// Hopefully the Shader Compiler doesn't get ambigious trying to optimise this to a single MAX instruction.
+	float f1FarFade =  1.0f - saturate( (f1DistanceToSurface - START_FAR_FADE) * FAR_FADE_FACTOR );
+	f4VertexColor_tmp *= f1FarFade;
+
+	// We saturated, so it can only be equal to 0, unless Shader Compiler messes with us
+	if (f1FarFade <= 0)
+		f1Radius = 0.0f;
+
+	// if the Maximum Size Factor is smaller use that instead
+	f1Radius = min(f1Radius, MAXIMUM_SIZE_FACTOR * f1DistanceToSurface);
+
+	// Prepare some extra variables for Orientation
+	// Rotation Variables
+	float2 sc_yaw, sc;
+	sincos( YAW, sc_yaw.y, sc_yaw.x );
+	sincos( ROTATION, sc.y, sc.x );
+
+	// Determine what Corner we are dealing with(?)
+	// Unfortunately Documentation for this is rather lacking.
+	float2 ix = 2.0f * v.vCornerID.xy - 1.0f;
+	float x1 = dot(ix, sc);
+	float y1 = sc.x * ix.y - sc.y * ix.x;
+
+	float4 f4ProjPos_tmp;
+	// Using Static here because ShaderCompiler isn't very smart with static const Variables
+	#if (ORIENTATION == 0)
+		// Screen Aligned
+		// ( Always faces the Camera )
+		float3 f3ViewPos = mul4x3(float4(v.vPos.xyz, 1.0f), cModelView);
+
+		float3 f3Disp = float3( -x1,y1,0);
+ 		float tmpx = f3Disp.x * sc_yaw.x + f3Disp.z * sc_yaw.y;
+ 		f3Disp.z = f3Disp.z * sc_yaw.x - f3Disp.x * sc_yaw.y;
+ 		f3Disp.x = tmpx;
+
+		f3ViewPos += f3Disp * f1Radius;
+
+		f4ProjPos_tmp = mul(float4(f3ViewPos, 1.0f), cProj);
+	
+	#elif (ORIENTATION == 1)
+		// Axis-Aligned (Complex)
+		if (f1DistanceToSurface > f1Radius / 2)
+		{
+			// This code would imply that we are viewing directly onto the particle from its side
+			// In which case 'right', is Binormal
+			// Meaning, 'right' is the direction orthogonal from us to the surface
+			float3 up = float3(0,0,1);
+			float3 right = normalize(cross(up, f3ViewDir));
+
+			// Rotation Calculation of some sort
+			float tmpx = right.x * sc_yaw.x + right.y * sc_yaw.y;
+			right.y = right.y * sc_yaw.x - right.x * sc_yaw.y;
+			right.x = tmpx;
+			
+			f3PositionWS_tmp += (x1 * f1Radius) * right;
+			f3PositionWS_tmp.z += (y1 * f1Radius) * up.z;
+			
+			if (f1DistanceToSurface < f1Radius * 2 )
+			{
+				f4VertexColor_tmp *= smoothstep(f1Radius / 2, f1Radius, f1DistanceToSurface);
+			}
+		}
+
+		f4ProjPos_tmp = mul(float4(f3PositionWS_tmp, 1.0f), cViewProj);
+
+	#elif (ORIENTATION == 2)
+		// Z-Plane-Aligned (Simple)
+		f3PositionWS_tmp = v.vPos.xyz + RADIUS * float3(y1, x1, 0);
+		f4ProjPos_tmp = mul( float4(f3PositionWS_tmp, 1.0f), cModelViewProj);
+
+	#elif (ORIENTATION == 3)
+
+		// Your Custom Code here
+		// NOTE: Must set ProjPos or Shader errors compiling so just replace this
+		f3PositionWS_tmp = v.vPos.xyz + RADIUS * float3(y1, x1, 0);
+		f4ProjPos_tmp = mul(float4(f3PositionWS_tmp, 1.0f), cModelViewProj);
+	#endif
+
+	// "Map projected position to the refraction Texture"
+	// This can be used for DepthBlending
+	float2 f2ScreenPos;
+	f2ScreenPos.x = f4ProjPos_tmp.x;
+	f2ScreenPos.y = -f4ProjPos_tmp.y; // invert Y
+	f2ScreenPos = (f2ScreenPos + f4ProjPos_tmp.ww) * 0.5f;
+
+	// "Need to also account for the viewport transform, which matters when rendering with mat_viewportscale != 1.0"
+    f2ScreenPos = (f2ScreenPos * cViewportTransform.xy) + (f4ProjPos_tmp.ww * cViewportTransform.zw);
+
+	// Texcoord Shenanigans
+	// Not well documented what all of this does exactly.
+	float2 f2TexCoord0_tmp = 0.0f;
+	float2 f2TexCoord1_tmp = 0.0f;
+	float2 f2TexCoord2_tmp = 0.0f;
+
+	f2TexCoord0_tmp.x = lerp( v.vTexCoord0.z, v.vTexCoord0.x, v.vCornerID.x );
+	f2TexCoord0_tmp.y = lerp( v.vTexCoord0.w, v.vTexCoord0.y, v.vCornerID.y );
+	f2TexCoord1_tmp.x = lerp( v.vTexCoord1.z, v.vTexCoord1.x, v.vCornerID.x );
+	f2TexCoord1_tmp.y = lerp( v.vTexCoord1.w, v.vTexCoord1.y, v.vCornerID.y );
+
+	#if ADDBASETEXTURE2
+	f2TexCoord2_tmp.x = lerp( v.vTexCoord2.z, v.vTexCoord2.x, v.vCornerID.x );
+	f2TexCoord2_tmp.y = lerp( v.vTexCoord2.w, v.vTexCoord2.y, v.vCornerID.y );
+	#endif
+
+	// BlendFactors for between Frames
+	float4 f4BlendFactors0_tmp = float4( v.vParams.x, 0, 0, 0 );
+
+	float2 f2Seq2TexCoord0_tmp = 0.0f;
+	float2 f2Seq2TexCoord1_tmp = 0.0f;
+	#if DUALSEQUENCE
+		float2 f2LerpOld = v.vCornerID.xy;
+		float2 f2LerpNew = v.vCornerID.xy;
+		
+		#if ZOOM_ANIMATE_SEQ2
+			f2LerpOld.x = getlerpscale_for_old_frame( v.vCornerID.x, v.vParams1.x );
+			f2LerpOld.y = getlerpscale_for_old_frame( v.vCornerID.y, v.vParams1.x );
+			f2LerpNew.x = getlerpscale_for_new_frame( v.vCornerID.x, v.vParams1.x );
+			f2LerpNew.y = getlerpscale_for_new_frame( v.vCornerID.y, v.vParams1.x );
+		#endif
+		
+		f2Seq2TexCoord0_tmp	= lerp( v.vSeq2TexCoord0.zw, v.vSeq2TexCoord0.xy, f2LerpOld.xy );
+		f2Seq2TexCoord1_tmp = lerp( v.vSeq2TexCoord1.zw, v.vSeq2TexCoord1.xy, f2LerpNew.xy );
+		
+		f4BlendFactors0_tmp.z = v.vParams1.x;
+	#endif
+
+	float4 f4BlendFactors1_tmp = 0.0f;
+	#if EXTRACTGREENALPHA
+																	// Input range	|	Output range
+		if ( v.vParams.x < 0.25f )									// 0.0 .. 0.25	|	
+		{															//		\-------|-------\
+			f4BlendFactors0_tmp.w = v.vParams.x * 2.0f + 0.5f;		//				|	0.5 .. 1.0
+			f4BlendFactors0_tmp.y = 1.0f - f4BlendFactors0_tmp.w;	//				|	0.5 .. 0.0
+		}															//
+		else if ( v.vParams.x < 0.75f )								// 0.25 .. 0.75	|
+		{															//		\-------|-------\
+			f4BlendFactors1_tmp.y = v.vParams.x * 2.0f - 0.5f;		//				|	0.0 .. 1.0
+			f4BlendFactors0_tmp.w = 1.0f - f4BlendFactors1_tmp.y;	//				|	1.0 .. 0.0
+		}															//
+		else														// 0.75 .. 1.0	|
+		{															//		\-------|-------\
+			f4BlendFactors1_tmp.w = v.vParams.x * 2.0f - 1.5f;		//				|	0.0 .. 0.5
+			f4BlendFactors1_tmp.y = 1.0f - f4BlendFactors1_tmp.w;	//				|	1.0 .. 0.5
+		}
+
+	#endif
+
+	//==========================================================================//
+	//	Finished Variables usable in Custom Shaders
+	//==========================================================================//
+
+	float4 f4ProjPos = f4ProjPos_tmp;
+
+	// Always
+	float3 f3Position = f3PositionWS_tmp;
+
+	// Vertex Color. Only with bVertexColors
+	// Lighting comes through this Stream for Detail Sprites
+	float4 f4VertexColor = f4VertexColor_tmp;	
+
+	// Texture Coordinates..
+
+	// Texture0 and Texture1
+	// Aka Frame0 and Frame1 that get interpolated between
+	float2 f2TexCoord0 = f2TexCoord0_tmp;
+	float2 f2TexCoord1 = f2TexCoord1_tmp;
+
+	// Only with $Shader_Particle_AddBaseTexture2
+	// A Variant of the Frame0 UV
+	float2 f2TexCoord2 = f2TexCoord2_tmp;
+
+	// Only with $Shader_Particle_SecondSequence
+	float2 f2Seq2TexCoord0 = f2Seq2TexCoord0_tmp;
+	float2 f2Seq2TexCoord1 = f2Seq2TexCoord1_tmp;
+
+	// Screen UV. You must pass on the Homogenous Coordinate as well as Depth.
+	// .w for Normalized Device Coordinates ( NDC )
+	// .z for comparison with the Depth Values in the RenderTarget.a
+	float4 f4DepthBlendVars = float4(f2ScreenPos.xy, f4ProjPos.z, f4ProjPos.w);
+
+	// Provided Vertex Shader Registers from lux_custom_common_vs.h
+	// float4 TransformMatrix0[2]
+	// float4 TransformMatrix1[2]
+	// float4 TransformMatrix2[2]
+	// float4 TransformMatrix3[2]
+	// float4 cReg_56
+	// float4 cReg_57
+
+	//==========================================================================//
+	//	Basic Setup for Shaders
+	//==========================================================================//
+
+	VS_OUTPUT o = ( VS_OUTPUT )0;
+
+	// Always need to set this
+	o.ProjPosSetup = f4ProjPos;
+
+	// Better Depth than ProjPos.z
+	float f1Depth = dot(float4(f3Position, 1.0f), cViewProjZ);;
+
+	// Always 
+	o.WorldPos_ProjPosZ.xyz = f3Position;
+	o.WorldPos_ProjPosZ.w = f1Depth;
+
+	//==========================================================================//
+	//	Custom Code
+	//==========================================================================//
+
+
+
+	// Your Custom Code here
+
+
+
+	//==========================================================================//
+	//	Return the filled Struct
+	//==========================================================================//
+
+	return o;
+}
+#endif

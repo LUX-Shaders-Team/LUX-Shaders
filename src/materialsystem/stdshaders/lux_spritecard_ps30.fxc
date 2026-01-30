@@ -1,0 +1,254 @@
+//===================== File of the LUX Shader Project =====================//
+//
+//	Initial D.	:	22.05.2024 DMY
+//	Last Change :	 30.01.2026 DMY
+//
+//==========================================================================//
+
+//==========================================================================//
+//	Declare Static Combos
+//==========================================================================//
+// STATIC: "ANIMBLEND"				"0..1"
+// STATIC: "MAXLUMFRAMEBLEND1"		"0..1"
+// STATIC: "EXTRACTGREENALPHA"		"0..1"
+// STATIC: "ADDBASETEXTURE2"		"0..1"
+// STATIC: "ADDSELF"				"0..1"
+// STATIC: "DUALSEQUENCE"			"0..1"
+// STATIC: "MAXLUMFRAMEBLEND2"		"0..1"
+// STATIC: "SEQUENCE_BLEND_MODE"	"0..2"
+// STATIC: "COLORRAMP"				"0..1"
+// STATIC: "DEPTHBLEND"				"0..1"
+// STATIC: "MOD2X"					"0..1"
+
+//==========================================================================//
+//	Declare Dynamic Combos
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Skipping undesired Combos
+//	The Order of Static Combos and Skips has a drastic Impact on Compile Time!
+//==========================================================================//
+// These exclude eachother
+// SKIP: ($ANIMBLEND == 1 && $MAXLUMFRAMEBLEND1 == 1)
+// Very edge case scenario, where all of EXTRAGREENALPHA is ifd off, might be faster to skip this.
+// SKIP: (($ANIMBLEND == 1 || $MAXLUMFRAMEBLEND1 == 1) && $EXTRACTGREENALPHA == 1 && $ADDBASETEXTURE2 == 0)
+// Another exclusion through elif
+// SKIP: ($ADDBASETEXTURE2 == 1 && $ADDSELF == 1)
+// FrameBlend2 and Sequence Blending is part of DualSequence
+// SKIP: ($DUALSEQUENCE == 0 && ($MAXLUMFRAMEBLEND2 == 1 || $SEQUENCE_BLEND_MODE != 0))
+
+//==========================================================================//
+//	Common Definitions
+//==========================================================================//
+
+// No Fog on Particles!!
+#define NO_FOG
+#define NO_DEPTHTODESTALPHA
+
+// Mod2X gets No Tonemapping
+#if MOD2X
+	#define TONEMAP_SCALE_NONE
+#else
+	#define TONEMAP_SCALE_LINEAR
+#endif
+
+#define COMBINE_MODE_AVERAGE							0
+#define COMBINE_MODE_USE_FIRST_AS_ALPHA_MASK_ON_SECOND	1
+#define COMBINE_MODE_USE_FIRST_OVER_SECOND				2
+
+//==========================================================================//
+//	Constants, Functions, Includes
+//==========================================================================//
+
+// Include for all Pixel Shaders
+#include "lux_common_ps_fxc.h"
+
+// Depth related functions
+#include "lux_common_depth.h"
+
+const float4 cParameters				: register(c0);
+#define g_f1AdditiveBlendWeight				(cParameters.x)
+#define g_f1OverbrightFactor				(cParameters.y)
+#define g_f1AdditiveSelfBlendWeight			(cParameters.z)
+#define g_f1Mod2XIdentity					(cParameters.w)
+
+const float4 cParameters2				: register(c2);
+#define g_f3ParameterTint					(cParameters2.rgb)
+#define g_f1DepthInverse					(cParameters2.w)
+
+// When not using Custom depth ranges, have to use the existing functionality
+#if !defined(CUSTOM_DEPTH_RANGE)
+// Cannot use anything other than .x on this... sadly
+const float4 cDepthFactor				: register(c3);
+#define f1DepthRangeFactor (cDepthFactor.x)
+#else
+#define f1DepthRangeFactor (cParameters.w)
+#endif
+
+//		Sampler_BaseTexture
+sampler Sampler_ColorRamp	: register( s1 );
+sampler Sampler_FrameBuffer	: register( s2 );
+
+//==========================================================================//
+//	PS Input
+//==========================================================================//
+struct PS_INPUT
+{
+	float4 WorldPos_ProjPosZ	:	TEXCOORD0; // Goes unused
+    float4 TexCoord1And2		:	TEXCOORD1;
+	float4 Blendfactor0			:	TEXCOORD2;
+	float4 ScreenPos			:	TEXCOORD3;
+
+	// We want a more optimised register layout here
+	// So force packed tight!
+	#if EXTRACTGREENALPHA			// 3-[4]
+		float4 Blendfactor1			: TEXCOORD4; // for extracting green/alpha
+		#if DUALSEQUENCE				// 4-[4]
+			float4 Seq2TexCoords		: TEXCOORD5;
+			#if ADDBASETEXTURE2				// 5-[2]
+				float2 TexCoord3			: TEXCOORD6;
+			#endif
+		#elif ADDBASETEXTURE2			// 4-[2]
+			float2 TexCoord3			: TEXCOORD5;
+		#endif
+	#elif DUALSEQUENCE				// 3-[4]
+		float4 Seq2TexCoords		: TEXCOORD4;
+		#if ADDBASETEXTURE2				// 4-[2]
+			float2 TexCoord3			: TEXCOORD5;
+		#endif
+	#elif ADDBASETEXTURE2			// 3-[2]
+		float2 TexCoord3			: TEXCOORD4;
+	#endif
+	
+	// Always want ARGB Colors
+	float4 ARGB_Color				:	COLOR0;
+};
+ 
+//==========================================================================//
+//	PS Entry Point
+//==========================================================================//
+float4 main(PS_INPUT i) : COLOR
+{
+	float4 f4BaseTexture1 = tex2D(Sampler_BaseTexture, i.TexCoord1And2.xy);
+	float4 f4BaseTexture2 = tex2D(Sampler_BaseTexture, i.TexCoord1And2.zw);
+
+	float4 f4Blended_RGBA;
+	#if MAXLUMFRAMEBLEND1
+		// Blend between animation frames based on their maximum Luminance
+		float f1Luminance0 = PerceptualLuminance(f4BaseTexture1.rgb * (1.0f - i.Blendfactor0.x));
+		float f1Luminance1 = PerceptualLuminance(f4BaseTexture2.rgb * i.Blendfactor0.x);
+
+		if (f1Luminance0 > f1Luminance1)
+			f4Blended_RGBA = f4BaseTexture1;
+		else
+			f4Blended_RGBA = f4BaseTexture2;
+
+	#elif EXTRACTGREENALPHA
+		// Weight Green/Alphas from the two frames for a scalar result
+		f4Blended_RGBA = dot(f4BaseTexture1, i.Blendfactor0 ) + dot( f4BaseTexture2, i.Blendfactor1);
+
+	#elif ANIMBLEND
+		// "Blend by default (may override with bMaxLumFrameBlend1 or bExtractGreenAlpha)"
+		// Actually, no, no override.
+		f4Blended_RGBA = lerp(f4BaseTexture1, f4BaseTexture2, i.Blendfactor0.x);
+	#else
+		f4Blended_RGBA = f4BaseTexture1;
+	#endif
+
+	// Now that those are handled,
+	// Dual-Sequence
+	#if DUALSEQUENCE
+		f4BaseTexture1 = tex2D(Sampler_BaseTexture, i.Seq2TexCoords.xy);
+		f4BaseTexture2 = tex2D(Sampler_BaseTexture, i.Seq2TexCoords.zw);
+
+		// Blend by default (may override with bMaxLumFrameBlend2)
+		float4 f4Blended_RGBA2 = lerp(f4BaseTexture1, f4BaseTexture2, i.Blendfactor0.z);
+
+		#if MAXLUMFRAMEBLEND2
+			// blend between animation frames based upon max luminance
+			float tlum0 = PerceptualLuminance(f4BaseTexture1.rgb * (1.0f - i.Blendfactor0.x));
+			float tlum1 = PerceptualLuminance(f4BaseTexture2.rgb * i.Blendfactor0.x);
+
+			if (tlum0 > tlum1)
+				f4Blended_RGBA2 = f4BaseTexture1;
+			else
+				f4Blended_RGBA2 = f4BaseTexture2;
+		#endif
+
+		// 0, 1, 2
+		// 0 Specifically has to get Alpha too
+		#if ( SEQUENCE_BLEND_MODE == COMBINE_MODE_AVERAGE )
+			f4Blended_RGBA = 0.5f * (f4Blended_RGBA + f4Blended_RGBA2);
+		#elif ( SEQUENCE_BLEND_MODE == COMBINE_MODE_USE_FIRST_AS_ALPHA_MASK_ON_SECOND )
+			f4Blended_RGBA.rgb = f4Blended_RGBA2.rgb;
+		#elif ( SEQUENCE_BLEND_MODE == COMBINE_MODE_USE_FIRST_OVER_SECOND )
+			f4Blended_RGBA.rgb = lerp( f4Blended_RGBA.rgb, f4Blended_RGBA2.rgb, f4Blended_RGBA2.a );
+		#endif
+	#endif
+
+	// Optional color ramp
+	// NOTE: Not a real Texture Coordinate so use mip0
+	#if COLORRAMP
+		f4Blended_RGBA.rgb = tex2Dlod(Sampler_ColorRamp, float4(f4Blended_RGBA.r, f4Blended_RGBA.g, 0.0f, 0.0f)).rgb;
+	#endif
+
+	// Overbright, which means we are basically done with the color.
+    f4Blended_RGBA.rgb *= g_f1OverbrightFactor;
+
+	// "Soft Particles FTW"
+	// They can now maybe have actual range FTW?!!
+	float4 f4ARGB_Colors = i.ARGB_Color;
+
+	#if DEPTHBLEND
+		float f1DepthBlend = DepthFeathering(Sampler_FrameBuffer, i.ScreenPos, f1DepthRangeFactor);
+
+		// Adapted from Alien Swarm.
+		// Instead of using a Static Combo, this for less Complexity
+		// f1DepthInverse is either 0 or 1
+		f1DepthBlend = abs(g_f1DepthInverse - f1DepthBlend);
+
+		f4ARGB_Colors.a *= f1DepthBlend;
+	#endif
+
+	// "Premultiply the alpha for a ONE:INVALPHA blend"
+	#if ADDBASETEXTURE2
+
+		f4Blended_RGBA.a *= f4ARGB_Colors.a;
+
+		// In this case, we don't really want to pre-multiply by alpha
+		#if !COLORRAMP
+			f4Blended_RGBA.rgb *= f4Blended_RGBA.aaa;
+		#endif
+
+		#if EXTRACTGREENALPHA
+			f4Blended_RGBA.rgb += g_f1AdditiveBlendWeight * f4ARGB_Colors.aaa * f4Blended_RGBA.rgb;
+		#else
+			f4Blended_RGBA.rgb += g_f1OverbrightFactor * g_f1AdditiveBlendWeight * f4ARGB_Colors.aaa * tex2D(Sampler_BaseTexture, i.TexCoord3).rgb;
+		#endif
+
+		f4Blended_RGBA.rgb *= f4ARGB_Colors.rgb;
+	#elif ADDSELF
+
+
+		f4Blended_RGBA.a *= f4ARGB_Colors.a;
+		f4Blended_RGBA.rgb *= f4Blended_RGBA.aaa;
+		f4Blended_RGBA.rgb += g_f1OverbrightFactor * g_f1AdditiveSelfBlendWeight * f4ARGB_Colors.aaa * f4Blended_RGBA.rgb;
+		f4Blended_RGBA.rgb *= f4ARGB_Colors.rgb;
+	#elif MOD2X
+	
+		// Adapted from ASW
+		f4Blended_RGBA.rgb = lerp(g_f1Mod2XIdentity, f4Blended_RGBA.rgb, f4ARGB_Colors.rgb );
+		f4Blended_RGBA.a *= f4ARGB_Colors.a;
+	
+		// "Blend towards a unity multiply as alpha gets closer to zero"
+		f4Blended_RGBA.rgb = lerp(g_f1Mod2XIdentity, f4Blended_RGBA.rgb, f4Blended_RGBA.a);
+	#else
+		f4Blended_RGBA *= f4ARGB_Colors;		
+	#endif
+
+	// Add a $Color/$Color2 tint
+    f4Blended_RGBA.rgb *= g_f3ParameterTint;
+
+	return LUX_Finalise(f4Blended_RGBA);
+}

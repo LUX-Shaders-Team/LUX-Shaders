@@ -1,0 +1,70 @@
+//===================== File of the LUX Shader Project =====================//
+//
+//	Initial D.	:	19.11.2024 DMY
+//	Last Change :	 30.01.2026 DMY
+//
+//==========================================================================//
+
+//==========================================================================//
+//	Declare Static Combos
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Declare Dynamic Combos
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Skipping undesired Combos
+//	The Order of Static Combos and Skips has a drastic Impact on Compile Time!
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Common Definitions
+//==========================================================================//
+
+// No Fog on this Shader
+#define NO_FOG
+
+// No
+#define NO_DEPTHTODESTALPHA
+
+#define TONEMAP_SCALE_NONE
+//#define TONEMAP_SCALE_LINEAR
+//#define TONEMAP_SCALE_GAMMA
+
+//==========================================================================//
+//	Constants, Functions, Includes
+//==========================================================================//
+
+// Include for all Pixel Shaders
+#include "lux_common_ps_fxc.h"
+
+// BaseTexture Sampler always defined
+#define Sampler_FrameBuffer			(Sampler_BaseTexture)
+sampler Sampler_Bloom				: register(s1);
+
+//==========================================================================//
+//	PS Input
+//==========================================================================//
+struct PS_INPUT
+{
+	float2 TexCoord					: TEXCOORD0;
+};
+ 
+//==========================================================================//
+//	PS Entry Point
+//==========================================================================//
+float4 main(PS_INPUT i) : COLOR
+{
+	float4 f4_FrameBuffer = tex2D(Sampler_FrameBuffer, i.TexCoord);
+	float4 f4_Blur = tex2D(Sampler_Bloom, i.TexCoord);
+
+	// MAX_HDR_OVERBRIGHT = 16.0f
+	float4 f4Result;
+	f4Result.xyz = f4_FrameBuffer.rgb + f4_Blur.rgb * f4_Blur.aaa * 16.0f;
+	f4Result.a = 1.0f;
+	return LUX_Finalise(f4Result);
+}

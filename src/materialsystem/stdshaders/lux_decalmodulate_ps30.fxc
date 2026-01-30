@@ -1,0 +1,160 @@
+//===================== File of the LUX Shader Project =====================//
+//
+//	Initial D.	:	28.02.2023 DMY
+//	Last Change :	 30.01.2026 DMY
+//
+//==========================================================================//
+
+//==========================================================================//
+//	Declare Static Combos
+//==========================================================================//
+// STATIC:	"DETAILTEXTURE"				"0..1"
+// STATIC:	"VERTEXALPHA"				"0..1"
+
+//==========================================================================//
+//	Declare Dynamic Combos
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Skipping undesired Combos
+//	The Order of Static Combos and Skips has a drastic Impact on Compile Time!
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Common Definitions
+//==========================================================================//
+
+// We want none here since we just apply to whatever is behind
+#define TONEMAP_SCALE_NONE
+//#define TONEMAP_SCALE_LINEAR
+//#define TONEMAP_SCALE_GAMMA
+
+// We need Alpha for Transparency
+// So never Write Depth or Water Fog
+// We compute Fog in the main Function here to account for modulation
+#define NO_DEPTHTODESTALPHA
+#define NO_WATERFOGTODESTALPHA
+#define NO_FOG
+
+//==========================================================================//
+//	Constants, Functions, Includes
+//==========================================================================//
+
+// Include for all Pixel Shaders
+#include "lux_common_ps_fxc.h"
+
+#if DETAILTEXTURE
+#include "lux_common_detailtexture.h"
+#endif
+
+// c32
+const float4 cControls : register(c32);
+#define g_f1ModulateBias	(cControls.x)
+#define g_f1BlendFactor		(cControls.y)
+
+float FogFactor_EasingFunction(float x, float t)
+{
+    x = saturate(x);
+    float yCurve = (x * x) / (2.0f * t);
+    float yLinear = x - 0.5f * t;
+    return lerp(yCurve, yLinear, step(t, x));
+}
+
+//==========================================================================//
+//	PS Input
+//==========================================================================//
+struct PS_INPUT
+{
+	float4	WorldPos_ProjPosZ	:	TEXCOORD0;
+    float4	TexCoords			:	TEXCOORD1;
+
+	float4	VertexColors		:	COLOR0;
+};
+
+//==========================================================================//
+//	PS Entry Point
+//==========================================================================//
+float4 main(PS_INPUT i) : COLOR
+{
+	//	Getting our PS_INPUT
+	//==========================================================================//
+
+	// TEXCOORD0
+	float3 f3WorldPos = i.WorldPos_ProjPosZ.xyz;
+	float  f1Depth = i.WorldPos_ProjPosZ.w;
+
+	// TEXCOORD1
+	float2 f2BaseTextureUV = i.TexCoords.xy;
+	float2 f2DetailTextureUV = i.TexCoords.zw;
+
+	// TEXCOORD2
+	float4 VertexColors = i.VertexColors;
+
+	//==========================================================================//
+	//	Getting the current Pixels Color from the Samplers
+	//==========================================================================//
+
+	float4 f4BaseTexture = tex2D(Sampler_BaseTexture, f2BaseTextureUV);
+    f4BaseTexture.xyz += g_f1ModulateBias; // Modulation Bias
+
+#if DETAILTEXTURE
+	float4 f4DetailTexture = tex2D(Sampler_DetailTexture, f2DetailTextureUV);
+
+	// Mod2x
+	// Uses special BlendFactor
+	f4BaseTexture.xyz *= lerp(float3(1.0f,1.0f,1.0f), 2.0f * f4DetailTexture.xyz, g_f1BlendFactor); 
+#endif
+
+	float3 f3Result = f4BaseTexture.rgb;
+
+	// Pass BaseAlpha On
+	float f1Alpha = f4BaseTexture.a;
+
+	// $VertexColor && $VertexAlpha
+	// Only when not seamless as we need the texcoords!
+	if(g_bVertexColor)
+	{
+		f3Result *= VertexColors.rgb;
+		f1Alpha *= VertexColors.a;
+	}
+
+	// ============================================== //
+	// DecalModulate Underwater Fix
+	// ============================================== //
+	
+	// PIXEL_FOG_TYPE_HEIGHT
+	// In case of WaterFog we want no Fogging at all, since the Water will be applying that for us
+	float f1FogFactor = 0.0f;
+	if (!g_bHeightFog)
+	{
+		// PIXEL_FOG_TYPE_NONE and PIXEL_FOG_TYPE_RANGE and PIXEL_FOG_TYPE_RANGE_RADIAL
+        f1FogFactor = ComputeRangeFogFactor(f3WorldPos, f1Depth);
+        f3Result = lerp(f3Result, g_f3FogColor, f1FogFactor);
+    }
+	
+	// ============================================== //
+	// DecalModulate Fog 'Fix' ( not really )
+	// ============================================== //	
+	
+	// ShiroDkxtro2:
+	// This Shader applies it's Results to it's Background
+	// However, Fog is NOT being applied in post.
+	// The Shader will darken or lighten *through* the Fog.
+	// To solve this Stock Shaders apply an Exponent and Scale to the FogFactor,
+	// before applying the FogColor to the Color of this Surface.
+	// My approach differs in that I know the Background already has Fog applied
+	// From this perspective, the FogFactor determines when not to apply Modulation
+	// We can avoid some Issues in the near-Area as well by applying a Curve to the FogFactor
+	// Further away we want linear Progression but close up we want a stronger FogFactor
+	// Here, I'm applying an Easing Function to do this.
+	// There are probably better Ways to do this ( like doing Fog in post.. )
+	// but this is better than having to set Material specific Parameters like Stock
+    f1FogFactor = saturate(abs(FogFactor_EasingFunction(f1FogFactor, -0.1f)));
+	
+	// Lerp towards "No Modulation"
+    f3Result = lerp(f3Result, 0.5f, f1FogFactor);
+	
+    return LUX_Finalise(float4(f3Result, f1Alpha), f3WorldPos, f1Depth, g_f1AlphaModulation);
+}

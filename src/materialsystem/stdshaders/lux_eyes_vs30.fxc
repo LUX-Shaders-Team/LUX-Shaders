@@ -1,0 +1,186 @@
+//===================== File of the LUX Shader Project =====================//
+//
+//	Initial D.	:	26.01.2026 DMY
+//	Last Change :	 30.01.2026 DMY
+//
+//==========================================================================//
+
+//==========================================================================//
+//	Declare Static Combos
+//==========================================================================//
+//	STATIC: "INTRO"						"0..1"
+//	STATIC: "PROJTEX"					"0..1"
+
+//==========================================================================//
+//	Declare Dynamic Combos
+//==========================================================================//
+//	DYNAMIC: "STATICPROPLIGHTING"		"0..1"
+//	DYNAMIC: "DYNAMICPROPLIGHTING"		"0..1"
+//	DYNAMIC: "COMPRESSION"				"0..1"
+//  DYNAMIC: "SKINNING"                 "0..1"
+
+//==========================================================================//
+//	Skipping undesired Combos
+//	The Order of Static Combos and Skips has a drastic Impact on Compile Time!
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Decompress Combos
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Constants, Functions, Includes
+//==========================================================================//
+
+// Include for all Vertex Shaders
+#include "lux_common_vs_fxc.h"
+
+// Model specific Functions
+#include "lux_common_vs_model.h"
+
+// Header contains Intro Effect Functions
+#include "lux_common_intro.h"
+
+const float3 g_f3EyeOrigin			:  register(LUX_VS_FLOAT_SET1_0);
+const float3 g_f3EyeUp				:  register(LUX_VS_FLOAT_SET1_1);
+const float4 g_f4IrisProjectionU	:  register(LUX_VS_FLOAT_SET1_2);
+const float4 g_f4IrisProjectionV	:  register(LUX_VS_FLOAT_SET1_3);
+const float4 g_f4GlintProjectionU	:  register(LUX_VS_FLOAT_SET1_4);
+const float4 g_f4GlintProjectionV	:  register(LUX_VS_FLOAT_SET1_5);
+#if INTRO
+const float4 cIntroControls			:  register(LUX_VS_FLOAT_SET1_6);
+#define g_f3ModelOrigin					(cIntroControls.xyz)
+#define g_f1Time						(cIntroControls.w)
+#endif
+
+//==========================================================================//
+//	VS Input
+//==========================================================================//
+struct VS_INPUT
+{
+    // This is all of the stuff that we ever use
+    float4 vPos                     : POSITION;
+	float4 vBoneWeights             : BLENDWEIGHT;
+	float4 vBoneIndices             : BLENDINDICES;
+    float4 vNormal                  : NORMAL;
+	float4 vTangent					: TANGENT;
+    float2 vTexCoord0               : TEXCOORD0;
+    float2 vTexCoord1		        : TEXCOORD1;
+    float4 vMorphTexCoord			: TEXCOORD2;
+	float4 vColor                   : COLOR0;
+	float3 vSpecular				: COLOR1;
+
+	// Holds uncompressed TangentS with Binormal Sign ( when not using compression )
+	float4 vUserData				: TANGENT;
+
+	// Position and normal/tangent deltas
+	float4 vPosFlex					: POSITION1;
+	float4 vNormalFlex				: NORMAL1;
+
+	// Morphing
+	float vVertexID					: POSITION2;
+};
+
+//==========================================================================//
+//	VS Output
+//==========================================================================//
+struct VS_OUTPUT
+{
+    float4 ProjPosSetup				: POSITION;
+	float4 WorldPos_ProjPosZ		: TEXCOORD0;
+    float4 TexCoords1				: TEXCOORD1;
+	float2 TexCoords2				: TEXCOORD2;
+	
+#if !PROJTEX
+	float3 VertexLighting			: TEXCOORD3;
+#else
+	float3 Normal					: NORMAL;
+#endif
+};
+
+//==========================================================================//
+//	VS Entry Point
+//==========================================================================//
+VS_OUTPUT main( const VS_INPUT v )
+{
+	VS_OUTPUT o = ( VS_OUTPUT )0;
+
+	//==========================================================================//
+	//	Handle Decompression
+	//==========================================================================//
+
+	// Variable needed for Skinning and Morphing
+	float3 f3ObjectPosition = v.vPos.xyz;
+
+	//==========================================================================//
+	//	Handle Morphing
+	//==========================================================================//
+	
+	// Allow Flexes ( Pos only )
+	ApplyMorph(v.vPosFlex, f3ObjectPosition);
+	
+	//==========================================================================//
+	//	Handle Rotations and Offsets
+	//==========================================================================//
+
+	float3 f3WorldPos;
+	
+	// Only Position
+	AlignVertexInputs(SKINNING, float4(f3ObjectPosition, 1.0f),
+		v.vBoneWeights, v.vBoneIndices, f3WorldPos);
+	
+	// EP1-Intro Code
+	#if INTRO
+		f3WorldPos = WorldSpaceVertexProcess(g_f3ModelOrigin, f3WorldPos, g_f1Time);
+	#endif
+	
+	//==========================================================================//
+	//	VS Output
+	//==========================================================================//
+
+	// POSITION	
+	float4 f4ProjPos = mul(float4(f3WorldPos, 1.0f), cViewProj);
+	o.ProjPosSetup = FixHPO(f4ProjPos); // Apply Half-Pixel Offset Fix
+	
+	// TEXCOORD0
+	// Set WorldPos and compute Depth
+	o.WorldPos_ProjPosZ.xyz = f3WorldPos;
+	o.WorldPos_ProjPosZ.w = dot(float4(f3WorldPos, 1.0f), cViewProjZ);
+
+	// TEXCOORD1
+	// $BaseTexture UV
+    o.TexCoords1.xy = v.vTexCoord0.xy;
+	
+	// $Iris UV
+    o.TexCoords1.z = dot(g_f4IrisProjectionU, float4(f3WorldPos, 1.0f));
+    o.TexCoords1.w = dot(g_f4IrisProjectionV, float4(f3WorldPos, 1.0f));
+
+	// TEXCOORD2
+	// $Glint UV
+	#if !PROJTEX
+	    o.TexCoords2.x = dot(g_f4GlintProjectionU, float4(f3WorldPos, 1.0f));
+	    o.TexCoords2.y = dot(g_f4GlintProjectionV, float4(f3WorldPos, 1.0f));
+	#endif
+
+	
+	// Now build a Normal from the WorldPos ( Eyes are supposed to be Balls, so making the Normal for this is quite simple )
+    float3 f3WorldNormal = f3WorldPos - g_f3EyeOrigin;
+	
+	// Stock-Consistency: Replicate this 1:1
+    float f1NdU = -dot(f3WorldNormal, g_f3EyeUp) * 0.5f;
+    f3WorldNormal = normalize(f1NdU * g_f3EyeUp + f3WorldNormal);
+	
+	// TEXCOORD3 or NORMAL
+	// Always do Vertex Lighting
+	#if !PROJTEX
+		float3 f3StaticPropLighting = 0.0f;
+		o.VertexLighting = ComputeVertexLighting(f3WorldPos, f3WorldNormal,
+							f3StaticPropLighting, STATICPROPLIGHTING, DYNAMICPROPLIGHTING, g_bHalfLambert);
+	#else
+		o.Normal = f3WorldNormal;
+	#endif
+
+    return o;
+}

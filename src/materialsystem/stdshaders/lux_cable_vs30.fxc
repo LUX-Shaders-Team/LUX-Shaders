@@ -1,0 +1,125 @@
+//===================== File of the LUX Shader Project =====================//
+//
+//	Initial D.	:	31.08.2024 DMY
+//	Last Change :	 30.01.2026 DMY
+//
+//==========================================================================//
+
+//==========================================================================//
+//	Declare Static Combos
+//==========================================================================//
+//	STATIC:	"BASETRANSFORM"				"0..1"
+//	STATIC:	"BUMPMAPPING"				"0..1"
+//	STATIC:	"BUMPTRANSFORM"				"0..1"
+//	STATIC:	"TANGENTS"					"0..1"
+
+//==========================================================================//
+//	Declare Dynamic Combos
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Skipping undesired Combos
+//	The Order of Static Combos and Skips has a drastic Impact on Compile Time!
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Constants, Functions, Includes
+//==========================================================================//
+
+// Include for all Vertex Shaders
+#include "lux_common_vs_fxc.h"
+
+const float4 g_TexCoordTransform1[2] : register(LUX_VS_TEXTURETRANSFORM_01);
+const float4 g_TexCoordTransform2[2] : register(LUX_VS_TEXTURETRANSFORM_02);
+
+//==========================================================================//
+//	VS Input
+//==========================================================================//
+struct VS_INPUT
+{
+    // This is all of the stuff that we ever use
+    float4 vPos                     : POSITION;
+    float4 vNormal                  : NORMAL; // Functional on this Shader?
+    float2 vTexCoord0               : TEXCOORD0;
+    float4 vTexCoord1		        : TEXCOORD1;
+	float4 vColor                   : COLOR0;
+	float3 vTangentS				: TANGENT;
+	float3 vTangentT				: BINORMAL;
+};
+
+//==========================================================================//
+//	VS Output
+//==========================================================================//
+struct VS_OUTPUT
+{
+    float4 ProjPosSetup			: POSITION; 
+	float4 f3WorldPos_ProjPosZ	: TEXCOORD0;
+	float4 TexCoords			: TEXCOORD1;
+	float4 VertexLighting		: TEXCOORD2;
+
+#if TANGENTS
+	float3 Tangent				: TANGENT;
+	float3 Binormal				: BINORMAL;
+	float3 Normal				: NORMAL;
+#endif
+};
+
+//==========================================================================//
+//	VS Entry Point
+//==========================================================================//
+VS_OUTPUT main( const VS_INPUT v )
+{
+	VS_OUTPUT o = ( VS_OUTPUT )0;
+
+	// World Position
+	float3 f3WorldPos = mul(float4(v.vPos.xyz, 1.0f), cModel[0]);
+
+	//==========================================================================//
+	//	VS Output
+	//==========================================================================//
+
+	// POSITION	
+	float4 f4ProjPos = mul(float4(f3WorldPos, 1.0f), cViewProj);
+	o.ProjPosSetup = FixHPO(f4ProjPos); // Apply Half-Pixel Offset Fix
+	
+	// TEXCOORD0
+	o.f3WorldPos_ProjPosZ.xyz = f3WorldPos;
+	o.f3WorldPos_ProjPosZ.w = dot(float4(f3WorldPos, 1.0f), cViewProjZ);
+
+	// IMPORTANT: TexCoord1 is for the $BaseTexture
+	// TexCoord0 is for the $BumpMap
+	// Stuffing 1.0f into .zw so all Components of the TexCoord Transform influence the UV
+	float4 f4BaseTexCoord = float4(v.vTexCoord1.xy, 1.0f, 1.0f);
+	float4 f4BumpTexCoord = float4(v.vTexCoord0.xy, 1.0f, 1.0f);
+
+	// TEXCOORD1
+	o.TexCoords.x = dot(f4BaseTexCoord, g_TexCoordTransform1[0]);
+	o.TexCoords.y = dot(f4BaseTexCoord, g_TexCoordTransform1[1]);
+
+	#if BUMPMAPPING
+		o.TexCoords.z = dot(f4BumpTexCoord, g_TexCoordTransform2[0]);
+		o.TexCoords.w = dot(f4BumpTexCoord, g_TexCoordTransform2[1]);
+	#endif
+
+	// TEXCOORD2
+	o.VertexLighting = v.vColor;
+
+	// TEXCOORD3, TEXCOORD4, TEXCOORD5
+	#if TANGENTS
+		// This is pretty much what the original Shader did..
+		// Its unclear whether or not the Normal Vertex Input actually works
+		float3 f3WorldNormal = normalize(cross(v.vTangentS, v.vTangentT));
+		float3 f3WorldTangent = normalize(v.vTangentS);
+	
+		// I assume the Tangent Input is used here to account for the Sign but who knows really
+		float3 f3WorldBinormal = cross(f3WorldNormal, v.vTangentS);
+	
+		o.Tangent = f3WorldTangent;
+		o.Binormal = f3WorldBinormal;
+		o.Normal = f3WorldNormal;
+	#endif
+	
+    return o;
+}

@@ -1,0 +1,78 @@
+//===================== File of the LUX Shader Project =====================//
+//
+//	Initial D.	:	25.03.2025 DMY
+//	Last Change :	 30.01.2026 DMY
+//
+//==========================================================================//
+
+//==========================================================================//
+//	Declare Static Combos
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Declare Dynamic Combos
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Skipping undesired Combos
+//	The Order of Static Combos and Skips has a drastic Impact on Compile Time!
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Common Definitions
+//==========================================================================//
+
+// Fog is handled somewhere else
+#define NO_FOG
+
+// Consistent with Stock
+//#define TONEMAP_SCALE_NONE
+#define TONEMAP_SCALE_LINEAR
+//#define TONEMAP_SCALE_GAMMA
+
+//==========================================================================//
+//	Constants, Functions, Includes
+//==========================================================================//
+
+// Include for all Pixel Shaders
+#include "lux_common_ps_fxc.h"
+
+#define Sampler_Texture0				(Sampler_BaseTexture)
+sampler Sampler_Texture1				: register(s1);
+sampler Sampler_Texture2				: register(s2);
+
+//==========================================================================//
+//	PS Input
+//==========================================================================//
+struct PS_INPUT
+{
+	float4	WorldPos_ProjPosZ		:	TEXCOORD0;
+    float2	TexCoord				:	TEXCOORD1;
+};
+ 
+//==========================================================================//
+//	PS Entry Point
+//==========================================================================//
+float4 main(PS_INPUT i) : COLOR
+{
+	//	Getting our PS_INPUT
+	//==========================================================================//
+	float2 f2TexCoord = i.TexCoord.xy;
+
+	float4	Color0 = 0.25f * tex2D(Sampler_Texture0, f2TexCoord);
+	float4	Color1 = 2.00f * tex2D(Sampler_Texture1, f2TexCoord);
+	float4	Color2 = 16.0f * tex2D(Sampler_Texture2, f2TexCoord);
+
+	float4	f4SkyColor = max(max(Color0,Color1),Color2);
+	f4SkyColor.a = 1.0f;
+
+	// NOTE: Stock returns Constant Red Color
+	// I have never seen a Material ever use this Shader
+	// But if there was one, now it works again
+
+	// Force super-high Depth Value in case of WriteToDepthAlpha
+	return LUX_Finalise(f4SkyColor, float3(0.0f, 0.0f, 0.0f), 1e20);
+}

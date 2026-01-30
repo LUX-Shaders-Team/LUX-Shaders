@@ -1,0 +1,170 @@
+//===================== File of the LUX Shader Project =====================//
+//
+//	Initial D.	:	11.09.2025 DMY
+//	Last Change :	 30.01.2026 DMY
+//
+//==========================================================================//
+
+//==========================================================================//
+//	Declare Static Combos
+//==========================================================================//
+// STATIC:	"BUMPMAPPED"				"0..1"
+
+//==========================================================================//
+//	Declare Dynamic Combos
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Skipping undesired Combos
+//	The Order of Static Combos and Skips has a drastic Impact on Compile Time!
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Common Definitions
+//==========================================================================//
+
+#define TONEMAP_SCALE_NONE
+//#define TONEMAP_SCALE_LINEAR
+//#define TONEMAP_SCALE_GAMMA
+
+// Don't write literally anything to the alpha
+#define NO_DEPTHTODESTALPHA
+#define NO_WATERFOGTODESTALPHA
+
+// We don't want ANY fog
+#define NO_FOG
+
+//==========================================================================//
+//	Constants, Functions, Includes
+//==========================================================================//
+
+// Include for all Pixel Shaders
+#include "lux_common_ps_fxc.h"
+
+#include "lux_common_normalmap.h"
+
+// The Order of the Samplers here is pretty disorganised
+// The Results consist of BumpMap -> EnvMap -> EnvMapMask
+// But the order of the Samplers here says EnvMapMask -> EnvMap -> BumpMap
+
+// s0 ( Sampler_BaseTexture )
+#define Sampler_EnvMapMask	(Sampler_BaseTexture)
+
+// s1
+sampler Sampler_EnvMap		: register(s1);
+
+// c32
+const float4 cConstants1 : register(c32);
+#define g_f3SheenTint		(cConstants1.rgb)
+#define g_f1SheenDirection	(cConstants1.w)
+
+// c33
+const float4 cConstants2		: register(c33);
+#define g_f2SheenMapMaskOffset		(cConstants2.xy)
+#define g_f2SheenMapMaskScale		(cConstants2.zw)
+
+//==========================================================================//
+//	PS Input
+//==========================================================================//	
+struct PS_INPUT
+{
+	// lux_model_simplified_vs30
+	float3 WorldPos		: TEXCOORD0;
+	float3 ModelPos		: TEXCOORD1;
+	float2 TexCoord		: TEXCOORD2;
+
+#if BUMPMAPPED
+	float3 Tangent		: TANGENT;
+	float3 Binormal		: BINORMAL;
+#endif
+	float3 Normal		: NORMAL;
+};
+ 
+//==========================================================================//
+//	PS Entry Point
+//==========================================================================//
+float4 main(PS_INPUT i) : COLOR
+{
+	float3 f3WorldPos = i.WorldPos;
+	float3 f3ModelPos = i.ModelPos;
+
+	float3 f3NormalWS;
+	#if BUMPMAPPED
+		float4 f4NormalTS = tex2D(Sampler_NormalMap, i.TexCoord.xy);
+				
+		// Decompressed Normal
+		f4NormalTS.xyz = f4NormalTS.xyz * 2.0f - 1.0f;
+
+		// TS -> WS
+		// NOTE: Matrix Vector Components are aligned horizontally, so Matrix goes into the mul() last
+		float3x3 TBN_Matrix = float3x3(i.Tangent, i.Binormal, i.Normal);
+		f3NormalWS = normalize(mul(f4NormalTS.xyz, TBN_Matrix));
+	#else
+		// Vertex Normal is already WS
+		f3NormalWS = i.Normal;
+	#endif
+
+	// Note that there was a lot of "Staging test for weapon patterns" code
+	// All of that was for debugging and the way it was setup, was not functional
+	// So I removed it, if you want to bring it back look at weapon_sheen_pass_ps2x.fxc in stock Code.
+	// It is very similar to most of the Code here though
+
+	// Must be negative. Similar to Cloak Pass.
+	// "generate a hard reflection in to the cube map"
+    float3 f3ViewDir = -normalize((f3WorldPos - g_f3EyePos));
+
+	// Using intrinsic Function here
+	float3 f3Reflect = -reflect(f3ViewDir, f3NormalWS);
+
+    float3 f3Specular = ENV_MAP_SCALE * texCUBE(Sampler_EnvMap, f3Reflect).rgb * g_f3SheenTint;
+
+	// Stock-Consistency: Wat?
+	f3Specular *= 10.0f;
+
+	// Now get the "EnvMapMask"
+	float2 f2SheenMapUV;
+
+	// "No Skewing, just move left to right"
+    if (g_f1SheenDirection == 0.0f)
+	{
+		f2SheenMapUV.x = f3ModelPos.z;
+		f2SheenMapUV.y = f3ModelPos.y;
+	}
+    else if (g_f1SheenDirection == 1.0f)
+	{
+		f2SheenMapUV.x = f3ModelPos.z;
+		f2SheenMapUV.y = f3ModelPos.x;
+	}
+	else
+	{
+		f2SheenMapUV.x = f3ModelPos.y;
+		f2SheenMapUV.y = f3ModelPos.x;
+	}
+
+	// This works backwards to how I would design it..
+
+	// Backwards Offset
+    f2SheenMapUV -= g_f2SheenMapMaskOffset;
+
+	// This is rcp() of the Scale, original applied /= f2SheenMapUV
+	// Which becomes rcp(f2SheenMapMaskScale) * f2SheenMapUV in ASM
+    f2SheenMapUV *= g_f2SheenMapMaskScale;
+
+	// Legendary DirectX Behaviour
+	f2SheenMapUV.y = 1.0f - f2SheenMapUV.y;
+
+	// 'Alpha' 
+	float f1Alpha = max(max(f3Specular.x, f3Specular.y), f3Specular.z);
+
+	// 'Mask'
+	float3 f3SheenMap = tex2D(Sampler_EnvMapMask, f2SheenMapUV).rgb;
+
+	// "Build result, only have alpha if there was value in the mask.
+	// High alpha (white) will override the underlying texture while low to none will show model underneath"
+	f1Alpha *= f3SheenMap.r;
+	f3Specular *= f3SheenMap;
+
+	return LUX_Finalise(float4(f3Specular, f1Alpha));
+}

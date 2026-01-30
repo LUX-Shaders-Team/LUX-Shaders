@@ -1,0 +1,230 @@
+//===================== File of the LUX Shader Project =====================//
+//
+//	Initial D.	:	25.03.2025 DMY
+//	Last Change :	 30.01.2026 DMY
+//
+//==========================================================================//
+
+//==========================================================================//
+//	Declare Static Combos
+//==========================================================================//
+//	STATIC: "TEXCOORDS"					"0..3"
+//	STATIC: "NOMODELMATRIX"				"0..1"
+//	STATIC:	"NORMALS"					"0..2"
+//	STATIC:	"LIGHTMAP_UV"				"0..1"
+//	STATIC:	"VERTEXCOLORS"				"0..1"
+
+//==========================================================================//
+//	Declare Dynamic Combos
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Skipping undesired Combos
+//	The Order of Static Combos and Skips has a drastic Impact on Compile Time!
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Unpack Combos
+//==========================================================================//
+#if (NORMALS == 1)
+	#define VERTEXNORMAL 1
+	#define VERTEXTANGENTS 0
+#elif (NORMALS == 2)
+	#define VERTEXNORMAL 1
+	#define VERTEXTANGENTS 1
+#else
+	#define VERTEXNORMAL 0
+	#define VERTEXTANGENTS 0
+#endif
+
+//==========================================================================//
+//	Constants, Functions, Includes
+//==========================================================================//
+
+// Include for all Vertex Shaders
+#include "lux_common_vs_fxc.h"
+
+// Brush specific Functions
+#include "lux_common_vs_brush.h"
+
+const float4 g_TexCoordTransform1[2] : register(LUX_VS_TEXTURETRANSFORM_01);
+const float4 g_TexCoordTransform2[2] : register(LUX_VS_TEXTURETRANSFORM_02);
+const float4 g_TexCoordTransform3[2] : register(LUX_VS_TEXTURETRANSFORM_03);
+const float4 g_TexCoordTransform4[2] : register(LUX_VS_TEXTURETRANSFORM_04);
+
+//==========================================================================//
+//	VS Input
+//==========================================================================//
+struct VS_INPUT
+{
+    // This is all of the stuff that we ever use, or can use for that matter
+    float4 vPos                     : POSITION;
+	float4 vBoneWeights             : BLENDWEIGHT;
+	float4 vBoneIndices             : BLENDINDICES;
+	float3 vTangentS				: TANGENT;		// Tangent
+	float3 vTangentT				: BINORMAL;		// Binormal
+    float4 vNormal                  : NORMAL;		// WorldNormal
+    float2 vTexCoord0               : TEXCOORD0;	// Texture UV
+    float4 vLightmapTexCoord        : TEXCOORD1;	// Lightmap UV
+    float4 vLightmapTexCoordOffset  : TEXCOORD2;	// Offset to Bumped Lightmap 1
+	float4 vColor                   : COLOR0;		// Vertex Colors, if they exist
+//	float3 vSpecular : COLOR1;
+};
+
+//==========================================================================//
+//	VS Output
+//==========================================================================//
+struct VS_OUTPUT
+{
+	// General Register Layout of lux_brush.vs30
+	// ( Keeps it compatible )
+    float4 ProjPosSetup					: POSITION;
+	float4 WorldPos_ProjPosZ			: TEXCOORD0;
+	float4 TexCoords1					: TEXCOORD1;
+	float4 TexCoords2					: TEXCOORD2;
+
+	#if LIGHTMAP_UV
+		float4 LightmapTexCoord			: TEXCOORD3;
+	#endif
+
+	#if VERTEXCOLORS
+		float3 VertexColor				: COLOR0;
+	#endif
+
+	#if (VERTEXTANGENTS || VERTEXNORMAL)
+		float3 Tangent					: TANGENT;
+		float3 Binormal					: BINORMAL;
+		float3 Normal					: NORMAL;
+	#endif
+};
+
+//-----------------------------------------------------------------------------
+// Main shader entry point
+//-----------------------------------------------------------------------------
+VS_OUTPUT main( const VS_INPUT v )
+{
+	VS_OUTPUT o = ( VS_OUTPUT )0;
+
+	//==========================================================================//
+	//	Handle Decompression
+	//==========================================================================//
+
+	#if VERTEXNORMAL
+		float3 f3ObjectNormal;
+		DecompressVertexNormal(v.vNormal, f3ObjectNormal);
+	#endif
+
+	// Variable needed for Offset and Rotation
+	float3 f3ObjectPosition = v.vPos.xyz;
+
+
+	//==========================================================================//
+	//	Handle Rotations and Offsets
+	//==========================================================================//
+
+	// "SKINNING"
+	#if !NOMODELMATRIX
+	
+		float3 f3WorldPos;
+	    AlignInputWithOffset(f3ObjectPosition, f3WorldPos);
+	
+		#if VERTEXNORMAL
+			float3 f3WorldNormal;
+			AlignInputWithoutOffset(f3ObjectNormal, f3WorldNormal);
+		#endif
+
+		#if VERTEXTANGENTS
+			float3 f3ObjectTangent = v.vTangentS.xyz;
+			float3 f3ObjectBinormal = v.vTangentT.xyz;
+	
+			float3 f3WorldTangent, f3WorldBinormal;
+			AlignInputWithoutOffset(f3ObjectTangent, f3WorldTangent);
+			AlignInputWithoutOffset(f3ObjectBinormal, f3WorldBinormal);
+		#endif
+	#elif VERTEXTANGENTS
+		float3 f3ObjectTangent = v.vTangentS.xyz;
+		float3 f3ObjectBinormal = v.vTangentT.xyz;
+	#endif
+
+	//==========================================================================//
+	//	VS Output
+	//==========================================================================//
+
+	// POSITION	
+	#if NOMODELMATRIX
+		// We still Model Matrix here, indirectly with the MVP Matrix
+		float4 f4ProjPos = mul(float4(f3ObjectPosition, 1.0f), cViewProj);
+		o.ProjPosSetup = FixHPO(f4ProjPos); // Apply Half-Pixel Offset Fix
+	#else
+		float4 f4ProjPos = mul(float4(f3WorldPos, 1.0f), cViewProj);
+		o.ProjPosSetup = FixHPO(f4ProjPos); // Apply Half-Pixel Offset Fix
+	#endif
+
+	// TEXCOORD0
+	#if NOMODELMATRIX
+		o.WorldPos_ProjPosZ.xyz = f3ObjectPosition;
+		o.WorldPos_ProjPosZ.w = f4ProjPos.z;
+	#else
+		o.WorldPos_ProjPosZ.xyz = f3WorldPos;
+		o.WorldPos_ProjPosZ.w = dot(float4(f3WorldPos, 1.0f), cViewProjZ);
+	#endif
+
+	// Stuffing 1.0f into .zw so all Components of the TexCoord Transform influence the UV
+	float4 f4UnmodifiedTexCoord = float4(v.vTexCoord0.xy, 1.0f, 1.0f);
+
+	// TEXCOORD1
+	#if (TEXCOORDS >= 0)
+		// Always one Texture	
+		o.TexCoords1.x = dot(f4UnmodifiedTexCoord, g_TexCoordTransform1[0]);
+		o.TexCoords1.y = dot(f4UnmodifiedTexCoord, g_TexCoordTransform1[1]);
+
+		#if (TEXCOORDS >= 1)
+			o.TexCoords1.z = dot(f4UnmodifiedTexCoord, g_TexCoordTransform2[0]);
+			o.TexCoords1.w = dot(f4UnmodifiedTexCoord, g_TexCoordTransform2[1]);
+		#endif
+	#endif
+
+	// TEXCOORD2
+	#if (TEXCOORDS >= 2)
+		o.TexCoords2.x = dot(f4UnmodifiedTexCoord, g_TexCoordTransform3[0]);
+		o.TexCoords2.y = dot(f4UnmodifiedTexCoord, g_TexCoordTransform3[1]);
+
+		#if (TEXCOORDS >= 3)
+			o.TexCoords2.z = dot(f4UnmodifiedTexCoord, g_TexCoordTransform4[0]);
+			o.TexCoords2.w = dot(f4UnmodifiedTexCoord, g_TexCoordTransform4[1]);
+		#endif
+	#endif
+		
+	// TEXCOORD3
+	#if LIGHTMAP_UV
+		o.LightmapTexCoord.xy = v.vLightmapTexCoord.xy;
+	#endif
+
+	// COLOR0
+	#if VERTEXCOLORS
+		o.VertexColor = v.vColor.rgb;
+	#endif
+
+	// TANGENT, BINORMAL, NORMAL
+	#if VERTEXTANGENTS
+		#if NOMODELMATRIX
+			o.Tangent = f3ObjectTangent;
+			o.Binormal = f3ObjectBinormal;
+			o.Normal = f3ObjectNormal;
+		#else
+			o.Tangent = f3WorldTangent;
+			o.Binormal = f3WorldBinormal;
+			o.Normal = f3WorldNormal;
+		#endif
+	#elif VERTEXNORMAL
+		#if NOMODELMATRIX
+			o.Normal = f3ObjectNormal;
+		#else
+			o.Normal = f3WorldNormal;
+		#endif
+	#endif
+
+    return o;
+}

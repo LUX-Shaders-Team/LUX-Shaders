@@ -1,0 +1,88 @@
+//===================== File of the LUX Shader Project =====================//
+//
+//	Initial D.	:	22.07.2023 DMY
+//	Last Change :	 30.01.2026 DMY
+//
+//==========================================================================//
+
+//==========================================================================//
+//	Declare Static Combos
+//==========================================================================//
+// STATIC:	"VERTEXRGBA"				"0..1"
+// STATIC:	"CONSTANTCOLOR"				"0..1"
+// STATIC:	"SRGB"						"0..1"
+
+//==========================================================================//
+//	Declare Dynamic Combos
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Common Definitions
+//==========================================================================//
+
+//#define TONEMAP_SCALE_NONE
+#if SRGB
+#define TONEMAP_SCALE_LINEAR
+#else
+#define TONEMAP_SCALE_GAMMA
+#endif
+
+//==========================================================================//
+//	Constants, Functions, Includes
+//==========================================================================//
+
+// Include for all Pixel Shaders
+#include "lux_common_ps_fxc.h"
+
+// c0 can be a bit weird, c1 is taken for HDR ColorScale
+// c2 is inoperable
+// We use c0, that's what Stock did
+const float4 cModulation : register(c0); // Color and Alpha
+#define g_f4Modulation (cModulation)
+
+//==========================================================================//
+//	PS Input
+//==========================================================================//
+struct PS_INPUT
+{
+	float4 WorldPos_ProjPosZ		: TEXCOORD0;
+    float2 TexCoord0				: TEXCOORD1;
+
+	#if VERTEXRGBA
+		float4 VertexColor			:	COLOR0;
+	#endif
+};
+ 
+//==========================================================================//
+//	PS Entry Point
+//==========================================================================//
+float4 main(PS_INPUT i) : COLOR
+{
+	float2 f2BaseTextureUV = i.TexCoord0.xy;
+	float3 f3WorldPos = i.WorldPos_ProjPosZ.xyz;
+	float  f1Depth = i.WorldPos_ProjPosZ.w;
+
+	// The only Color Texture
+	float4 f4BaseTexture = tex2D(Sampler_BaseTexture, f2BaseTextureUV);
+
+	// $VertexColor & $VertexAlpha
+#if VERTEXRGBA
+	float4 f4VertexColor = i.VertexColor;
+
+	#if SRGB
+		f4VertexColor.rgb = GammaToLinear(f4VertexColor.rgb);
+	#endif
+
+	f4BaseTexture *= f4VertexColor;
+#endif
+
+#if CONSTANTCOLOR
+	f4BaseTexture *= g_f4Modulation;
+#endif
+
+	// HDRColorScale
+	f4BaseTexture.rgb *= g_f3DefaultTint;
+
+	return LUX_Finalise(f4BaseTexture, f3WorldPos, f1Depth);
+}

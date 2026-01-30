@@ -1,0 +1,29 @@
+//
+// vs 3.0   ps 3.0   shaders collection
+//
+//  These shaders are forced to compile as shader model 3.0
+//  using the new compiler.
+//	    _ps30.vcs
+//	    _vs30.vcs
+//
+//	ShiroDkxtro2 :	You must add the filename WITH extension. Example :
+//					lux_newshader_ps30.fxc
+
+//============================================
+// All fxc Files needed for the Sky Shaders
+//============================================
+
+// All needed for complex Sky
+lux_brush_simplified_vs30.fxc
+lux_sky_simple_ps30.fxc
+lux_sky_rgbs_vs30.fxc
+lux_sky_rgbs_ps30.fxc
+lux_sky_compressed_ps30.fxc
+
+// All needed for Simple Sky, already included with complex Sky
+// lux_brush_simplified_vs30.fxc
+// lux_sky_simple_ps30.fxc
+
+// All needed for Equirectangular Sky
+lux_model_simplified_vs30.fxc
+lux_sky_hdri_ps30.fxc

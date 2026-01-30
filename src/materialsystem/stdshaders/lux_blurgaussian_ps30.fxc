@@ -1,0 +1,74 @@
+//===================== File of the LUX Shader Project =====================//
+//
+//	Initial D.	:	09.09.2025 DMY - Adapted from Screenspace ps30
+//	Last Change :	 30.01.2026 DMY
+//
+//==========================================================================//
+
+//==========================================================================//
+//	Declare Static Combos
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Declare Dynamic Combos
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Skipping undesired Combos
+//	The Order of Static Combos and Skips has a drastic Impact on Compile Time!
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Available Constants
+//==========================================================================//
+
+sampler	Sampler_Texture0 : register(s0);
+sampler	Sampler_Texture1 : register(s1);
+sampler	Sampler_Texture2 : register(s2);
+sampler	Sampler_Texture3 : register(s3);
+
+const float4 cReg_00 : register(c0);
+const float4 cReg_01 : register(c1);
+const float4 cReg_02 : register(c2);
+const float4 cReg_03 : register(c3);
+
+const float4 cReg_04 : register(c4);
+const float4 cReg_05 : register(c5);
+const float4 cReg_06 : register(c6);
+const float4 cReg_07 : register(c7);
+
+#define g_f2TexelSize_Texture0 (cReg_04.xy)
+#define g_f2TexelSize_Texture1 (cReg_05.xy)
+#define g_f2TexelSize_Texture2 (cReg_06.xy)
+#define g_f2TexelSize_Texture3 (cReg_07.xy)
+
+//==========================================================================//
+//	Everything Vertex Shader is outputting, enters here
+//==========================================================================//
+struct PS_INPUT
+{
+    float2 TexCoord : TEXCOORD0;
+};
+ 
+//==========================================================================//
+//	Rendering Start - Entry point
+//==========================================================================//
+float4 main(PS_INPUT i) : COLOR
+{
+	float2 f2ScreenUV = i.TexCoord.xy;
+
+	float4 f4Result = 0.0f;
+	
+    // Stock-Consistency:
+    // Polyphase magic doesn't happen when you don't even set these Constants.
+    // The VMT sure doesn't. I'm just replicating what I see in blurgaussian_3x3_ps2x.fxc
+    f4Result += 0.25f * tex2D(Sampler_Texture0, f2ScreenUV + cReg_00.xy);
+    f4Result += 0.25f * tex2D(Sampler_Texture0, f2ScreenUV - cReg_00.xy);
+    f4Result += 0.25f * tex2D(Sampler_Texture0, f2ScreenUV + cReg_01.xy);
+    f4Result += 0.25f * tex2D(Sampler_Texture0, f2ScreenUV - cReg_01.xy);
+    
+	return f4Result;
+}

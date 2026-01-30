@@ -1,0 +1,78 @@
+//===================== File of the LUX Shader Project =====================//
+//
+//	Initial D.	:	26.03.2025 DMY
+//	Last Change :	 30.01.2026 DMY
+//
+//==========================================================================//
+
+//==========================================================================//
+//	Declare Static Combos
+//==========================================================================//
+//	NONE
+
+//==========================================================================//
+//	Declare Dynamic Combos
+//==========================================================================//
+//	NONE
+
+//==========================================================================//
+//	Skipping undesired Combos
+//	The Order of Static Combos and Skips has a drastic Impact on Compile Time!
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Decompress Combos
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Constants, Functions, Includes
+//==========================================================================//
+
+// Include for all Vertex Shaders
+#include "lux_common_vs_fxc.h"
+
+//==========================================================================//
+//	VS Input
+//==========================================================================//
+struct VS_INPUT
+{
+    // This is all of the stuff that we ever use
+    float4 vPos                     : POSITION;
+    float2 vTexCoord0               : TEXCOORD0;
+};
+
+//==========================================================================//
+//	VS Output
+//==========================================================================//
+struct VS_OUTPUT
+{
+    float4 ProjPosSetup				: POSITION; 
+    float2 TexCoords1				: TEXCOORD1; // TexCoord1 for consistency with other Shaders
+};
+
+//==========================================================================//
+//	VS Entry Point
+//==========================================================================//
+VS_OUTPUT main( const VS_INPUT v )
+{
+	VS_OUTPUT o = ( VS_OUTPUT )0;
+
+	// Variable needed for Skinning and Morphing
+	float3 f3ObjectPosition = v.vPos.xyz;
+
+	//==========================================================================//
+	//	VS Output
+	//==========================================================================//
+	
+	// Transform into Projection Space ( Clip Space )
+	// This will flatten the geometrical Position into a 2D-Plane
+    float4 f4ProjPos = mul(float4(f3ObjectPosition, 1.0f), cModelViewProj);
+	o.ProjPosSetup = FixHPO(f4ProjPos); // Apply Half-Pixel Offset Fix
+
+	// Always one Texture	
+    o.TexCoords1.xy = v.vTexCoord0.xy;
+
+    return o;
+}

@@ -1,0 +1,330 @@
+//===================== File of the LUX Shader Project =====================//
+//
+//	Initial D.	:	26.08.2024 DMY
+//	Last Change :	 30.01.2026 DMY
+//
+//==========================================================================//
+
+//==========================================================================//
+//	Declare Static Combos
+//==========================================================================//
+// STATIC:	"ENVMAPMODE"				"0..4"
+// STATIC:	"SELFILLUMMODE"				"0..2"
+// STATIC:	"XBYBASEALPHA"				"0..2"
+// STATIC:	"SSBUMP"					"0..1"
+// STATIC:	"DETAILTEXTURE"				"0..1"
+// STATIC:	"EXPONENTTEXTURE"			"0..1"
+
+//==========================================================================//
+//	Declare Dynamic Combos
+//==========================================================================//
+// DYNAMIC: "BICUBIC_FILTERING"			"0..1"
+
+//==========================================================================//
+//	Skipping undesired Combos
+//	The Order of Static Combos and Skips has a drastic Impact on Compile Time!
+//==========================================================================//
+// SKIP: ( $ENVMAPMODE != 2 && $SELFILLUMMODE == 2 )
+// SKIP: ( $ENVMAPMODE != 4 && $SELFILLUMMODE == 2 )
+// SKIP: ( $SELFILLUMMODE == 1 && $XBYBASEALPHA != 0 )
+
+//==========================================================================//
+//	Unpack Combos
+//==========================================================================//
+#if (XBYBASEALPHA > 0)
+	#if (XBYBASEALPHA == 1)
+		#define BLENDTINTBYBASEALPHA 1
+		#define DESATURATEWITHBASEALPHA 0
+	// == 2
+	#else
+		#define BLENDTINTBYBASEALPHA 0
+		#define DESATURATEWITHBASEALPHA 1		
+	#endif
+#else
+	#define BLENDTINTBYBASEALPHA 0
+	#define DESATURATEWITHBASEALPHA 0
+#endif
+
+// $SelfIllum/$SelfIllumMask & $SelfIllum_EnvMapMask_Alpha
+#if (SELFILLUMMODE > 0)
+	#define SELFILLUM 1
+
+	#if (SELFILLUMMODE == 2)
+		#define SELFILLUM_ENVMAPMASK_ALPHA 1
+	#else
+		#define SELFILLUM_ENVMAPMASK_ALPHA 0
+	#endif
+#else
+	#define SELFILLUM 0
+	#define SELFILLUM_ENVMAPMASK_ALPHA 0
+#endif
+
+//==========================================================================//
+//	Common Definitions
+//==========================================================================//
+
+// This IS a Shader usable on BRUSHES
+// Need this for PCC
+#define BRUSH
+
+// We use different Equations for Phong on Brush-based Geometry
+// This Define will enable that in the Header
+#define BRUSH_SPECULAR
+
+// This is what actually enables $PhongExponentTexture Behaviour
+#if EXPONENTTEXTURE
+#define PHONGEXPONENTTEXTURE
+#endif
+
+//#define TONEMAP_SCALE_NONE
+#define TONEMAP_SCALE_LINEAR
+//#define TONEMAP_SCALE_GAMMA
+
+//==========================================================================//
+//	Constants, Functions, Includes
+//==========================================================================//
+
+// Include for all Pixel Shaders
+#include "lux_common_ps_fxc.h"
+
+#include "lux_common_detailtexture.h"
+#include "lux_common_lightmapped.h"
+#include "lux_common_selfillum.h"
+#include "lux_common_envmap.h"
+#include "lux_common_phong.h"
+
+//==========================================================================//
+//	PS Input
+//==========================================================================//
+struct PS_INPUT
+{
+	// lux_brush_vs30
+	float4 WorldPos_ProjPosZ		: TEXCOORD0;
+	float4 TexCoords1				: TEXCOORD1;
+	float4 TexCoords2				: TEXCOORD2;
+	float4 LightmapTexCoord			: TEXCOORD3;
+	float4 LightmapTexCoord2And3	: TEXCOORD4;
+	
+	float3 VertexColors				: COLOR0;
+
+	float3 Tangent					: TANGENT;
+	float3 Binormal					: BINORMAL;
+	float3 Normal					: NORMAL;
+};
+ 
+//==========================================================================//
+//	PS Entry Point
+//==========================================================================//
+float4 main(PS_INPUT i) : COLOR
+{
+	//	Getting our PS_INPUT
+	//==========================================================================//
+
+	// TEXCOORD0
+	float3 f3WorldPos = i.WorldPos_ProjPosZ.xyz;
+	float  f1Depth = i.WorldPos_ProjPosZ.w; 
+
+	// TEXCOORD1
+	float2 f2BaseTextureUV = i.TexCoords1.xy;
+	float2 f2NormalUV = i.TexCoords1.zw;
+
+	// TEXCOORD2
+	#if ENVMAPMASK
+		float2 f2EnvMapMaskUV = i.TexCoords2.xy;
+		float2 f2DetailTextureUV = i.TexCoords2.zw;
+	#else
+		float2 f2DetailTextureUV = i.TexCoords2.xy;
+	#endif
+
+	// TEXCOORD3, TEXCOORD4
+	float4 f4LightmapUVs1 = i.LightmapTexCoord;
+	float4 f4LightmapUVs2 = i.LightmapTexCoord2And3;
+
+	// COLOR0
+	float3 f3VertexColors = i.VertexColors;
+
+	// TANGENT, BINORMAL, NORMAL
+	float3x3 TBN_Matrix = float3x3(i.Tangent, i.Binormal, i.Normal);
+
+	//==========================================================================//
+	//	..
+	//==========================================================================//
+	float4 f4BaseTexture = tex2D(Sampler_BaseTexture, f2BaseTextureUV.xy);	
+	float4 f4NormalTS = tex2D(Sampler_NormalMap, f2NormalUV.xy);
+
+	// $BlendTintByBaseAlpha and $DesatureWithBaseAlpha
+    ComputeTintAndXByBaseAlpha(f4BaseTexture, g_f3DefaultTint, g_f1DefaultAlphaFactor, BLENDTINTBYBASEALPHA, DESATURATEWITHBASEALPHA);
+		
+	//==========================================================================//
+	//	Detail Texture. Blendmodes 0 to 9
+	//==========================================================================//
+	#if DETAILTEXTURE
+		// Integer Constants are for use with loops only...
+		int nDetailBlendMode = trunc(g_f1DetailBlendMode);
+
+		float4 f4DetailTexture = tex2D(Sampler_DetailTexture, f2DetailTextureUV);
+		f4DetailTexture.xyz *= g_f3DetailTextureTint;
+
+		f4BaseTexture = TextureCombine(f4BaseTexture, f4DetailTexture, nDetailBlendMode);
+	#endif
+
+	//==========================================================================//
+	// Lightmap
+	//==========================================================================//
+
+	// Define it into a f3 instead of f4
+	float3 f3NormalTS = f4NormalTS.xyz;
+
+	#if !SSBUMP
+		// Regular Tangent Space Normal Maps get perturbed
+		// This scales the Normal Map to [-1..+1] Range
+		f3NormalTS = f3NormalTS.xyz * 2.0f - 1.0f;
+	#endif
+
+	// Sample the Lightmap
+	// And extract the DomDir
+	// This is Direct Diffuse *and* Indirect Diffuse
+	// Which is bad since we get our Light Dir from that.
+	// Nothing we can do though and this is better than no Specular
+	float3 f3LightDir;
+	#if DETAILTEXTURE
+		float3 f3DiffuseLighting = ComputeBumpedLightmap_Directional(f3NormalTS, f4LightmapUVs1, f4LightmapUVs2, TBN_Matrix,
+		f3LightDir, nDetailBlendMode, f4DetailTexture.xyz);
+	#else
+		float3 f3DiffuseLighting = ComputeBumpedLightmap_Directional(f3NormalTS, f4LightmapUVs1, f4LightmapUVs2, TBN_Matrix, f3LightDir);
+	#endif
+
+	// If we used an SSBump we must convert it or bad Things happen to our Cubemaps...
+	// ShiroDkxtro2: This does not appear to be affected by the SSBumpMathIssue
+	#if SSBUMP
+		// Use the original f4 for the math, as the f3 is being overwritten
+		f3NormalTS  = mxBumpBasis[0] * f4NormalTS.xxx;
+		f3NormalTS += mxBumpBasis[1] * f4NormalTS.yyy;
+		f3NormalTS += mxBumpBasis[2] * f4NormalTS.zzz;
+		f3NormalTS  = normalize(f3NormalTS);
+	#endif
+
+	// Convert from Tangent Space to World Space, using the Tangent Matrix
+	// NOTE: Matrix Vector Components are aligned horizontally, so Matrix goes into the mul() last
+	float3 f3NormalWS = normalize(mul(f3NormalTS, TBN_Matrix));
+
+	// We need the lightwarp sampler for the parallax map.
+	#if LIGHTWARPTEXTURE
+		if (g_bLightWarpTexture)
+		{
+			f3DiffuseLighting = 2.0f * tex2D(Sampler_LightWarpTexture, float2( 0.5f * length(f3DiffuseLighting), 0.0f)).rgb;
+		}
+	#endif
+	
+	//==========================================================================//
+	//	Lighting and $Phong
+	//==========================================================================//
+
+	// We prepare a Struct now with default Values
+	// This will be Setup using a Function, drastically compressing the Code
+	Phong_Data_t PhongData = Phong_Data_FakeConstructor(); // HLSL forced my Hand because it doesn't have constructors
+
+	float3 f3ViewDir = ComputeViewDir(f3WorldPos);
+	float f1NdotV = dot(f3NormalWS, -f3ViewDir);
+
+	// Phong needs some special fresnel functions to look correctly
+	SetupPhongFresnel(PhongData, f1NdotV);
+
+	// Now saturate.
+	f1NdotV = saturate(f1NdotV);
+
+	// Conditional Statement, yay!
+	if(g_bHasBaseAlphaPhongMask)
+		PhongData.f1AlphaMask = f4BaseTexture.w;
+	else
+		PhongData.f1AlphaMask = f4NormalTS.w;
+
+	#if EXPONENTTEXTURE
+		// Get the Pixel from the Texture into our float4.
+		PhongData.f4PhongExponentTexture = tex2D(Sampler_PhongExpTexture, f2BaseTextureUV.xy);
+	#endif
+
+	// Helper Function that sets up all our Phong Data
+	SetupPhongData(PhongData, f4BaseTexture.rgb);
+	
+	// Direct *and* Indirect Specular(?)
+	// This is technically 'wrong' (Read: Not physically based).
+	// We abuse the Direct Diffuse Color as a Direct Specular Color
+	// But it also contains Indirect Diffuse, so this is wrong. Nothing we can do though
+	// Valve, Ples Fix! ( Make Bounced Lighting a 'fourth' Lightmap. )
+	//
+	// Reuse Function from lux_common_phong
+	// TF2C: use blinn phong.
+	float3 f3DirectSpecular = ComputeDirectBlinnSpecularLight(f3NormalWS, f3ViewDir, f3LightDir, f3DiffuseLighting, PhongData.f1PhongExponent, PhongData.f1PhongFresnel);
+
+    if (!g_bHasPhongWarpTexture)
+		PhongData.f3PhongModulation *= PhongData.f1PhongFresnel;
+
+	// f3PhongModulation is basically the Product of Luminance + Masks + $PhongTint + $PhongAlbedoTint + ..
+	f3DirectSpecular *= PhongData.f3PhongModulation;
+    f3DirectSpecular *= g_f1PhongBoost; // Separate Term
+
+	// Prepare Results for SelfIllumination Methods
+	float3 f3Result = f4BaseTexture.rgb * f3DiffuseLighting;
+
+	//==========================================================================//
+	//	Cubemap
+	//==========================================================================//
+
+	// Cubemaps
+	float3 f3IndirectSpecular = 0.0f;
+	#if ENVMAP
+		#if ENVMAPMASK
+			float4 f4EnvMapMask = tex2D(Sampler_EnvMapMask, f2EnvMapMaskUV.xy);
+			f3IndirectSpecular = ComputeEnvMap(f3DiffuseLighting, f3WorldPos, f3NormalWS, f3ViewDir, f4EnvMapMask.xyz);
+		#else
+			f3IndirectSpecular = ComputeEnvMap(f3DiffuseLighting, f3WorldPos, f3NormalWS, f3ViewDir, f4BaseTexture.w, f4NormalTS.w);
+		#endif
+	#endif
+
+	//==========================================================================//
+	// SelfIllumination / Additive Lighting Methods
+	//==========================================================================//
+
+	// Unlike VertexLitGeneric we always do this Singlepass
+	#if DETAILTEXTURE
+		f3Result = TextureCombinePostLighting(f3Result, f4DetailTexture.rgb, nDetailBlendMode);
+	#endif
+
+	// BaseAlpha $SelfIllum or $SelfIllumMask
+	#if SELFILLUM
+		float f1SelfIllumFresnel = ComputeSelfIllumFresnel(f1NdotV);
+		#if SELFILLUM_ENVMAPMASK_ALPHA
+			// $SelfIllum_EnvMapMask_Alpha
+			// We only have one Mask and it's in the Alpha Channel of the $EnvMapMask
+			f3Result = lerp(f3Result, f4BaseTexture.rgb * g_f3SelfIllumTint, f4EnvMapMask.a * f1SelfIllumFresnel);
+		#else
+			// Mask Selection
+			float3 f3SelfIllumMask = tex2D(Sampler_SelfIllum, f2BaseTextureUV).rgb;
+			f3SelfIllumMask = lerp(f4BaseTexture.aaa, f3SelfIllumMask, g_f1SelfIllumMaskFactor) * f1SelfIllumFresnel;
+
+			// Apply SelfIllum via Mask
+			f3Result = lerp(f3Result, f4BaseTexture.rgb * g_f3SelfIllumTint, f3SelfIllumMask);
+		#endif
+	#endif
+
+	//==========================================================================//
+	// Results
+	//==========================================================================//
+
+	// f3Result already contains Direct Diffuse and Indirect Diffuse.
+	// This is how it should be.
+	// Direct Diffuse + Indirect Diffuse + Direct Specular + Indirect Specular
+	f3Result += f3DirectSpecular;
+	f3Result += f3IndirectSpecular;
+
+	// Pass Basealpha onwards
+	float f1Alpha = f4BaseTexture.a;
+
+	// NOTE: We don't do Vertex Colors on this Shader
+	// Those are needed for Texture Shaded Polygons in Hammer
+	// But Hammer ( And Hammer++ by Extension ) don't support Bumped Lightmaps
+	// No Bumped Lightmaps -> No Phong -> Shader disabled
+
+    return LUX_Finalise(float4(f3Result, f1Alpha), f3WorldPos, f1Depth, g_f1AlphaModulation);
+}

@@ -1,0 +1,183 @@
+//===================== File of the LUX Shader Project =====================//
+//
+//	Initial D.	:	30.09.2025 DMY
+//	Last Change :	 30.01.2026 DMY
+//
+//==========================================================================//
+
+//==========================================================================//
+//	Declare Static Combos
+//==========================================================================//
+//	STATIC:	"EMISSIVEBLENDMODE"			"0..2"
+//	STATIC:	"DETAILTEXTURE"				"0..1"
+//	STATIC:	"SELFILLUMTEXTURE"			"0..1"
+//  STATIC: "MINIMUMLIGHT"				"0..1"
+
+//==========================================================================//
+//	Declare Dynamic Combos
+//==========================================================================//
+//	DYNAMIC: "COMPRESSION"				"0..1"
+//  DYNAMIC: "SKINNING"                 "0..1"
+
+//==========================================================================//
+//	Skipping undesired Combos
+//	The Order of Static Combos and Skips has a drastic Impact on Compile Time!
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+// Unpack Combos
+//==========================================================================//
+#if (EMISSIVEBLENDMODE > 0)
+	#define EMISSIVEBLEND 1
+#else
+	#define EMISSIVEBLEND 0
+#endif
+
+#if (EMISSIVEBLENDMODE == 2)
+	#define EMISSIVEBLEND_NOFLOW 1
+#else
+	#define EMISSIVEBLEND_NOFLOW 0
+#endif
+
+//==========================================================================//
+//	Constants, Functions, Includes
+//==========================================================================//
+
+// Include for all Vertex Shaders
+#include "lux_common_vs_fxc.h"
+
+// Model Specific Functions
+#include "lux_common_vs_model.h"
+
+const float4 g_TexCoordEmissive[2]		: register(LUX_VS_TEXTURETRANSFORM_01);
+const float4 g_TexCoordNoFlow[2]		: register(LUX_VS_TEXTURETRANSFORM_02);
+const float4 g_TexCoordDetail[2]		: register(LUX_VS_TEXTURETRANSFORM_03);
+const float4 g_TexCoordSelfIllum[2]		: register(LUX_VS_TEXTURETRANSFORM_04);
+const float4 g_TexCoordBase[2]			: register(LUX_VS_TEXTURETRANSFORM_05);
+
+//==========================================================================//
+//	VS Input
+//==========================================================================//
+struct VS_INPUT
+{
+    // This is all of the stuff that we ever use
+    float4 vPos                     : POSITION;
+	float4 vBoneWeights             : BLENDWEIGHT;
+	float4 vBoneIndices             : BLENDINDICES;
+    float4 vNormal                  : NORMAL;
+	float4 vTangent					: TANGENT;
+    float2 vTexCoord0               : TEXCOORD0;
+    float4 vUnusedTexCoord	        : TEXCOORD1;
+    float4 vMorphTexCoord			: TEXCOORD2;
+	float4 vColor                   : COLOR0;
+	float3 vSpecular				: COLOR1;
+
+	// Holds uncompressed TangentS with Binormal Sign ( when not using compression )
+	float4 vUserData				: TANGENT;
+
+	// Position and normal/tangent deltas
+	float4 vPosFlex					: POSITION1;
+	float4 vNormalFlex				: NORMAL1;
+
+	// Morphing
+	float vVertexID					: POSITION2;
+};
+
+//==========================================================================//
+//	VS Output
+//==========================================================================//
+struct VS_OUTPUT
+{
+    float4 ProjPosSetup				: POSITION; 
+	float4 WorldPos_ProjPosZ		: TEXCOORD0;
+	#if EMISSIVEBLEND
+		float4 EmissiveTexCoords		: TEXCOORD1;
+
+		#if (DETAILTEXTURE || SELFILLUMTEXTURE)
+			float4 AdditiveTexCoords		: TEXCOORD2;
+			float2 BaseTexCoord				: TEXCOORD3;
+		#else
+			float2 BaseTexCoord				: TEXCOORD2;
+		#endif
+	#else
+		#if (DETAILTEXTURE || SELFILLUMTEXTURE)
+			float4 AdditiveTexCoords		: TEXCOORD1;
+			float2 BaseTexCoord				: TEXCOORD2;
+		#else
+			float2 BaseTexCoord				: TEXCOORD1;
+		#endif
+	#endif
+};
+
+//==========================================================================//
+//	VS Entry Point
+//==========================================================================//
+VS_OUTPUT main( const VS_INPUT v )
+{
+	VS_OUTPUT o = ( VS_OUTPUT )0;
+
+	//==========================================================================//
+	//	Handle Decompression
+	//==========================================================================//
+
+	// Variable needed for Skinning and Morphing
+	float3 f3ObjectPosition = v.vPos.xyz;
+
+	//==========================================================================//
+	//	Handle Morphing
+	//==========================================================================//
+	ApplyMorph( v.vPosFlex, f3ObjectPosition );
+	
+	//==========================================================================//
+	//	Handle Rotations and Offsets
+	//==========================================================================//
+		
+	float3 f3WorldNormal, f3WorldPos;
+	AlignVertexInputs(SKINNING, float4(f3ObjectPosition, 1.0f), v.vBoneWeights, v.vBoneIndices, f3WorldPos);
+
+	//==========================================================================//
+	//	VS Output
+	//==========================================================================//
+
+	// POSITION
+	float4 f4ProjPos = mul(float4(f3WorldPos, 1.0f), cViewProj);
+	o.ProjPosSetup = FixHPO(f4ProjPos); // Apply Half-Pixel Offset Fix
+	
+	// TEXCOORD0
+	// Set WorldPos and compute Depth
+	o.WorldPos_ProjPosZ.xyz = f3WorldPos;
+	o.WorldPos_ProjPosZ.w = dot(float4(f3WorldPos, 1), cViewProjZ);
+
+	// Stuffing 1.0f into .zw so all Components of the TexCoord Transform influence the UV
+	float4 f4UnmodifiedTexCoord = float4(v.vTexCoord0.xy, 1.0f, 1.0f);
+
+	// TEXCOORDS
+	#if EMISSIVEBLEND
+		
+		o.EmissiveTexCoords.x = dot(f4UnmodifiedTexCoord, g_TexCoordEmissive[0]);
+		o.EmissiveTexCoords.y = dot(f4UnmodifiedTexCoord, g_TexCoordEmissive[1]);
+
+		#if EMISSIVEBLEND_NOFLOW
+			o.EmissiveTexCoords.z = dot(f4UnmodifiedTexCoord, g_TexCoordNoFlow[0]);
+			o.EmissiveTexCoords.w = dot(f4UnmodifiedTexCoord, g_TexCoordNoFlow[1]);
+		#endif
+	#endif
+	
+	#if DETAILTEXTURE
+		o.AdditiveTexCoords.x = dot(f4UnmodifiedTexCoord, g_TexCoordDetail[0]);
+		o.AdditiveTexCoords.y = dot(f4UnmodifiedTexCoord, g_TexCoordDetail[1]);
+	#endif
+
+	#if SELFILLUMTEXTURE
+		o.AdditiveTexCoords.z = dot(f4UnmodifiedTexCoord, g_TexCoordSelfIllum[0]);
+		o.AdditiveTexCoords.w = dot(f4UnmodifiedTexCoord, g_TexCoordSelfIllum[1]);
+	#endif
+
+	#if MINIMUMLIGHT
+		o.BaseTexCoord.x = dot(f4UnmodifiedTexCoord, g_TexCoordBase[0]);
+		o.BaseTexCoord.y = dot(f4UnmodifiedTexCoord, g_TexCoordBase[1]);
+	#endif
+
+    return o;
+}

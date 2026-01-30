@@ -1,0 +1,25 @@
+//
+// vs 3.0   ps 3.0   shaders collection
+//
+//  These shaders are forced to compile as shader model 3.0
+//  using the new compiler.
+//	    _ps30.vcs
+//	    _vs30.vcs
+//
+//	ShiroDkxtro2 :	You must add the filename WITH extension. Example :
+//					lux_newshader_ps30.fxc
+
+//============================================
+// All Template fxc Files for the Custom-Shader Shader
+//============================================
+
+lux_custom_brush_vs30.fxc
+lux_custom_model_vs30.fxc
+lux_custom_particle_vs30.fxc
+lux_custom_ps30.fxc
+lux_custom_particle_ps30.fxc
+lux_custom_projtex_ps30.fxc
+
+//============================================
+// Other custom fxc Files ( Mod Shaders )
+//============================================

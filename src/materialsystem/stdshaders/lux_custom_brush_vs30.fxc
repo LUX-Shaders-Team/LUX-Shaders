@@ -1,0 +1,316 @@
+//===================== File of the LUX Shader Project =====================//
+
+//==========================================================================//
+//	Available Static Combos to the Shader
+//	Do not change anything here!
+//==========================================================================//
+//	STATIC:	"NORMALS"					"0..2"
+//	STATIC:	"VERTEXCOLORS"				"0..1"
+//  STATIC: "BUMPMAPPED"				"0..1"
+//	STATIC: "PROJTEX"					"0..1"
+//	STATIC:	"DECALMODE"					"0..2"
+
+//==========================================================================//
+//	Available Dynamic Combos to the Shader
+//	Do not change anything here!
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Skipped Combinations
+//==========================================================================//
+
+//==========================================================================//
+//	Decompress Combos
+//==========================================================================//
+#if (NORMALS > 0)
+	#define VERTEX_NORMAL 1
+
+	#if(NORMALS >= 2)
+		#define VERTEX_TANGENTS 1
+	#else
+		#define VERTEX_TANGENTS 0
+	#endif
+#else
+	#define VERTEX_NORMAL 0
+	#define VERTEX_TANGENTS 0
+#endif
+
+#if (BUMPMAPPED > 0)
+
+	// Always
+	#define BUMPMAPPING 1
+#else
+	#define BUMPMAPPING 0
+#endif
+
+#if (DECAL > 0)
+	#define DECAL_OR_OVERLAY 1
+
+	#if (DECALMODE == 2)
+		#define TF2SDK_OVERLAY 1
+	#else
+		#define TF2SDK_OVERLAY 0
+	#endif
+#else
+	#define DECAL_OR_OVERLAY 0
+	#define TF2SDK_OVERLAY 0
+#endif
+
+//==========================================================================//
+//	Constants, Functions, Includes
+//==========================================================================//
+
+// Include for all Vertex Shaders
+#include "lux_custom_common_vs.h"
+#include "lux_common_vs_brush.h"
+
+//==========================================================================//
+//	Everything the Vertex Shader can receive and when
+//==========================================================================//
+struct VS_INPUT
+{
+	// Position is always needed for ProjPos on any Mesh.
+	float4 vPos							: POSITION;
+
+	// Always uncompressed
+	float4 vNormal				: NORMAL;
+
+	// Always uncompressed
+	float4 vTangent				: TANGENT;
+	float4 vBinormal			: BINORMAL;
+
+	// Hammer uses Vertex Colors the Texture Shaded Polygons View.
+	// Displacements get their BlendFactor via .w 
+	float4 vColor				: COLOR0;
+
+	// TexCoord0 is the UV of the BaseTexture.
+	float2 vTexCoord0				: TEXCOORD0;
+
+	// Brushes get a secondary UV for Lightmaps.
+	// When Bumpmapped, a secondary Stream will give Offsets to the other Bumped Lightmaps
+	//
+	// It is important to note that Overlays receive the same Offset
+	// But the .y is messed up. An oversight somewhere deeper in the Code
+	// BumpMapped Overlays *are possible* by account for that here in the Vertex Shader.
+	float2 vLightmapTexCoord			: TEXCOORD1;
+	float2 vLightmapTexCoordOffset		: TEXCOORD2;
+};
+ 
+//==========================================================================//
+//	Output of the Vertex Shader
+//==========================================================================//
+struct VS_OUTPUT
+{
+	// ProjPos is -1 to +1 Coordinates on the RT
+	// ( The actual Screenspace Position of the Vertices )
+	float4 ProjPosSetup				: POSITION;
+
+	// Vertex Fog is not required. Allows us to do +1 TexCoord
+//  float  Fog						: FOG;
+
+	// VertexColors are used by Hammer for the Texture Shaded Polygons View
+	// Displacements use the .a as the Blend Factor
+	float4 VertexColors				: COLOR0;
+
+	// Always Output WorldPos_ProjPosZ for Fog ( Radial and Range Fog )
+	float4 WorldPos_ProjPosZ		: TEXCOORD0;
+
+	// Can put anything you want here down to TEXCOORD8 / TEXCOORD9
+};
+
+//==========================================================================//
+//	Configurable Compiletime Constants
+//==========================================================================//
+
+// Set to false to receive Tangent Space Everything
+#define APPLY_MODEL_MATRIX true
+
+//==========================================================================//
+//	Shader Entry point
+//==========================================================================//
+VS_OUTPUT main( const VS_INPUT v )
+{
+	//==========================================================================//
+	//	Unpacking existing Data
+	//==========================================================================//
+
+	// Input normal is actually compressed, we need to decompress it
+	float3 f3NormalTS = 0.0f;
+	float3 f3TangentTS = 0.0f;
+	float3 f3BinormalTS = 0.0f;
+
+	// Unpack Normal Data
+	#if VERTEX_NORMAL
+		f3NormalTS = v.vNormal.xyz;
+	#endif
+
+	#if VERTEX_TANGENTS
+		f3TangentTS = v.vTangent.xyz;
+		f3BinormalTS = v.vBinormal.xyz;
+	#endif
+
+	float3 f3PositionTS = v.vPos.xyz;
+
+	// Position
+	float3 f3Position_tmp = 0.0f;
+
+	// Tangents
+	float3 f3Tangent_tmp = 0.0f;
+	float3 f3Binormal_tmp = 0.0f;
+	float3 f3Normal_tmp = 0.0f;
+
+	#if APPLY_MODEL_MATRIX
+		#if VERTEX_NORMAL
+			AlignInputWithoutOffset(f3NormalTS, f3Normal_tmp);
+		#endif
+
+		#if VERTEX_TANGENTS
+            AlignInputWithoutOffset(f3TangentTS, f3Tangent_tmp);
+            AlignInputWithoutOffset(f3BinormalTS, f3Binormal_tmp);
+		#endif
+
+		// Important, with Offset!
+		AlignInputWithOffset(f3PositionTS, f3Position_tmp);
+	#else
+		#if VERTEX_NORMAL
+			f3Normal_tmp = f3NormalTS;
+		#endif
+		
+		#if VERTEX_TANGENTS
+			f3Tangent_tmp = f3NormalTS;
+			f3Binormal_tmp = f3BinormalTS;
+		#endif
+
+		f3Position_tmp = f3PositionTS;
+	#endif
+	
+	float2 LightmapUV1_tmp = 0.0f;
+	float2 LightmapUV2_tmp = 0.0f;
+	float2 LightmapUV3_tmp = 0.0f;
+
+	// Lightmap Array Constructed as such :
+	// +---+---+---+---+
+	// | 1 | 2 | 3 | 4 |
+	// +---+---+---+---+
+	// 1. Intensity of: ( All Dirs.  ) = vLightmapTexCoord
+	// 2. Intensity of: ( +x, --, +z ) = + vLightmapTexCoordOffset
+	// 3. Intensity of: ( -x, +y, +z ) = + vLightmapTexCoordOffset
+	// 4. Intensity of: ( -x, -y, +z ) = + vLightmapTexCoordOffset
+	#if !PROJTEX
+		#if BUMPMAPPING
+			float2 Offset = v.vLightmapTexCoordOffset.xy;
+
+			// On Overlays, the .y is busted. This can be fixed by setting .y to 0 as the Array is aligned horizontally
+			// ~ Also, Decals don't really get Lightmaps so this is basically bOverlay
+			#if DECAL_OR_OVERLAY
+				Offset.y = 0.0f;
+			#endif
+	
+			// On the TF2SDK the .x is also busted because they forgot to account for the Bicubic Padding
+			// Can be fixed by manually adding the TexelSize of the Padding, which is two Pixels.
+			#if (DECAL_OR_OVERLAY && TF2SDK_OVERLAY)
+				// Yikes this shouldn't be hardcoded!
+				// Lightmap Page Dimensions are available via pShaderAPI !!
+				float f1LightmapTexelW = 1.0f/1024;
+				Offset.x += 2.0f * f1LightmapTexelW;
+			#endif
+
+			LightmapUV1_tmp = v.vLightmapTexCoord.xy + v.vLightmapTexCoordOffset.xy;
+			LightmapUV2_tmp = LightmapUV1_tmp + v.vLightmapTexCoordOffset.xy;
+			LightmapUV3_tmp = LightmapUV2_tmp + v.vLightmapTexCoordOffset.xy;
+		#else
+			// In case of no BumpMapping, Lightmap 0 will be the one you can use
+			LightmapUV1_tmp = v.vLightmapTexCoord.xy;
+		#endif
+	#endif
+
+    float4 f4VertexColor_tmp = 0.0f;
+	#if VERTEXCOLORS
+		f4VertexColor_tmp = v.vColor;
+	#endif
+
+	//==========================================================================//
+	//	Finished Variables usable in Custom Shaders
+	//==========================================================================//
+
+	// Always
+	float3 f3Position = f3Position_tmp;
+
+	// Only with VERTEX_NORMAL or VERTEX_TANGENTS
+	float3 f3Normal = f3Normal_tmp;
+	
+	// Only with VERTEX_TANGENTS
+	float3 f3Tangent = f3Tangent_tmp;
+	float3 f3Binormal = f3Binormal_tmp;
+
+	// Finished TBN Matrix for output to the Pixel Shader
+	// Only with VERTEX_TANGENTS
+	float3x3 TBN_Matrix = float3x3(f3Tangent, f3Binormal, f3Normal);
+
+	// Main UV
+	float4 f4TexCoord = float4(v.vTexCoord0, 1.0f, 1.0f);
+
+	// Lightmap Coordinate without BUMPMAPPING
+	float2 f2LightmapUV1 = LightmapUV1_tmp;
+
+	// Lightmap Coordinates with BUMPMAPPING
+	float2 f2LightmapUV2 = LightmapUV2_tmp;
+	float2 f2LightmapUV3 = LightmapUV3_tmp;
+
+	// Vertex Color. Only with bVertexColors
+	float4 f4VertexColor = f4VertexColor_tmp;	
+	
+	// Only with bVertexColors
+	float f1DisplacementBlendFactor = f4VertexColor.a;
+
+	// Provided Vertex Shader Registers from lux_custom_common_vs.h
+	// float4 TransformMatrix0[2]
+	// float4 TransformMatrix1[2]
+	// float4 TransformMatrix2[2]
+	// float4 TransformMatrix3[2]
+	// float4 cReg_56
+	// float4 cReg_57
+
+	//==========================================================================//
+	//	Basic Setup for Shaders
+	//==========================================================================//
+
+	VS_OUTPUT o = ( VS_OUTPUT )0;
+
+	// This will flatten the geometrical Position into a 2D-Plane
+	// The GPU uses it and clips any Pixels outside of the -1 to +1 Range
+	// Look up Clip Space and 'Normalized Device Coordinates' for more Information on how this works
+	//
+	// xy will be Screen Position ( -1 to +1 )
+	// z will be Depth
+	// w is the divisor for perspective divide ( a homogeneous Coordinate )
+	float4 f4ProjPos = mul(float4(f3Position, 1.0f), cViewProj);
+	o.ProjPosSetup = f4ProjPos;
+
+	float f1Depth = dot(float4(f3Position, 1.0f), cViewProjZ);;
+
+	// Always 
+	o.WorldPos_ProjPosZ.xyz = f3Position;
+	o.WorldPos_ProjPosZ.w = f1Depth;
+
+	#if VERTEXCOLORS
+		o.VertexColors = f4VertexColor;
+	#endif
+
+	//==========================================================================//
+	//	Custom Code
+	//==========================================================================//
+
+
+
+	// Your Custom Code here
+
+
+
+	//==========================================================================//
+	//	Return the filled Struct
+	//==========================================================================//
+
+	return o;
+}

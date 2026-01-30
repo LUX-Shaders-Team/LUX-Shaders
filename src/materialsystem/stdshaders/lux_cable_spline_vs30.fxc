@@ -1,0 +1,161 @@
+//===================== File of the LUX Shader Project =====================//
+//
+//	Initial D.	:	31.08.2024 DMY
+//	Last Change :	 30.01.2026 DMY
+//
+//==========================================================================//
+
+//==========================================================================//
+//	Declare Static Combos
+//==========================================================================//
+//	STATIC:	"DEPTH_WRITE"				"0..1"
+
+//==========================================================================//
+//	Declare Dynamic Combos
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Skipping undesired Combos
+//	The Order of Static Combos and Skips has a drastic Impact on Compile Time!
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Constants, Functions, Includes
+//==========================================================================//
+
+// Include for all Vertex Shaders
+#include "lux_common_vs_fxc.h"
+
+// Spline Functions
+#include "lux_common_spline.h"
+
+const float4x3 g_f4x3ModelView			: register(LUX_VS_FLOAT_SET1_0);
+const float4x4 g_f4x4Proj				: register(LUX_VS_FLOAT_SET1_3);
+const float g_f1MinPixelSize			: register(LUX_VS_FLOAT_SET1_7);
+const float4 g_TexCoordTransform1[2]	: register(LUX_VS_TEXTURETRANSFORM_01);
+
+//==========================================================================//
+//	VS Input
+//==========================================================================//
+struct VS_INPUT
+{
+    // This is all of the stuff that we ever use
+	float4 vColor           : COLOR;
+
+	// This is a bit undocumented, meaning this here is a bit of speculation on the math Part.
+	// X determines which Control Point this Vertex is ( and thus how far along the Spline )
+	// Y Is the UV.y
+	// Z Is the inverse of UV.x
+	float4 vParms           : POSITION;
+
+	float4 vSplinePart0		: TEXCOORD0; // WorldPos xyz, Radius of Spline at this Point - for first control point
+	float4 vSplinePart1		: TEXCOORD1; // WorldPos xyz, Radius of Spline at this Point - for second control point
+	float4 vSplinePart2		: TEXCOORD2; // WorldPos xyz, Radius of Spline at this Point - for third control point
+	float4 vSplinePart3		: TEXCOORD3; // WorldPos xyz, Radius of Spline at this Point - for fourth control point
+};
+
+//==========================================================================//
+//	VS Output
+//==========================================================================//
+struct VS_OUTPUT
+{
+    float4 ProjPosSetup				:	POSITION; 
+
+#if !DEPTH_WRITE
+	float4	WorldPos_ProjPosZ		:	TEXCOORD0;
+	float4	VertexLighting			:	TEXCOORD1;
+	float4	TexCoords				:	TEXCOORD2;
+#endif
+};
+
+//==========================================================================//
+//	VS Entry Point
+//==========================================================================//
+VS_OUTPUT main( const VS_INPUT v )
+{
+	VS_OUTPUT o = ( VS_OUTPUT )0;
+
+	// xyz contains the Position of this segment in WS, .w has a WS-Diameter
+	float4 f4SegmentPos = CatmullRomSpline(v.vSplinePart0, v.vSplinePart1, v.vSplinePart2, v.vSplinePart3, v.vParms.x);
+
+	// For easier readbility :
+	float f1SegmentRadx2 = f4SegmentPos.w;
+
+	// "calculate projected position here so that we can figure out how much to bloat the diameter
+	// to avoid aliasing of the sort where you skip pixels in a segment."
+	if (0)
+	{
+		// "PERF FIXME!!  This could be simplified quite a bit if this ever becomes a bottleneck.  I feel dirty.
+		// Get the view-space position for two points that are posrad.w units away from each other horizontally."
+        float3 f3ViewPos1 = mul4x3(float4(f4SegmentPos.xyz, 1.0f),  g_f4x3ModelView); // Assumption : Local to Global Coordinates
+		float3 f3ViewPos2 = f3ViewPos1 + float3(f1SegmentRadx2, 0.0f, 0.0f); // Diameter unchanged as Distance should be the same 
+
+		// Project both points.
+		// ( Scale them into Screen Space )
+        float4 f4ProjectedPos1 = mul(float4(f3ViewPos1, 1.0f), g_f4x4Proj);
+        float4 f4ProjectedPos2 = mul(float4(f3ViewPos2, 1.0f), g_f4x4Proj);
+
+		// "Get the distance of the two points from each other in normalized screen space.
+		// This is working on the horizontal of the Screen, utilising the perspective divide
+		float f1ProjectedDiameterInPixels = abs((f4ProjectedPos1.x / f4ProjectedPos1.w) - (f4ProjectedPos2.x / f4ProjectedPos2.w));
+
+		// "Compare the distance between the two points to the minimum allowed to keep from skipping pixels and causing aliasing."
+		// ShiroDkxtro2: Shouldn't this be under a Static? Its only really required when AA is off..
+		// When AA is on, MinPixelSize is 0, Assuming the compiler is somewhat smart,
+		// without the abs() above, it should throw a warning. as f1ProjectedDiameterInPixels could be negative
+		// And thus lower than 0, whicn in this conditional statement would cause 0/-x 
+		if (f1ProjectedDiameterInPixels < g_f1MinPixelSize.x)
+		{
+			// Scale the radius in world space so that it is bigger than the required pixel size in screen space.
+            f1SegmentRadx2 *= (g_f1MinPixelSize / f1ProjectedDiameterInPixels);
+        }
+	}
+
+	// Screen Aligned
+	// Incident Vector
+    float3 f3ViewDir = f4SegmentPos.xyz - g_f3EyePos;
+	float3 f3Tangent = DCatmullRomSpline3(v.vSplinePart0.xyz, v.vSplinePart1.xyz, v.vSplinePart2.xyz, v.vSplinePart3.xyz, v.vParms.x);
+
+	// It is unclear to me what the ofs is supposed to mean.
+	// Up Vector?
+	float3 f3ofs = normalize(cross(f3ViewDir, normalize(f3Tangent)));
+
+	// v.vParams.z is how far along the UV.x this part of the Rope is.
+	// I assume what this does here, is move the Vertex outwards from the Center of the Rope
+	// If UV.x is 0..1, the 0.5f would cause negative Values to move to one side ( Depending on the Up Vector )
+	// and positive Values to move to the opposing Side of that.
+	// World Position = SegmentPos + Up Vector * Radius * (? - 0.5f)
+	float3 f3WorldPos = f4SegmentPos.xyz + (f3ofs * f1SegmentRadx2 * (v.vParms.z - 0.5f));
+
+	//==========================================================================//
+	// VS Output
+	//==========================================================================//
+
+	// POSITION	
+	float4 f4ProjPos = mul(float4(f3WorldPos, 1.0f), cViewProj);
+	o.ProjPosSetup = FixHPO(f4ProjPos); // Apply Half-Pixel Offset Fix
+	
+	// Beyond this Point, nothing for DepthWrites
+#if !DEPTH_WRITE
+
+	// TEXCOORD0
+	o.WorldPos_ProjPosZ.xyz = f3WorldPos;
+	o.WorldPos_ProjPosZ.w = dot(float4(f3WorldPos, 1.0f), cViewProjZ);
+
+	// Stuffing 1.0f into .zw so all Components of the TexCoord Transform influence the UV
+	float4 f4UV = float4(1.0f - v.vParms.z, v.vParms.y, 1.0f, 1.0f);
+	
+	// TEXCOORD1
+	o.TexCoords.x = dot(f4UV, g_TexCoordTransform1[0]);
+	o.TexCoords.y = dot(f4UV, g_TexCoordTransform1[1]);
+	o.TexCoords.z = o.TexCoords.x;
+	o.TexCoords.w = o.TexCoords.y;
+
+	// TEXCOORD2
+	o.VertexLighting = v.vColor;
+#endif
+
+    return o;
+}

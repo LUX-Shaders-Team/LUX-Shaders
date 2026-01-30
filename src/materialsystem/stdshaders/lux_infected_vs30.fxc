@@ -1,0 +1,271 @@
+//===================== File of the LUX Shader Project =====================//
+//
+//	Initial D.	:	06.08.2025 DMY
+//	Last Change :	 30.01.2026 DMY
+//
+//==========================================================================//
+
+//==========================================================================//
+//	Declare Static Combos
+//==========================================================================//
+//	STATIC: "PROJTEX"					"0..1"
+//  STATIC: "DETAILTEXTURE_UV"			"0..1"
+//	STATIC: "VERTEXCOLORS"				"0..1"
+
+//==========================================================================//
+//	Declare Dynamic Combos
+//==========================================================================//
+//	DYNAMIC: "ELLIPSOIDCULLING"			"0..3"
+//	DYNAMIC: "COMPRESSION"				"0..1"
+//  DYNAMIC: "SKINNING"                 "0..1"
+
+//==========================================================================//
+//	Skipping undesired Combos
+//	The Order of Static Combos and Skips has a drastic Impact on Compile Time!
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Constants, Functions, Includes
+//==========================================================================//
+
+// Include for all Vertex Shaders
+#include "lux_common_vs_fxc.h"
+
+// Model Specific Functions
+#include "lux_common_vs_model.h"
+
+const float4 g_BaseTexCoordTransform[2]		: register(LUX_VS_TEXTURETRANSFORM_01);
+const float4 g_DetailTexCoordTransform[2]	: register(LUX_VS_TEXTURETRANSFORM_02);
+
+// Ellipsoid Data for Culling
+#if (ELLIPSOIDCULLING == 1 || ELLIPSOIDCULLING == 3)
+	const float4 cEllipsoid1_Data1					: register(LUX_VS_FLOAT_SET1_0);
+	const float4 cEllipsoid1_Data2					: register(LUX_VS_FLOAT_SET1_1);
+	const float4 cEllipsoid1_Data3					: register(LUX_VS_FLOAT_SET1_2);
+	const float4 cEllipsoid1_Data4					: register(LUX_VS_FLOAT_SET1_3);
+	#define g_f3Ellipsoid1_Center		(cEllipsoid1_Data1.xyz)
+	#define g_f3Ellipsoid1_Right		(cEllipsoid1_Data2.xyz)
+	#define g_f3Ellipsoid1_Up			(cEllipsoid1_Data3.xyz)
+	#define g_f3Ellipsoid1_Forward		(cEllipsoid1_Data4.xyz)
+#endif
+
+#if (ELLIPSOIDCULLING == 2 || ELLIPSOIDCULLING == 3)
+	const float4 cEllipsoid2_Data1					: register(LUX_VS_FLOAT_SET1_4);
+	const float4 cEllipsoid2_Data2					: register(LUX_VS_FLOAT_SET1_5);
+	const float4 cEllipsoid2_Data3					: register(LUX_VS_FLOAT_SET1_6);
+	const float4 cEllipsoid2_Data4					: register(LUX_VS_FLOAT_SET1_7);
+	#define g_f3Ellipsoid2_Center			(cEllipsoid2_Data1.xyz)
+	#define g_f3Ellipsoid2_Right			(cEllipsoid2_Data2.xyz)
+	#define g_f3Ellipsoid2_Up				(cEllipsoid2_Data3.xyz)
+	#define g_f3Ellipsoid2_Forward			(cEllipsoid2_Data4.xyz)
+#endif
+
+//==========================================================================//
+//	VS Input
+//==========================================================================//
+struct VS_INPUT
+{
+    float4 vPos                     : POSITION;
+	float4 vBoneWeights             : BLENDWEIGHT;
+	float4 vBoneIndices             : BLENDINDICES;
+    float4 vNormal                  : NORMAL;
+	float4 vTangent					: TANGENT;
+    float2 vTexCoord0               : TEXCOORD0;
+	float4 vColor                   : COLOR0;
+	float3 vSpecular				: COLOR1;
+
+	// Position and normal/tangent deltas
+	float4 vPosFlex					: POSITION1;
+	float4 vNormalFlex				: NORMAL1;
+};
+
+//==========================================================================//
+//	VS Output
+//==========================================================================//
+struct VS_OUTPUT
+{
+	float4 ProjPosSetup			: POSITION;
+	float4 WorldPos_ProjPosZ	: TEXCOORD0;
+
+#if DETAILTEXTURE_UV
+	float4 TexCoords			: TEXCOORD1;
+#else
+	float2 TexCoords			: TEXCOORD1;
+#endif
+
+	float4 CullingUVs			: TEXCOORD2;
+	float2 CullingFactors		: TEXCOORD3; // .x Ellipsoid1, .y Ellipsoid2
+
+#if !PROJTEX
+	float4 LightAtten			: TEXCOORD4;
+#endif
+
+#if VERTEXCOLORS
+	float3 VertexColors			: COLOR0;
+#endif
+
+	float3 Tangent				: TANGENT;
+	float3 Binormal				: BINORMAL;	
+	float3 Normal				: NORMAL;
+};
+
+//==========================================================================//
+//	VS Entry Point
+//==========================================================================//
+VS_OUTPUT main( const VS_INPUT v )
+{
+	VS_OUTPUT o = ( VS_OUTPUT )0;
+
+	//==========================================================================//
+	//	Get the basic Vertex Shader Inputs
+	//==========================================================================//
+
+	// Input normal is actually compressed, we need to decompress it
+	// Tangents are also compressed onto the Normal
+	// Brushes use TangentS and TangentT Vertex Inputs, Models don't.
+	float3 vNormal;
+	float4 vTangent_Binormal;
+	DecompressVertexNormal(v.vNormal, v.vTangent, vNormal, vTangent_Binormal);
+
+	// Vertex Position is simply Input Pos
+	float3 f3ObjectPos = v.vPos.xyz;
+
+	//==========================================================================//
+	// Culling.
+	// Adapted from https://alex.vlachos.com/graphics/Vlachos-GDC10-Left4Dead2Wounds.pdf
+	// This has to happen before Skinning according to the Variable Names used there
+	// To avoid Morphing I put it in Front of that too.
+	//==========================================================================//
+
+	// TEXCOORD2, TEXCOORD3
+	#if (ELLIPSOIDCULLING > 0)
+
+		// Forward Declarations
+		float3 vLocalPosition;
+		float3 vEllipsoidPosition;
+
+		// First Ellipsoid
+		// Dyn 1 and 3 are for Ellipsoid1
+		#if (ELLIPSOIDCULLING != 2)
+
+			// "Subtract off ellipsoid center"
+			vLocalPosition = f3ObjectPos - g_f3Ellipsoid1_Center;
+
+			// "Apply rotation and ellipsoid scale. Ellipsoid basis is the orthonormal basis
+			// of the ellipsoid divided by the per-axis ellipsoid size."
+			vEllipsoidPosition.x = dot(g_f3Ellipsoid1_Right,	vLocalPosition);
+			vEllipsoidPosition.y = dot(g_f3Ellipsoid1_Up,		vLocalPosition);
+			vEllipsoidPosition.z = dot(g_f3Ellipsoid1_Forward,	vLocalPosition);
+
+			// "Use the length of the position in ellipsoid space as input to texkill/clip"
+			// ShiroDkxtro2: The Values this spit out didn't make a lot of sense.
+			// They would be 0.0f near the center and 1.0f further away
+			// I flipped it here and then saturate. That gives me the same Results as the GDC Talk
+			o.CullingFactors.x = saturate(1.0f - length(vEllipsoidPosition));
+
+			// "We use the xy of the position in ellipsoid space as the texture uv"
+			o.CullingUVs.xy = vEllipsoidPosition.xy;
+
+		#endif
+
+		// Second Ellipsoid
+		// Dyn 2 and 3 are for Ellipsoid1
+		#if (ELLIPSOIDCULLING != 1)
+
+			// "Subtract off ellipsoid center"
+			vLocalPosition = f3ObjectPos - g_f3Ellipsoid2_Center;
+
+			// "Apply rotation and ellipsoid scale. Ellipsoid basis is the orthonormal basis
+			// of the ellipsoid divided by the per-axis ellipsoid size."
+			vEllipsoidPosition.x = dot(g_f3Ellipsoid2_Right,	vLocalPosition);
+			vEllipsoidPosition.y = dot(g_f3Ellipsoid2_Up,		vLocalPosition);
+			vEllipsoidPosition.z = dot(g_f3Ellipsoid2_Forward,	vLocalPosition);
+
+			// "Use the length of the position in ellipsoid space as input to texkill/clip"
+			// ShiroDkxtro2: The Values this spit out didn't make a lot of sense.
+			// They would be 0.0f near the center and 1.0f further away
+			// I flipped it here and then saturate. That gives me the same Results as the GDC Talk
+			o.CullingFactors.y = saturate(1.0f - length(vEllipsoidPosition));
+
+			// "We use the xy of the position in ellipsoid space as the texture uv"
+			o.CullingUVs.zw = vEllipsoidPosition.xy;
+
+		#endif
+	#endif
+
+	//==========================================================================//
+	//	Handle Morphing
+	//==========================================================================//
+
+	// Do Infected Models even have Face-Flexes? This might be unnecessary.
+	ApplyMorph( v.vPosFlex, v.vNormalFlex, f3ObjectPos, vNormal, vTangent_Binormal.xyz );
+	
+	//==========================================================================//
+	// Handle Rotations and Offsets
+	// Also directly work on Tangents
+	//==========================================================================//
+
+	float3 f3WorldTangent, f3WorldBinormal;
+	float3 f3WorldNormal, f3WorldPos;
+	AlignVertexInputs(SKINNING, float4(f3ObjectPos, 1.0f), vNormal, vTangent_Binormal, v.vBoneWeights, v.vBoneIndices,
+			f3WorldPos, f3WorldNormal, f3WorldTangent, f3WorldBinormal);
+
+	// TANGENT, BINORMAL, NORMAL
+	o.Tangent = f3WorldTangent;
+	o.Binormal = f3WorldBinormal;
+	o.Normal = f3WorldNormal;
+	
+	//==========================================================================//
+	// Setup ClipSpace
+	//==========================================================================//
+
+	// POSITION	
+	float4 f4ProjPos = mul(float4(f3WorldPos, 1.0f), cViewProj);
+	o.ProjPosSetup = (f4ProjPos); // Apply Half-Pixel Offset Fix
+
+	// TEXCOORD0
+	// Set WorldPos and compute Depth
+	o.WorldPos_ProjPosZ.xyz = f3WorldPos;
+	o.WorldPos_ProjPosZ.w = dot(float4(f3WorldPos, 1.0f), cViewProjZ);
+	
+	//==========================================================================//
+	// Calculations for UV's and their Transforms.
+	//==========================================================================//
+
+	// Force filled UV for dot
+	float4 UV = float4(v.vTexCoord0, 1.0f, 1.0f);
+
+	// TEXCOORD1
+    o.TexCoords.x = dot(UV, g_BaseTexCoordTransform[0]);
+	o.TexCoords.y = dot(UV, g_BaseTexCoordTransform[1]);
+	
+	// DetailTexture Coordinate Transform
+	#if DETAILTEXTURE_UV
+		o.TexCoords.z = dot(UV, g_DetailTexCoordTransform[0]);
+		o.TexCoords.w = dot(UV, g_DetailTexCoordTransform[1]);
+	#endif
+
+	//==========================================================================//
+	// Lighting
+	//==========================================================================//
+
+	// TEXCOORD4
+	#if !PROJTEX
+		o.LightAtten.x = ComputeLightAttenuation(f3WorldPos, 0);
+		o.LightAtten.y = ComputeLightAttenuation(f3WorldPos, 1);
+		o.LightAtten.z = ComputeLightAttenuation(f3WorldPos, 2);
+		o.LightAtten.w = ComputeLightAttenuation(f3WorldPos, 3);
+	#endif
+
+	//==========================================================================//
+	// Hammer Texture Shaded Polygons Support
+	//==========================================================================//
+
+	// COLOR0
+	#if VERTEXCOLORS
+		o.VertexColors = v.vColor.rgb;
+	#endif
+
+    return o;
+}

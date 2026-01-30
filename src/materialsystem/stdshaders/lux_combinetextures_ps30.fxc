@@ -1,0 +1,145 @@
+//===================== File of the LUX Shader Project =====================//
+//
+//	Initial D.	:	16.07.2025 DMY
+//	Last Change :	 30.01.2026 DMY
+//
+//==========================================================================//
+
+//==========================================================================//
+//	Declare Static Combos
+//==========================================================================//
+// STATIC:	"TEXTURES"		"0..14"
+
+//==========================================================================//
+//	Declare Dynamic Combos
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Skipping undesired Combos
+//	The Order of Static Combos and Skips has a drastic Impact on Compile Time!
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Common Definitions
+//==========================================================================//
+
+//#define TONEMAP_SCALE_NONE
+#define TONEMAP_SCALE_LINEAR
+//#define TONEMAP_SCALE_GAMMA
+
+//==========================================================================//
+//	Constants, Functions, Includes
+//==========================================================================//
+
+// Include for all Pixel Shaders
+#include "lux_common_ps_fxc.h"
+
+// Tint on this Constant for simplicity
+const float4 g_f4Modulation : register(c0);
+
+// I.. I don't think we can do Sampler Arrays(?)
+// I'm not going to find out, so this will be manually unrolled..
+#define Sampler_Texture0	(Sampler_BaseTexture)
+sampler Sampler_Texture1	: register(s1);
+sampler Sampler_Texture2	: register(s2);
+sampler Sampler_Texture3	: register(s3);
+sampler Sampler_Texture4	: register(s4);
+sampler Sampler_Texture5	: register(s5);
+sampler Sampler_Texture6	: register(s6);
+sampler Sampler_Texture7	: register(s7);
+sampler Sampler_Texture8	: register(s8);
+sampler Sampler_Texture9	: register(s9);
+sampler Sampler_Texture10	: register(s10);
+sampler Sampler_Texture11	: register(s11);
+sampler Sampler_Texture12	: register(s12);
+sampler Sampler_Texture13	: register(s13);
+sampler Sampler_Texture14	: register(s14);
+
+//==========================================================================//
+//	PS Input
+//==========================================================================//
+struct PS_INPUT
+{
+	float4	WorldPos_ProjPosZ		:	TEXCOORD0;
+	float4	TexCoords[7]			:	TEXCOORD1;
+};
+ 
+//==========================================================================//
+//	PS Entry Point
+//==========================================================================//
+float4 main(PS_INPUT i) : COLOR
+{
+	// .xyz's in case we need to pack something later
+	float3 f3WorldPos		= i.WorldPos_ProjPosZ.xyz;
+	float  f1Depth			= i.WorldPos_ProjPosZ.w;
+
+	float4 Result = 1.0f;
+	
+	// Manually unrolling this
+	// If someone wants to give Sampler Array a Shot they can try and optimise this!
+	#if (TEXTURES > 0)
+		Result *= tex2D(Sampler_Texture0, i.TexCoords[0].xy); // s0
+	#endif
+
+	#if (TEXTURES > 1)
+		Result *= tex2D(Sampler_Texture1, i.TexCoords[0].zw); // s1
+	#endif
+
+	#if (TEXTURES > 2)
+		Result *= tex2D(Sampler_Texture2, i.TexCoords[1].xy); // s2
+	#endif
+
+	#if (TEXTURES > 3)
+		Result *= tex2D(Sampler_Texture3, i.TexCoords[1].zw); // s3
+	#endif
+
+	#if (TEXTURES > 4)
+		Result *= tex2D(Sampler_Texture4, i.TexCoords[2].xy); // s4
+	#endif
+
+	#if (TEXTURES > 5)
+		Result *= tex2D(Sampler_Texture5, i.TexCoords[2].zw); // s5
+	#endif
+
+	#if (TEXTURES > 6)
+		Result *= tex2D(Sampler_Texture6, i.TexCoords[3].xy); // s6
+	#endif
+
+	#if (TEXTURES > 7)
+		Result *= tex2D(Sampler_Texture7, i.TexCoords[3].zw); // s7
+	#endif
+
+	#if (TEXTURES > 8)
+		Result *= tex2D(Sampler_Texture8, i.TexCoords[4].xy); // s8
+	#endif
+
+	#if (TEXTURES > 9)
+		Result *= tex2D(Sampler_Texture9, i.TexCoords[4].zw); // s9
+	#endif
+
+	#if (TEXTURES > 10)
+		Result *= tex2D(Sampler_Texture10, i.TexCoords[5].xy); // s10
+	#endif
+
+	#if (TEXTURES > 11)
+		Result *= tex2D(Sampler_Texture11, i.TexCoords[5].zw); // s11
+	#endif
+
+	#if (TEXTURES > 12)
+		Result *= tex2D(Sampler_Texture12, i.TexCoords[6].xy); // s12
+	#endif
+
+	#if (TEXTURES > 13)
+		Result *= tex2D(Sampler_Texture13, i.TexCoords[6].zw); // s13
+	#endif
+
+	// Keeping a Sampler free here in case it might be needed later
+	// Cubemap Fog or whatever
+
+	// GetAlpha() handled via .w
+    Result *= g_f4Modulation;
+
+	return LUX_Finalise(Result, f3WorldPos, f1Depth);
+}

@@ -1,0 +1,191 @@
+//===================== File of the LUX Shader Project =====================//
+//
+//	Initial D.	:	03.12.2024 DMY
+//	Last Change :	 30.01.2026 DMY
+//
+//==========================================================================//
+
+//==========================================================================//
+//	Declare Static Combos
+//==========================================================================//
+//	STATIC: "LIGHTMAP_UV"				"0..1"
+//	STATIC:	"TEXCOORDS"					"0..3"
+//	STATIC:	"VERTEXCOLORS"				"0..1"
+
+//==========================================================================//
+//	Declare Dynamic Combos
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Skipping undesired Combos
+//	The Order of Static Combos and Skips has a drastic Impact on Compile Time!
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Constants, Functions, Includes
+//==========================================================================//
+
+// Include for all Vertex Shaders
+#include "lux_common_vs_fxc.h"
+
+// Brush specific Functions
+#include "lux_common_vs_brush.h"
+
+const float4 g_TexCoordTransform1[2] : register(LUX_VS_TEXTURETRANSFORM_01);
+const float4 g_TexCoordTransform2[2] : register(LUX_VS_TEXTURETRANSFORM_02);
+const float4 g_TexCoordTransform3[2] : register(LUX_VS_TEXTURETRANSFORM_03);
+const float4 g_TexCoordTransform4[2] : register(LUX_VS_TEXTURETRANSFORM_04);
+
+//==========================================================================//
+//	VS Input
+//==========================================================================//
+struct VS_INPUT
+{
+    float4 vPos                     : POSITION;
+	float3 vTangentS				: TANGENT;
+	float3 vTangentT				: BINORMAL;
+    float4 vNormal                  : NORMAL;
+    float2 vTexCoord0               : TEXCOORD0; // Texture UV
+    float4 vLightmapTexCoord        : TEXCOORD1; // Lightmap UV
+    float4 vLightmapTexCoordOffset  : TEXCOORD2; // Offset to Bumped Lightmap 1
+	float4 vColor                   : COLOR0;	 // Per-Vertex Colors
+};
+
+//==========================================================================//
+//	VS Output
+//==========================================================================//
+struct VS_OUTPUT
+{
+    float4 ProjPosSetup					: POSITION;
+	float4 WorldPos_ProjPosZ			: TEXCOORD0;
+	float4 TexCoords1					: TEXCOORD1;
+	float4 TexCoords2					: TEXCOORD2;
+	float4 ReflectRefractTexCoord		: TEXCOORD3;
+	float  ProjPosW						: TEXCOORD4;
+
+	#if LIGHTMAP_UV
+		float4 LightmapTexCoord			: TEXCOORD5; // Two more floats could be packed here
+		float4 LightmapTexCoord2And3	: TEXCOORD6;
+	#endif
+
+	#if VERTEXCOLORS
+		float3 VertexColor				: COLOR0;
+	#endif
+
+	float3 Normal						: NORMAL;
+};
+
+//==========================================================================//
+//	VS Entry Point
+//==========================================================================//
+VS_OUTPUT main( const VS_INPUT v )
+{
+	VS_OUTPUT o = ( VS_OUTPUT )0;
+	
+	//==========================================================================//
+	//	Handle Decompression
+	//==========================================================================//
+	float3 f3ObjectNormal;
+	DecompressVertexNormal(v.vNormal, f3ObjectNormal);
+
+	// Variable needed for Offset and Rotation
+	float3 f3ObjectPosition = v.vPos.xyz;
+	
+	//==========================================================================//
+	//	Handle Rotations and Offsets
+	//==========================================================================//
+
+	// "SKINNING"
+    float3 f3WorldPos, f3WorldNormal;
+    AlignInputWithOffset(f3ObjectPosition, f3WorldPos);
+    AlignInputWithoutOffset(f3ObjectNormal, f3WorldNormal);
+
+	//==========================================================================//
+	//	VS Output
+	//==========================================================================//
+	
+	// POSITION	
+	// Clip Space
+	float4 f4ProjPos = mul(float4(f3WorldPos, 1.0f), cViewProj);
+	f4ProjPos = FixHPO(f4ProjPos); // Apply Half-Pixel Offset Fix
+	o.ProjPosSetup = f4ProjPos;
+
+	// TEXCOORD0
+	o.WorldPos_ProjPosZ.xyz = f3WorldPos;
+	o.WorldPos_ProjPosZ.w = dot(float4(f3WorldPos, 1.0f), cViewProjZ);
+
+	// Stuffing 1.0f into .zw so all Components of the TexCoord Transform influence the UV
+	float4 f4UnmodifiedTexCoord = float4(v.vTexCoord0.xy, 1.0f, 1.0f);
+
+	// TEXCOORD1
+	#if (TEXCOORD >= 0)
+		// Always one Texture	
+		o.TexCoords1.x = dot(f4UnmodifiedTexCoord, g_TexCoordTransform1[0]);
+		o.TexCoords1.y = dot(f4UnmodifiedTexCoord, g_TexCoordTransform1[1]);
+
+		#if (TEXCOORDS >= 1)
+			o.TexCoords1.z = dot(f4UnmodifiedTexCoord, g_TexCoordTransform2[0]);
+			o.TexCoords1.w = dot(f4UnmodifiedTexCoord, g_TexCoordTransform2[1]);
+		#endif
+	#endif
+
+	// TEXCOORD2
+	#if (TEXCOORDS >= 2)
+		o.TexCoords2.x = dot(f4UnmodifiedTexCoord, g_TexCoordTransform3[0]);
+		o.TexCoords2.y = dot(f4UnmodifiedTexCoord, g_TexCoordTransform3[1]);
+
+		#if (TEXCOORDS >= 3)
+			o.TexCoords2.z = dot(f4UnmodifiedTexCoord, g_TexCoordTransform4[0]);
+			o.TexCoords2.w = dot(f4UnmodifiedTexCoord, g_TexCoordTransform4[1]);
+		#endif
+	#endif
+
+	// TEXCOORD3
+	// "Map projected position to the reflection texture"
+	// "Map projected position to the refraction texture"
+	// -ASW
+	// Presumably this whole Thing was stitched together from the Water Shader Code
+	// What's interesting is that ReflectX and Y are flipped here. Why?
+	// Is the Texture flipped horizontally and vertically?
+	// Pretty much Stock Code otherwise, except no swizzel for xyyx. Just doing xyxy
+	float2 f2ReflectPos;
+	f2ReflectPos.x = -f4ProjPos.x;
+	f2ReflectPos.y = -f4ProjPos.y;
+	f2ReflectPos = ( f2ReflectPos + f4ProjPos.ww ) * 0.5f;
+
+	float2 f2RefractPos;
+	f2RefractPos.x = f4ProjPos.x;
+	f2RefractPos.y = -f4ProjPos.y; // invert Y
+	f2RefractPos = ( f2RefractPos + f4ProjPos.ww ) * 0.5f;
+	o.ReflectRefractTexCoord = float4(f2ReflectPos, f2RefractPos);
+
+	// TEXCOORD4
+	o.ProjPosW = f4ProjPos.w;
+
+	// TEXCOORD5, TEXCOORD6
+	#if LIGHTMAP_UV
+		// Lightmap Array Constructed as such :
+		// +---+---+---+---+
+		// | 1 | 2 | 3 | 4 |
+		// +---+---+---+---+
+		// 1. Intensity of: ( All Dirs.  ) = vLightmapTexCoord
+		// 2. Intensity of: ( +x, --, +z ) = + vLightmapTexCoordOffset
+		// 3. Intensity of: ( -x, +y, +z ) = + vLightmapTexCoordOffset
+		// 4. Intensity of: ( -x, -y, +z ) = + vLightmapTexCoordOffset
+		o.LightmapTexCoord.xy = v.vLightmapTexCoord.xy + v.vLightmapTexCoordOffset.xy;
+		o.LightmapTexCoord2And3.xy = o.LightmapTexCoord.xy + v.vLightmapTexCoordOffset.xy;
+		o.LightmapTexCoord2And3.zw = o.LightmapTexCoord2And3.xy + v.vLightmapTexCoordOffset.xy;
+	#endif
+
+	// COLOR0
+	#if VERTEXCOLORS
+		o.VertexColor = v.vColor.rgb;
+	#endif
+	
+	// NORMAL
+	o.Normal = f3WorldNormal;
+
+    return o;
+}

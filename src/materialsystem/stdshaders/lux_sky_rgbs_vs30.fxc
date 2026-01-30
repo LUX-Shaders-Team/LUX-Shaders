@@ -1,0 +1,157 @@
+//===================== File of the LUX Shader Project =====================//
+//
+//	Initial D.	:	25.03.2025 DMY
+//	Last Change :	 30.01.2026 DMY
+//
+//==========================================================================//
+
+//==========================================================================//
+//	Declare Static Combos
+//==========================================================================//
+//	STATIC:		"USEMODELMATRIX"		"0..1"
+
+//==========================================================================//
+//	Declare Dynamic Combos
+//==========================================================================//
+//	DYNAMIC:	"FILTER"				"0..2"
+
+//==========================================================================//
+//	Skipping undesired Combos
+//	The Order of Static Combos and Skips has a drastic Impact on Compile Time!
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Constants, Functions, Includes
+//==========================================================================//
+
+// Include for all Vertex Shaders
+#include "lux_common_vs_fxc.h"
+
+// Brush specific Functions
+#include "lux_common_vs_brush.h"
+
+const float4 g_BaseTexCoordTransform[2]		: register(c223); // 223 & 224
+
+const float4 cTextureData					: register(c225);
+
+// FIXME: Unused Filter constants, what does bicubic do here anyways?
+#if (FILTER == 1)
+#include "lux_common_bicubic.h"
+
+#define g_f2TexelScaleUp (cTextureData.xy)
+#define g_f2TexelScaleDown (cTextureData.zw)
+#elif (FILTER == 0)
+
+// Stock-Consistency
+#define TEXEL_XINCR (cTextureData.x)
+#define TEXEL_YINCR (cTextureData.y)
+#define U_TO_PIXEL_COORD_SCALE (cTextureData.z)
+#define V_TO_PIXEL_COORD_SCALE (cTextureData.w)
+#endif
+
+//==========================================================================//
+//	VS Input
+//==========================================================================//
+struct VS_INPUT
+{
+    // This is all of the stuff that we ever use, or can use for that matter
+    float4 vPos                     : POSITION;
+	float4 vBoneWeights             : BLENDWEIGHT;
+	float4 vBoneIndices             : BLENDINDICES;
+	float3 vTangentS				: TANGENT;		// Tangent
+	float3 vTangentT				: BINORMAL;		// Binormal
+    float4 vNormal                  : NORMAL;		// WorldNormal
+    float2 vTexCoord0               : TEXCOORD0;	// Texture UV
+    float4 vLightmapTexCoord        : TEXCOORD1;	// Lightmap UV
+    float4 vLightmapTexCoordOffset  : TEXCOORD2;	// Offset to Bumped Lightmap 1
+	float4 vColor                   : COLOR0;		// Vertex Colors, if they exist
+//	float3 vSpecular : COLOR1;
+};
+
+//==========================================================================//
+//	VS Output
+//==========================================================================//
+struct VS_OUTPUT
+{
+    float4 ProjPosSetup			:	POSITION;
+
+	#if (FILTER == 0)
+	    float4 TexCoords1		: TEXCOORD0;
+		float4 TexCoords2		: TEXCOORD1;
+		float4 TexCoordsExtra	: TEXCOORD2;
+	#else
+		float2 TexCoord			: TEXCOORD0;
+	#endif
+};
+
+//==========================================================================//
+//	VS Entry Point
+//==========================================================================//
+VS_OUTPUT main( const VS_INPUT v )
+{
+	VS_OUTPUT o = ( VS_OUTPUT )0;
+
+	// Not actually Compressed on Brushes, just keeping it consistent
+	float3 f3ObjectNormal;
+    DecompressVertexNormal(v.vNormal, f3ObjectNormal);
+
+	// Needed below
+    float3 f3ObjectPosition = v.vPos.xyz;
+	
+	// We know that on certain Geometry Types these Values come correct
+	// NOTE: When not using NORMALS it will automatically cut the fat here	
+	#if USEMODELMATRIX
+		// Adjust for Rotation and Translation
+		float3 f3WorldPos, f3WorldNormal;
+	    AlignInputWithOffset(f3ObjectPosition, f3WorldPos);
+	    AlignInputWithoutOffset(f3ObjectNormal, f3WorldNormal);
+	#else
+	    float3 f3WorldPos = f3ObjectPosition;
+	    float3 f3WorldNormal = f3ObjectNormal;
+	#endif
+	
+	// Transform into Projection Space ( Clip Space )
+	// This will flatten the geometrical position into a 2d plane
+	#if USEMODELMATRIX
+		float4 f4ProjPos = mul(float4(f3WorldPos, 1), cViewProj);
+	#else
+		float4 f4ProjPos = mul(float4(f3WorldPos, 1), cModelViewProj); // MVP Matrix instead, since WorldPos is just vPos
+	#endif
+    o.ProjPosSetup = FixHPO(f4ProjPos); // Apply Half-Pixel Offset Fix
+
+	// Stuffing 1.0f into .zw so all Components of the TexCoord Transform influence the UV
+	float4 f4UnmodifiedTexCoord = float4(v.vTexCoord0.xy, 1.0f, 1.0f);
+
+	float2 TexCoord;
+	TexCoord.x = dot(f4UnmodifiedTexCoord, g_BaseTexCoordTransform[0]);
+    TexCoord.y = dot(f4UnmodifiedTexCoord, g_BaseTexCoordTransform[1]);
+
+	#if (FILTER == 0) // Bilinear Filter
+
+		o.TexCoords1.x = TexCoord.x - TEXEL_XINCR;
+		o.TexCoords1.y = TexCoord.y - TEXEL_YINCR;
+		o.TexCoords1.z = TexCoord.x + TEXEL_XINCR;
+		o.TexCoords1.w = TexCoord.y - TEXEL_YINCR;
+
+		o.TexCoords2.x = TexCoord.x - TEXEL_XINCR;
+		o.TexCoords2.y = TexCoord.y + TEXEL_YINCR;
+		o.TexCoords2.z = TexCoord.x + TEXEL_XINCR;
+		o.TexCoords2.w = TexCoord.y + TEXEL_YINCR;
+
+		o.TexCoordsExtra.xy = o.TexCoords1.xy;
+		o.TexCoordsExtra.x *= U_TO_PIXEL_COORD_SCALE;
+		o.TexCoordsExtra.y *= V_TO_PIXEL_COORD_SCALE;
+
+	#elif (FILTER == 1) // Bicubic
+
+		o.TexCoord = TexCoord;
+
+	#else // No Filter
+
+		o.TexCoord = TexCoord;
+
+	#endif
+
+    return o;
+}

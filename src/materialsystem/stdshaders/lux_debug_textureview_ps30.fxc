@@ -1,0 +1,213 @@
+//===================== File of the LUX Shader Project =====================//
+//
+//	Initial D.	:	28.01.2026 DMY
+//	Last Change :	 30.01.2026 DMY
+//
+//==========================================================================//
+
+//==========================================================================//
+//	Declare Static Combos
+//==========================================================================//
+//	STATIC:		"SHOWALPHA"			"0..1"
+
+//==========================================================================//
+//	Declare Dynamic Combos
+//==========================================================================//
+//	DYNAMIC:	"CUBEMAPMODE"		"0..2"
+//	DYNAMIC:	"HDRTEXTUREMODE"	"0..2"
+
+//==========================================================================//
+//	Skipping undesired Combos
+//	The Order of Static Combos and Skips has a drastic Impact on Compile Time!
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Unpack Combos
+//==========================================================================//
+#if (CUBEMAPMODE > 0)
+	#define CUBEMAP 1
+	
+	#if (CUBEMAPMODE == 2)
+		#define CUBEMAP_AS_OCTAHEDRON 1
+	#else
+		#define CUBEMAP_AS_OCTAHEDRON 0
+	#endif
+#else
+	#define CUBEMAP 0
+	#define CUBEMAP_AS_OCTAHEDRON 0
+#endif
+
+#if (HDRTEXTUREMODE > 0)
+	#define HDRTEXTURE 1
+	
+	#if (HDRTEXTUREMODE == 2)
+		#define CONVERT_TO_GAMMA 1
+	#else
+		#define CONVERT_TO_GAMMA 0
+	#endif
+#else
+	#define HDRTEXTURE 0
+	#define CONVERT_TO_GAMMA 0
+#endif
+
+//==========================================================================//
+//	Common Definitions
+//==========================================================================//
+
+#define TONEMAP_SCALE_NONE
+//#define TONEMAP_SCALE_LINEAR
+//#define TONEMAP_SCALE_GAMMA
+
+// Don't need any of this
+#define NO_FOG
+#define NO_DEPTHTODESTALPHA
+#define NO_WATERFOGTODESTALPHA
+
+//==========================================================================//
+//	Constants, Functions, Includes
+//==========================================================================//
+
+// Include for all Pixel Shaders
+#include "lux_common_ps_fxc.h"
+
+// Branchless Variant of x >= 0.0f ? 1.0 f: -1.0f
+float2 SignNotZero(float2 x)
+{
+    return 1.0f - 2.0f * step(x, 0.0f);
+}
+
+// Adapted from, see also and credits to: https://jcgt.org/published/0003/02/01/
+float3 OctahedronToVec3(float2 uv)
+{
+    // Remap from [0,1] to [-1,1]
+    float2 f = uv * 2.0f - 1.0f;
+
+    // Flip y and compute preliminary direction
+    float3 dir = float3(f.x, f.y, 1.0f - abs(f.x) - abs(f.y));
+
+    // Reflect the lower hemisphere
+    if (dir.z < 0.0f)
+    {
+        float2 orig = dir.xy;
+        dir.xy = (1.0f - abs(orig.yx)) * (orig.xy >= 0.0f ? 1.0f : -1.0f);
+    }
+
+    return normalize(dir);
+}
+
+//==========================================================================//
+//	PS Input
+//==========================================================================//	
+struct PS_INPUT
+{
+	// lux_debug_textureview_vs30
+	// TexCoord1 for consistency with other Shaders
+	float2 TexCoords1			: TEXCOORD1;
+};
+ 
+//==========================================================================//
+//	PS Entry Point
+//==========================================================================//
+float4 main(PS_INPUT i) : COLOR
+{
+	//	Getting our PS_INPUT
+	//==========================================================================//
+
+	// TEXCOORD1
+	float2 f2TexCoord = i.TexCoords1;
+    float4 f4Result = float4(0.0f, 0.0f, 0.0f, 1.0f);
+	
+	//==========================================================================//
+	//	..
+	//==========================================================================//
+	#if !CUBEMAP
+		// Simple Lookup
+	    f4Result = tex2D(Sampler_BaseTexture, f2TexCoord);
+	#else
+		#if !CUBEMAP_AS_OCTAHEDRON
+			// Identically adapted from Stock Code
+			bool bNoDataForThisPixel = false;
+			float3 f3Dir = 0.0f;
+			
+			float2 f2FracTexCoord;
+			f2FracTexCoord.x = frac(f2TexCoord.x * 3.0f) * 2.0f - 1.0f;
+			f2FracTexCoord.y = frac(f2TexCoord.y * 4.0f) * 2.0f - 1.0f;
+			
+			// Center
+			if(f2TexCoord.x >= 0.3333f && f2TexCoord.x <= 0.6666f)
+			{
+				if(f2TexCoord.y >= 0.75f)
+				{
+					f3Dir = float3(f2FracTexCoord.x, 1.0f, f2FracTexCoord.y);
+				}
+				else if(f2TexCoord.y >= 0.5f)
+				{	
+					f3Dir = float3(f2FracTexCoord.x, f2FracTexCoord.y, -1.0f);
+				}
+				else if(f2TexCoord.y >= 0.25f)
+				{
+					f3Dir = float3(f2FracTexCoord.x, -1.0f, -f2FracTexCoord.y);
+				}
+				else if(f2TexCoord.y >= 0.0f)
+				{
+					f3Dir = float3(f2FracTexCoord.x, -f2FracTexCoord.y, 1.0f);	
+				}			
+			}
+			else if (f2TexCoord.y >= 0.25f && f2TexCoord.y <= 0.5f)
+			{
+				if (f2TexCoord.x <= 0.3333f)
+				{
+					f3Dir = float3(-1.0f, -f2FracTexCoord.x, -f2FracTexCoord.y);
+				}
+				else if (f2TexCoord.x >= 0.6666f)
+				{
+					f3Dir = float3(1.0f, f2FracTexCoord.x, -f2FracTexCoord.y);
+				}
+				else
+				{
+					bNoDataForThisPixel = true;
+				}
+			}
+			else
+			{
+				bNoDataForThisPixel = true;
+			}
+	
+			if(bNoDataForThisPixel)
+				f4Result = float4(0.9f, 0.4f, 0.15f, 1.0f);
+			else
+				f4Result = texCUBE(Sampler_BaseTexture, f3Dir);
+		#else
+			// Show as Octahedron
+			float3 f3Dir = OctahedronToVec3(f2TexCoord);
+			
+			f4Result = texCUBE(Sampler_BaseTexture, f3Dir);
+		#endif
+	#endif
+
+	//==========================================================================//
+	//	Results
+	//==========================================================================//
+
+	// Should Alpha really be modulated by HDR Factor?
+	#if SHOWALPHA
+		f4Result.rgb = f4Result.aaa;
+	#endif
+	
+	#if HDRTEXTURE
+
+		// 16.0f for HDR Textures, 1.0f for LDR
+		// NOTE: Not using ENV_MAP_SCALE, it entirely ignores LDR Custom Cubemaps on HDR Maps	
+		f4Result.rgb *= 16.0f;
+	
+		#if CONVERT_TO_GAMMA
+			// HDR Textures ( Like HDR Cubemaps ) come in LINEAR Values
+			// We MUST convert to GAMMA or they will look too dark.
+			// ( It's hard enough to see ANYTHING in mat_texture_list @4k )
+			f4Result.rgb = SrgbLinearToGamma(f4Result.rgb);
+		#endif
+	#endif
+		
+    return LUX_Finalise(f4Result);
+}

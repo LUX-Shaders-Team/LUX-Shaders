@@ -1,0 +1,189 @@
+//===================== File of the LUX Shader Project =====================//
+//
+//	Initial D.	:	~18.08.2024 DMY
+//	Last Change :	 30.01.2026 DMY
+//
+//==========================================================================//
+
+//==========================================================================//
+//	Declare Static Combos
+//==========================================================================//
+//	STATIC:	"TANGENTS"					"0..1"
+//	STATIC:	"HALFLAMBERT"				"0..1"
+
+//==========================================================================//
+//	Declare Dynamic Combos
+//==========================================================================//
+//	DYNAMIC:	"STATICPROPLIGHTING"		"0..1"
+//	DYNAMIC:	"DYNAMICPROPLIGHTING"		"0..1"
+//	DYNAMIC:	"SKINNING"					"0..1"
+//	DYNAMIC:	"COMPRESSION"				"0..1"
+
+//==========================================================================//
+//	Skipping undesired Combos
+//	The Order of Static Combos and Skips has a drastic Impact on Compile Time!
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Constants, Functions, Includes
+//==========================================================================//
+
+// Include for all Vertex Shaders
+#include "lux_common_vs_fxc.h"
+
+// Model specific Functions
+#include "lux_common_vs_model.h"
+
+const float4 cLighting		: register(LUX_VS_FLOAT_SET0_0);
+#define g_f3LightForward		(cLighting.xyz)
+#define g_f1IllumFactor			(cLighting.w)
+
+//==========================================================================//
+//	VS Input
+//==========================================================================//
+struct VS_INPUT
+{
+    // This is all of the stuff that we ever use
+    float4 vPos                     : POSITION;
+	float4 vBoneWeights             : BLENDWEIGHT;	//	Despite no bones,
+	float4 vBoneIndices             : BLENDINDICES; //	we use these in SkinPositionAndNormal()
+    float4 vNormal                  : NORMAL;
+	float4 vTangent					: TANGENT;
+    float2 vTexCoord0               : TEXCOORD0;
+    float4 vLightmapTexCoord        : TEXCOORD1;
+    float4 vLightmapTexCoordOffset  : TEXCOORD2;
+	float4 vColor                   : COLOR0;
+	float3 vSpecular				: COLOR1;
+	float4 vUserData				: TANGENT;
+
+	// Position and normal/tangent deltas
+	float4 vPosFlex					: POSITION1;
+	float4 vNormalFlex				: NORMAL1;
+
+	float vVertexID					: POSITION2;
+};
+
+//==========================================================================//
+//	VS Output
+//==========================================================================//
+struct VS_OUTPUT
+{
+    float4 ProjPosSetup			: POSITION; 
+	float4 WorldPos_ProjPosZ	: TEXCOORD0;
+
+#if TANGENTS
+    float3 BaseTexCoord			: TEXCOORD1;
+	float4 LightAtten			: TEXCOORD2;
+#else
+    float2 BaseTexCoord			: TEXCOORD1;
+	float4 VertexLighting		: TEXCOORD2;
+#endif
+
+#if TANGENTS
+	float3 Tangent				: TANGENT;
+	float3 Binormal				: BINORMAL;
+#endif
+	float3 Normal				: NORMAL;
+};
+
+//==========================================================================//
+//	VS Entry Point
+//==========================================================================//
+VS_OUTPUT main( const VS_INPUT v )
+{
+	VS_OUTPUT o = ( VS_OUTPUT )0;
+
+	//==========================================================================//
+	//	Handle Decompression
+	//==========================================================================//
+
+	float3 f3ObjectNormal;
+	#if TANGENTS
+		// Tangents are also compressed into the NORMAL Stream
+		// Compressed Verts get Normal, Tangent and Binormal Sign through the NORMAL Stream
+		// Uncompressed Verts get an Uncompressed NORMAL Stream,
+		// with Tangent and Binormal Sign on the TANGENT Stream
+		float4 f4ObjectTangents;
+		DecompressVertexNormal(v.vNormal, v.vTangent, f3ObjectNormal, f4ObjectTangents);
+	#else
+		DecompressVertexNormal(v.vNormal, f3ObjectNormal);
+	#endif
+
+	// Variable needed for Skinning and Morphing
+	float3 f3ObjectPosition = v.vPos.xyz;
+
+	//==========================================================================//
+	//	Handle Morphing
+	//==========================================================================//
+
+	#if TANGENTS
+		ApplyMorph( v.vPosFlex, v.vNormalFlex, f3ObjectPosition, f3ObjectNormal, f4ObjectTangents.xyz );
+	#else
+		ApplyMorph( v.vPosFlex, v.vNormalFlex, f3ObjectPosition, f3ObjectNormal );
+	#endif
+	
+	//==========================================================================//
+	//	Handle Rotations and Offsets
+	//==========================================================================//
+	
+	float3 f3WorldNormal, f3WorldPos;
+	#if TANGENTS
+		float3 f3WorldTangent, f3WorldBinormal;
+		AlignVertexInputs(SKINNING, float4(f3ObjectPosition, 1.0f), f3ObjectNormal, f4ObjectTangents,
+			v.vBoneWeights, v.vBoneIndices, f3WorldPos, f3WorldNormal, f3WorldTangent, f3WorldBinormal);
+	#else
+		AlignVertexInputs(SKINNING, float4(f3ObjectPosition, 1.0f), f3ObjectNormal,
+			v.vBoneWeights, v.vBoneIndices, f3WorldPos, f3WorldNormal);
+	#endif
+
+	//==========================================================================//
+	//	VS Output
+	//==========================================================================//
+
+	// POSITION	
+	float4 f4ProjPos = mul(float4(f3WorldPos, 1.0f), cViewProj);
+	o.ProjPosSetup = FixHPO(f4ProjPos); // Apply Half-Pixel Offset Fix
+	
+	// TEXCOORD0
+	// Set WorldPos and compute Depth
+	o.WorldPos_ProjPosZ.xyz = f3WorldPos;
+	o.WorldPos_ProjPosZ.w = dot(float4(f3WorldPos, 1), cViewProjZ);
+
+	// Stock Code
+    float f1IlluminationFactor = g_f1IllumFactor * saturate(dot(f3WorldNormal, g_f3LightForward));
+
+	#if TANGENTS
+		// TANGENT, BINORMAL, NORMAL
+		o.Tangent = f3WorldTangent;
+		o.Binormal = f3WorldBinormal;
+		o.Normal = f3WorldNormal;
+
+		// TEXCOORD4
+		// For Per-Pixel Lighting
+		o.LightAtten.x = ComputeLightAttenuation(f3WorldPos, 0);
+		o.LightAtten.y = ComputeLightAttenuation(f3WorldPos, 1);
+		o.LightAtten.z = ComputeLightAttenuation(f3WorldPos, 2);
+		o.LightAtten.w = ComputeLightAttenuation(f3WorldPos, 3);
+	
+		// TEXCOORD5
+		// No TexCoord Transform on this Shader
+		o.BaseTexCoord.xy = v.vTexCoord0.xy;
+		o.BaseTexCoord.z = f1IlluminationFactor;
+	#else
+		// NORMAL
+		o.Normal = f3WorldNormal;
+		
+		// TEXCOORD1
+    o.VertexLighting.xyz = ComputeVertexLighting(f3WorldPos, f3WorldNormal, v.vSpecular, STATICPROPLIGHTING, DYNAMICPROPLIGHTING, g_bHalfLambert);
+
+		// "Darken by forward dot normal and illumination factor"
+		o.VertexLighting.xyz *= f1IlluminationFactor;
+
+		// TEXCOORD3
+		// No TexCoord Transform on this Shader
+		o.BaseTexCoord.xy = v.vTexCoord0.xy;
+	#endif
+
+    return o;
+}

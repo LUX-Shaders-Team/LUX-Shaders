@@ -1,0 +1,187 @@
+//===================== File of the LUX Shader Project =====================//
+//
+//	Initial D.	:	02.01.2024 DMY
+//	Last Change :	 30.01.2026 DMY
+//
+//==========================================================================//
+
+//==========================================================================//
+//	Declare Static Combos
+//==========================================================================//
+// STATIC:	"LINEARTOGAMMA"				"0..1"
+// STATIC:	"BUMPMAPPED"				"0..1"
+
+//==========================================================================//
+//	Declare Dynamic Combos
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Skipping undesired Combos
+//	The Order of Static Combos and Skips has a drastic Impact on Compile Time!
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Common Definitions
+//==========================================================================//
+
+#define TONEMAP_SCALE_NONE
+//#define TONEMAP_SCALE_LINEAR
+//#define TONEMAP_SCALE_GAMMA
+
+// Don't write Anything to the Alpha
+#define NO_DEPTHTODESTALPHA
+#define NO_WATERFOGTODESTALPHA
+
+// We don't want ANY fog
+#define NO_FOG
+
+//==========================================================================//
+//	Constants, Functions, Includes
+//==========================================================================//
+
+// Include for all Pixel Shaders
+#include "lux_common_ps_fxc.h"
+
+// Normal Map Sampler
+#include "lux_common_normalmap.h"
+
+// FIXME: Make a Header for this with custom constant defines
+
+// c32
+const float4 cConstants1		: register(c32);
+#define f3CloakTint		(cConstants1.rgb)
+#define f1CloakFactor	(cConstants1.w)
+
+// c33
+const float4 cConstants2		: register(c33);
+#define g_f1CloakFactorSquared	(cConstants2.x)
+#define g_f1RefractFactor		(cConstants2.y)
+#define g_f1BlurAmount			(cConstants2.z)
+
+// c34, c35
+const float3 g_f3ViewProj0		: register(c34);
+const float3 g_f3ViewProj1		: register(c35);
+
+// Stock Consistency - Have to use this otherwise the look is too different
+// "8 2D Poisson offsets (designed to use .xy and .wz swizzles (not .zw)"
+static const float4 g_PoissonOffsets[4] = {	float4 (-0.0876f,  0.9703f,  0.5651f,  0.4802f ),
+											float4 ( 0.1851f,  0.1580f, -0.0617f, -0.2616f ),
+											float4 (-0.5477f, -0.6603f,  0.0711f, -0.5325f ),
+											float4 (-0.0751f, -0.8954f,  0.4054f,  0.6384f ) };
+
+//==========================================================================//
+//	PS Input
+//==========================================================================//	
+struct PS_INPUT
+{
+	float4 WorldPos_ProjPosW		: TEXCOORD0;
+#if !BUMPMAPPED
+	float2 TexCoords				: TEXCOORD1;
+#else
+	float4 TexCoords				: TEXCOORD1;
+	float3 Tangent					: TANGENT;
+	float3 Binormal					: BINORMAL;
+#endif
+	float3 Normal					: NORMAL;
+};
+
+//==========================================================================//
+//	PS Entry Point
+//==========================================================================//
+float4 main(PS_INPUT i) : COLOR
+{
+	//	Getting our PS_INPUT
+	//==========================================================================//
+
+	// TEXCOORD0
+	float3 f3WorldPos	= i.WorldPos_ProjPosW.xyz;
+	float f1OoW = 1.0f / i.WorldPos_ProjPosW.w;
+
+	// TEXCOORD1 or TEXCOORD2
+	float2 f2ScreenUV	= i.TexCoords.xy * f1OoW;
+
+	// TANGENT, BINORMAL, NORMAL
+	float3 f3NormalWS;
+	float3 f3VNormal;
+	#if BUMPMAPPED
+		float4 f4NormalTS = tex2D(Sampler_NormalMap, i.TexCoords.zw);
+				
+		// Decompressed Normal
+		f4NormalTS.xyz = f4NormalTS.xyz * 2.0f - 1.0f;
+
+		// TS -> WS
+		// NOTE: Matrix Vector Components are aligned horizontally, so Matrix goes into the mul() last
+		float3x3 TBN_Matrix = float3x3(i.Tangent, i.Binormal, i.Normal);
+		f3NormalWS = normalize(mul(f4NormalTS.xyz, TBN_Matrix));
+		
+		// Need this for Fresnel later
+		f3VNormal = i.Normal;
+	#else
+		f3NormalWS = i.Normal;
+		f3VNormal = i.Normal;
+	#endif
+
+	//==========================================================================//
+	//	..
+	//==========================================================================//
+
+	// "Transform world space normal into clip space and project"
+	float2 f2NormalCS;
+	f2NormalCS.x = dot(f3NormalWS.xyz, g_f3ViewProj0);
+	f2NormalCS.y = dot(f3NormalWS.xyz, g_f3ViewProj1);
+
+	// Sampling Position = UV + Refraction Offset * Scale
+	// g_f1RefractFactor is = lerp( g_flRefractAmount, 0.0f, saturate( g_flCloakFactor ) );
+    float2 f2RefractTexCoord = f2ScreenUV + f2NormalCS.xy * g_f1RefractFactor;
+
+	// "Blur by scalable Poisson filter"
+	// f1BlurAmount is = lerp( 0.05f, 0.0f, saturate( g_flCloakFactor ) );
+	float3	f3RefractedColor  = tex2D( Sampler_BaseTexture, f2RefractTexCoord ).rgb;
+			f3RefractedColor += tex2D( Sampler_BaseTexture, f2RefractTexCoord + ( g_PoissonOffsets[0].xy * g_f1BlurAmount ) ).rgb;
+			f3RefractedColor += tex2D( Sampler_BaseTexture, f2RefractTexCoord + ( g_PoissonOffsets[0].wz * g_f1BlurAmount ) ).rgb;
+			f3RefractedColor += tex2D( Sampler_BaseTexture, f2RefractTexCoord + ( g_PoissonOffsets[1].xy * g_f1BlurAmount ) ).rgb;
+			f3RefractedColor += tex2D( Sampler_BaseTexture, f2RefractTexCoord + ( g_PoissonOffsets[1].wz * g_f1BlurAmount ) ).rgb;
+			f3RefractedColor += tex2D( Sampler_BaseTexture, f2RefractTexCoord + ( g_PoissonOffsets[2].xy * g_f1BlurAmount ) ).rgb;
+			f3RefractedColor += tex2D( Sampler_BaseTexture, f2RefractTexCoord + ( g_PoissonOffsets[2].wz * g_f1BlurAmount ) ).rgb;
+			f3RefractedColor += tex2D( Sampler_BaseTexture, f2RefractTexCoord + ( g_PoissonOffsets[3].xy * g_f1BlurAmount ) ).rgb;
+			f3RefractedColor += tex2D( Sampler_BaseTexture, f2RefractTexCoord + ( g_PoissonOffsets[3].wz * g_f1BlurAmount ) ).rgb;
+			f3RefractedColor /= 9.0f;
+
+	float3 f3ViewDir = ComputeViewDir(f3WorldPos);
+
+	// 1-NdotV, from VS Normal
+	// Must be outgoing. Otherwise the fade to cloaked is too abrupt.
+    float f1Fresnel = 1.0f - saturate(dot(f3VNormal, -f3ViewDir));
+
+	// ShiroDkxtro2 :	Tried to optimise this, the compiler probably automatically did this anways
+	//					And if it didn't now it doesn't matter
+	// Previously ( s factor, y fresnel )
+	//			1 + s * (1 - y - 1.35 - 1)	// ADD; ADD; LRP
+	// NOW ->	1 + s * (1 - y - 2.35)		// ADD; ADD; MAD
+	float	f1CloakLerpFactor = saturate(1.0f + f1CloakFactor * (f1Fresnel - 2.35f));
+			f1CloakLerpFactor = 1.0f - smoothstep( 0.4f, 0.425f, f1CloakLerpFactor );
+
+	// "Slightly dim the facing pixels and brighten the silhouette pixels"
+	// "This gives a scalar in the range [0.8 1.2]"
+	f3RefractedColor *= lerp( f1Fresnel * 0.4f + 0.8f, 1.0f, g_f1CloakFactorSquared);
+
+	// Previously...
+	// fColorTintStrength = saturate( ( saturate( g_flCloakFactor ) - 0.75f ) * 4.0f );
+	// cRefract.rgb *= lerp( g_cCloakColorTint, 1.0f, fColorTintStrength );
+	// Precomputed in C++ now...
+	f3RefractedColor *= f3CloakTint;
+
+	//==========================================================================//
+	//	Results
+	//==========================================================================//
+
+	// We do this instead of the Linear->Gamma LUT
+	#if LINEARTOGAMMA
+		f3RefractedColor = LinearToGamma(f3RefractedColor);
+	#endif
+
+	// "Set alpha to cloak mask"
+	return LUX_Finalise(float4(f3RefractedColor, f1CloakLerpFactor), float3(0.0f, 0.0f, 0.0f), 0.0f);
+}

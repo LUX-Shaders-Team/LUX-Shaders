@@ -1,0 +1,362 @@
+//===================== File of the LUX Shader Project =====================//
+//
+//	Original D. :	28.02.2023 DMY
+//	Initial D.	:	12.06.2025 DMY
+//	Last Change :	 30.01.2026 DMY
+//
+//==========================================================================//
+
+//==========================================================================//
+//	Declare Static Combos
+//==========================================================================//
+// STATIC:	"ENVMAPMODE"				"0..4"
+// STATIC:	"XBYBASEALPHA"				"0..2"
+// STATIC:	"DETAILTEXTURE"				"0..4" // 2 is DistanceAlpha From Detail, 2+ is separate Texcoord
+// STATIC:	"DISTANCEALPHAMODE"			"0..7"
+
+//==========================================================================//
+//	Declare Dynamic Combos
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Skipping undesired Combos
+//	The Order of Static Combos and Skips has a drastic Impact on Compile Time!
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Unpack Combos
+//==========================================================================//
+#if (XBYBASEALPHA > 0)
+	#if (XBYBASEALPHA == 1)
+		#define BLENDTINTBYBASEALPHA 1
+		#define DESATURATEWITHBASEALPHA 0
+	// == 2
+	#else
+		#define BLENDTINTBYBASEALPHA 0
+		#define DESATURATEWITHBASEALPHA 1		
+	#endif
+#else
+	#define BLENDTINTBYBASEALPHA 0
+	#define DESATURATEWITHBASEALPHA 0
+#endif
+
+#if (DETAILTEXTURE > 2)
+	#define SEPARATEDETAILTEXCOORD 1
+#else
+	#define SEPARATEDETAILTEXCOORD 0
+#endif
+
+// I could probably just make this separate statics
+// Buuut to me this is more logical for such a feature
+// +-------+-----------+---------+------------+
+// | VALUE | SOFT_MASK | OUTLINE | OUTER_GLOW |
+// +-------+-----------+---------+------------+
+// |   0   |           |         |            |
+// +-------+-----------+---------+------------+
+// |   1   |     x     |         |            |
+// +-------+-----------+---------+------------+
+// |   2   |           |    x    |            |
+// +-------+-----------+---------+------------+
+// |   3   |     x     |    x    |            |
+// +-------+-----------+---------+------------+
+// |   4   |           |         |      x     |
+// +-------+-----------+---------+------------+
+// |   5   |     x     |         |      x     |
+// +-------+-----------+---------+------------+
+// |   6   |           |    x    |      x     |
+// +-------+-----------+---------+------------+
+// |   7   |     x     |    x    |      x     |
+// +-------+-----------+---------+------------+
+#if (DISTANCEALPHAMODE > 0)
+	#define DISTANCEALPHA 1
+
+	#if (DETAILTEXTURE == 2 || DETAILTEXTURE == 4)
+		#define DISTANCEALPHAFROMDETAIL 1
+	#else
+		#define DISTANCEALPHAFROMDETAIL 0
+	#endif
+
+	// Unpacking..
+	#if (DISTANCEALPHAMODE == 1)
+		#define SOFT_MASK 1
+
+	#elif (DISTANCEALPHAMODE == 2)
+		#define OUTLINE 1
+
+	#elif (DISTANCEALPHAMODE == 3)
+		#define SOFT_MASK 1
+		#define OUTLINE 1
+
+	#elif (DISTANCEALPHAMODE == 4)
+		#define OUTER_GLOW 1
+
+	#elif (DISTANCEALPHAMODE == 5)
+		#define SOFT_MASK 1
+		#define OUTER_GLOW 1
+
+	#elif (DISTANCEALPHAMODE == 6)
+		#define OUTLINE 1
+		#define OUTER_GLOW 1
+
+	#else // (DISTANCEALPHAMODE == 7)
+		#define SOFT_MASK 1
+		#define OUTLINE 1
+		#define OUTER_GLOW 1
+
+	#endif
+#endif
+
+//==========================================================================//
+//	Common Definitions
+//==========================================================================//
+
+// We need the BRUSH definition for PCC
+#define BRUSH
+
+//#define TONEMAP_SCALE_NONE
+#define TONEMAP_SCALE_LINEAR
+//#define TONEMAP_SCALE_GAMMA
+
+// NOTE:
+// We need to move these registers to avoid tf2sdk crashes
+#define MOVED_REGISTERS_ENVMAP
+#define MOVED_REGISTERS_DETAIL
+
+//==========================================================================//
+//	Constants, Functions, Includes
+//==========================================================================//
+
+// Include for all Pixel Shaders
+#include "lux_common_ps_fxc.h"
+
+// Register Map for this Shader
+#include "lux_unlitgeneric_registermap.h"
+
+// Move EnvMap Registers below c32
+// c2 to c10 is free, usually used for Ambient Cubes
+// But this Shader doesn't have those!
+#if (ENVMAPMODE > 0)
+	const float4	cEnvMapTint_LightScale		: register(UNLITGENERIC_ENVMAP_TINT); 
+	#define			g_f3EnvMapTint					(cEnvMapTint_LightScale.xyz)
+	#define			g_f1EnvMapLightScale			(cEnvMapTint_LightScale.w)
+	const float4	cEnvMapFresnel				: register(UNLITGENERIC_ENVMAP_FRESNEL);
+	#define			g_f1EnvMapFresnelScale			(cEnvMapFresnel.x)
+	#define			g_f1EnvMapFresnelBias			(cEnvMapFresnel.y)
+	#define			g_f1EnvMapFresnelExponent		(cEnvMapFresnel.z)
+	const float4	cEnvMapSaturation_Contrast	: register(UNLITGENERIC_ENVMAP_FACTORS);
+	#define			g_f3EnvMapSaturation			(cEnvMapSaturation_Contrast.xyz)
+	#define			g_f1EnvMapContrast				(cEnvMapSaturation_Contrast.w)
+	
+	// On brushes ENVMAPMODE > 2 is PCC
+	// On models its envmap anisotropy ( exception unlitgeneric )
+	#if (ENVMAPMODE > 2 && defined(BRUSH))
+	const float3	g_f3CubeMapPos			: register(UNLITGENERIC_ENVMAP_POSITION);
+	const float4x3	g_f4x3CorrectionMatrix	: register(UNLITGENERIC_ENVMAP_MATRIX); // c7...c8
+	#endif
+	
+	const float4	EnvMapMaskControls		: register(UNLITGENERIC_ENVMAP_CONTROLS);
+	#define			g_f1LerpBaseAlpha			(EnvMapMaskControls.x)
+	#define			g_f1LerpNormalAlpha			(EnvMapMaskControls.y)
+	#define			g_f1EnvMapMaskFlip			(EnvMapMaskControls.z)
+	// FREE
+
+	// EnvMapping Data
+	#include "lux_common_envmap.h"
+#endif
+
+// Move Detail Registers below c32
+// c20 to c27 is free, usually used for Lighting
+// But this Shader doesn't have those!
+#if DETAILTEXTURE
+	const float4	cDetailTint_BlendFactor		: register(UNLITGENERIC_DETAIL_TINT);
+	#define			g_f3DetailTextureTint			(cDetailTint_BlendFactor.xyz)
+	#define			g_f1DetailBlendFactor			(cDetailTint_BlendFactor.w)
+	
+	const float4	cDetailFactors				: register(UNLITGENERIC_DETAIL_MODE);
+	#define			g_f1DetailBlendMode				(cDetailFactors.x)
+
+	#include "lux_common_detailtexture.h"
+#endif
+
+// Distance Alpha stuff can go between Detail Texture Constants and Flashlight Color
+#if DISTANCEALPHA
+	const float4 cGlowParameters	: register(UNLITGENERIC_DA_GLOWPARAMS);
+	const float4 cGlowColor			: register(UNLITGENERIC_DA_GLOWCOLOR);
+	#define GLOW_UV_OFFSET				(cGlowParameters.xy)
+	#define OUTER_GLOW_MIN_DVALUE		(cGlowParameters.z)
+	#define OUTER_GLOW_MAX_DVALUE		(cGlowParameters.w)
+	#define OUTER_GLOW_COLOR			(cGlowColor)
+
+	// NOTE: On the C++ portion we pack first the start and then the end
+	// So start = max, end = min
+	// Which is kinda odd
+	// NOTE2: slap this in .w of glow color and .w of outline color
+	const float4 cDistanceAlphaParams	: register(UNLITGENERIC_DA_PARAMS);
+	#define g_f1SoftMask_Max				(cDistanceAlphaParams.x)
+	#define g_f1SoftMask_Min				(cDistanceAlphaParams.y)
+
+	const float4 cOutlineColor			: register(UNLITGENERIC_DA_OUTLINECOLOR);
+	#define OUTLINE_COLOR					(cOutlineColor)
+
+	// "these are ordered this way for optimal ps20 swizzling"
+	// We could unswizzle this since the wz thing was specific to ps20
+	const float4 cOutlineParams			: register(UNLITGENERIC_DA_OUTLINEPARARMS);
+	#define g_f4OutlineParams				(cOutlineParams)
+#endif
+
+// Specific to this Shader
+#define g_bVertexAlpha Bools[UNLITGENERIC_BOOL_VERTEXALPHA]
+
+//==========================================================================//
+//	PS Input
+//==========================================================================//	
+struct PS_INPUT
+{
+	float4 WorldPos_ProjPosZ	: TEXCOORD0;
+    float4 TexCoords1			: TEXCOORD1;
+	float4 TexCoords2			: TEXCOORD2;
+	float3 VertexLighting		: TEXCOORD3; // Unused
+	float2 SpecialTexCoord		: TEXCOORD4;
+	float4 VertexColor			: COLOR0;
+	float3 Normal				: NORMAL;
+};
+ 
+//==========================================================================//
+//	PS Entry Point
+//==========================================================================//
+float4 main(PS_INPUT i) : COLOR
+{
+	//	Getting our PS_INPUT
+	//==========================================================================//
+
+	// TEXCOORD0
+	float3 f3WorldPos = i.WorldPos_ProjPosZ.xyz;
+	float  f1Depth = i.WorldPos_ProjPosZ.w;
+
+	// TEXCOORD1, TEXCOORD2
+	float2 f2BaseUV = i.TexCoords1.xy;
+
+	#if ENVMAPMASK
+		float2 f2EnvMapMaskUV = i.TexCoords1.zw;
+		float2 f2DetailUV = i.TexCoords2.xy;
+	#else
+		float2 f2DetailUV = i.TexCoords1.zw;
+	#endif
+
+	// TEXCOORD4
+	// Override Detail UV with Special UV
+	#if SEPARATEDETAILTEXCOORD
+		f2DetailUV = i.SpecialTexCoord;
+	#endif
+
+	// COLOR0
+	float4 f4VertexColors = i.VertexColor;
+
+	// NORMAL
+	float3 f3VNormal = i.Normal;
+
+	//==========================================================================//
+	//	..
+	//==========================================================================//
+	float4 f4BaseTexture = tex2D(Sampler_BaseTexture, f2BaseUV);
+
+	// In case of Distance Alpha
+	float f1DistanceAlphaMask = f4BaseTexture.a;
+
+	#if DETAILTEXTURE
+		int nDetailBlendMode = trunc(g_f1DetailBlendMode);
+
+		float4	f4DetailTexture	= tex2D(Sampler_DetailTexture, f2DetailUV);
+				f4DetailTexture.xyz *= g_f3DetailTextureTint;
+
+		// We need to set the Detail Alpha to 1.0f,
+		// as some Blendmodes use it..
+		// Very shortsighted Design honestly.
+		#if DISTANCEALPHAFROMDETAIL
+			f1DistanceAlphaMask = f4DetailTexture.a;
+			f4DetailTexture.a = 1.0f;
+		#endif
+
+		f4BaseTexture = TextureCombine(f4BaseTexture, f4DetailTexture, nDetailBlendMode);
+	#endif
+
+	#if DISTANCEALPHA
+		// NOTE: Special alignment for the params here. We run [min, max, max, min] against [min, max, max, min]
+		// Instead of [min, max, min, max] vs [max, min, max, min]
+		#if OUTLINE
+			float4 f4DistanceAlphaFactors = smoothstep(g_f4OutlineParams.xyzw, g_f4OutlineParams.wzyx, f1DistanceAlphaMask);
+			f4BaseTexture = lerp(f4BaseTexture, OUTLINE_COLOR, f4DistanceAlphaFactors.x * f4DistanceAlphaFactors.y);
+		#endif
+
+		float f1MaskUsed;
+		#if SOFT_MASK
+			f1MaskUsed = smoothstep(g_f1SoftMask_Min, g_f1SoftMask_Max, f1DistanceAlphaMask);
+			f4BaseTexture.a *= f1MaskUsed; // In case of DISTANCEALPHAFROMDETAIL, this will modify the *actual* Alpha instead
+		#else
+			// 1.0f if above 0.5f
+			f1MaskUsed = f1DistanceAlphaMask >= 0.5f;
+
+			// This is odd because when you use DISTANCEALPHAFROMDETAIL, it will *still* mess with BaseTexture Alpha
+			#if (DETAILTEXTURE > 0)
+				f4BaseTexture.a *= f1MaskUsed;
+			#else
+				f4BaseTexture.a = f1MaskUsed;
+			#endif
+		#endif
+
+		#if OUTER_GLOW
+			// This is odd, second sample?
+			#if (DISTANCEALPHAFROMDETAIL)
+				float4 f4GlowColor = tex2D(Sampler_DetailTexture, f2DetailUV + GLOW_UV_OFFSET);
+			#else
+				float4 f4GlowColor = tex2D(Sampler_BaseTexture, f2BaseUV + GLOW_UV_OFFSET);
+			#endif
+
+			f4GlowColor = OUTER_GLOW_COLOR * smoothstep( OUTER_GLOW_MIN_DVALUE, OUTER_GLOW_MAX_DVALUE, f4GlowColor.a );
+			
+			// This might break what BlendTintByBaseAlpha looks like
+			// The original Shader applied the lerp to the whole tmp-register that had the BaseTexture on it
+			// Meaning BlendTintByBaseAlpha SHOULD be affected by this operation!!
+			f4BaseTexture = lerp(f4GlowColor, f4BaseTexture, f1MaskUsed);
+		#endif
+	#endif // End of Distance Alpha Modes
+
+	// $BlendTintByBaseAlpha and $DesatureWithBaseAlpha
+    ComputeTintAndXByBaseAlpha(f4BaseTexture, g_f3DefaultTint, g_f1DefaultAlphaFactor, BLENDTINTBYBASEALPHA, DESATURATEWITHBASEALPHA);
+
+	float3 f3Result = f4BaseTexture.rgb;
+
+	#if ENVMAP
+	    float3 f3ViewDir = ComputeViewDir(f3WorldPos);
+		#if ENVMAPMASK
+			float4 f4EnvMapMask	= tex2D(Sampler_EnvMapMask, f2EnvMapMaskUV);
+			f3Result += ComputeEnvMap(f3WorldPos, f3VNormal, f3ViewDir, f4EnvMapMask.xyz);
+		#else
+			f3Result += ComputeEnvMap(f3WorldPos, f3VNormal, f3ViewDir, f4BaseTexture.w);
+		#endif
+	#endif
+
+//	This cannot be used on Unlitgeneric
+//	#if DETAILTEXTURE
+//		f3Result = TextureCombinePostLighting(f3Result, f4DetailTexture.rgb, nDetailBlendMode);
+//	#endif
+
+	// Pass Basealpha onwards
+	float f1Alpha = f4BaseTexture.a;
+
+	// $VertexColor && $VertexAlpha
+	// Only when not seamless as we need the texcoords!
+	if(g_bVertexColor)
+	{
+		f3Result *= i.VertexColor.xyz;
+	}
+
+	if(g_bVertexAlpha)
+	{
+		f1Alpha *= i.VertexColor.w;
+	}
+
+    return LUX_Finalise(float4(f3Result, f1Alpha), f3WorldPos, f1Depth, g_f1AlphaModulation);
+}

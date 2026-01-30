@@ -1,0 +1,252 @@
+//===================== File of the LUX Shader Project =====================//
+//
+//	Initial D.	:	23.12.2023 DMY
+//	Last Change :	 30.01.2026 DMY
+//
+//==========================================================================//
+
+//==========================================================================//
+//	Declare Static Combos
+//==========================================================================//
+// Lighting Mode is
+// 0 = No BumpMap, 1 = BumpMap, 2 = SSBump,
+// 3 = BumpMap + Phong, 4 = BumpMap + SSBump + Phong
+// 5 = BumpMap + Phong + PhongExponentTexture, 6 = BumpMap + SSBump + Phong + PhongExponentTexture
+// This avoids a single Skip hahaha
+// STATIC:	"LIGHTING_MODE"				"0..6"
+// STATIC:	"DETAILTEXTURE"				"0..1"
+// STATIC:	"XBYBASEALPHA"				"0..2"
+
+//==========================================================================//
+//	Declare Dynamic Combos
+//==========================================================================//
+// DYNAMIC: "PROJTEXSHADOWS"			"0..1"
+
+//==========================================================================//
+//	Skipping undesired Combos
+//	The Order of Static Combos and Skips has a drastic Impact on Compile Time!
+//==========================================================================//
+// None
+
+//==========================================================================//
+//	Unpacking Combos
+//==========================================================================//
+
+#if (LIGHTING_MODE >= 1)
+#define BUMPMAPPED 1
+
+	#if (LIGHTING_MODE == 2 || LIGHTING_MODE == 4 || LIGHTING_MODE == 6)
+		#define SSBUMP 1
+	#else
+		#define SSBUMP 0
+	#endif
+
+	// This is what actually enables PhongExponentTexture Behaviour
+	#if (LIGHTING_MODE > 2)
+		#define PHONGEXPONENTTEXTURE 1
+		#define PHONG 1
+		
+		#if (LIGHTING_MODE >= 5)
+			#define EXPONENTTEXTURE 1
+		#else
+			#define EXPONENTTEXTURE 0
+		#endif
+	#else
+		#define PHONGEXPONENTTEXTURE 0
+		#define PHONG 0
+		#define EXPONENTTEXTURE 0
+	#endif
+#else
+#define BUMPMAPPED 0
+#define SSBUMP 0
+#define PHONGEXPONENTTEXTURE 0
+#define PHONG 0
+#define EXPONENTTEXTURE 0
+#endif
+
+// $BlendTintByBaseAlpha and $DesaturateWithBaseAlpha
+#if (XBYBASEALPHA > 0)
+	#if (XBYBASEALPHA == 1)
+		#define BLENDTINTBYBASEALPHA 1
+		#define DESATURATEWITHBASEALPHA 0
+	// == 2
+	#else
+		#define BLENDTINTBYBASEALPHA 0
+		#define DESATURATEWITHBASEALPHA 1		
+	#endif
+#else
+	#define BLENDTINTBYBASEALPHA 0
+	#define DESATURATEWITHBASEALPHA 0
+#endif
+
+//==========================================================================//
+//	Common Definitions
+//==========================================================================//
+
+// We are on a Projected Texture
+#define PROJTEX 1
+
+//#define TONEMAP_SCALE_NONE
+#define TONEMAP_SCALE_LINEAR
+//#define TONEMAP_SCALE_GAMMA
+
+//==========================================================================//
+//	Constants, Functions, Includes
+//==========================================================================//
+
+// Include for all Pixel Shaders
+#include "lux_common_ps_fxc.h"
+
+#include "lux_common_detailtexture.h"
+#include "lux_common_lightmapped.h"
+
+#if PHONG
+	#include "lux_common_phong_data.h"
+	#include "lux_common_phong_flashlight.h"
+#else
+	#include "lux_common_flashlight.h"
+#endif
+
+//==========================================================================//
+//	PS Input
+//==========================================================================//
+struct PS_INPUT
+{
+	// lux_brush_vs30
+	float4 WorldPos_ProjPosZ		: TEXCOORD0;
+	float4 TexCoords1				: TEXCOORD1;
+	float4 TexCoords2				: TEXCOORD2;
+
+	float3 VertexColors				: COLOR0;
+
+	#if BUMPMAPPED
+		float3 Tangent				: TANGENT;
+		float3 Binormal				: BINORMAL;
+	#endif
+	float3 Normal					: NORMAL;
+};
+ 
+//==========================================================================//
+//	PS Entry Point
+//==========================================================================//
+float4 main(PS_INPUT i) : COLOR
+{
+	// TEXCOORD0
+	float3 f3WorldPos = i.WorldPos_ProjPosZ.xyz;
+	float  f1Depth = i.WorldPos_ProjPosZ.w; 
+
+	// TEXCOORD1, TEXCOORD2
+	float2 f2BaseUV = i.TexCoords1.xy;
+	#if BUMPMAPPED
+		float2 f2NormalUV = i.TexCoords1.zw;
+
+		// TEXCOORD2
+		float2 f2DetailUV = i.TexCoords2.xy;
+
+		// TANGENT, BINORMAL, NORMAL
+		float3x3 TBN_Matrix = float3x3(i.Tangent, i.Binormal, i.Normal);
+	#else
+		float2 f2DetailUV = i.TexCoords1.zw;
+
+		// NORMAL
+		float3 f3NormalWS = i.Normal;
+	#endif
+
+	// COLOR0
+	float3 f3VertexColors = i.VertexColors;
+
+	//==========================================================================//
+	//	Getting the current Pixels Color from the Samplers
+	//==========================================================================//
+	float4 f4BaseTexture = tex2D(Sampler_BaseTexture, f2BaseUV);		
+
+	#if BUMPMAPPED
+		float4	f4NormalTS = f4NormalTS = tex2D(Sampler_NormalMap, f2NormalUV);
+
+		// Into a f3 you go
+		float3 f3NormalTS = f4NormalTS.xyz;
+		#if !SSBUMP
+			// Regular BumpMaps get perturbed, -1 to +1
+			f3NormalTS = f3NormalTS.xyz * 2.0f - 1.0f;
+		#else
+			// If we used an SSBump we must convert it or bad Things happen to our Cubemaps...
+			// ShiroDkxtro2: This does not appear to be affected by the SSBumpMathIssue
+			// Use the original f4 for the math, as the f3 is being overwritten
+			f3NormalTS  = mxBumpBasis[0] * f4NormalTS.xxx;
+			f3NormalTS += mxBumpBasis[1] * f4NormalTS.yyy;
+			f3NormalTS += mxBumpBasis[2] * f4NormalTS.zzz;
+			f3NormalTS  = normalize(f3NormalTS);
+		#endif
+
+		float3 f3NormalWS = normalize(mul(f3NormalTS, TBN_Matrix));
+	#endif
+
+	//==========================================================================//
+	//	Adding tints when possible
+	//==========================================================================//
+
+	// $BlendTintByBaseAlpha and $DesatureWithBaseAlpha
+    ComputeTintAndXByBaseAlpha(f4BaseTexture, g_f3DefaultTint, g_f1DefaultAlphaFactor, BLENDTINTBYBASEALPHA, DESATURATEWITHBASEALPHA);
+		
+	//==========================================================================//
+	//	Detail Texture. Blendmodes 0 to 9
+	//==========================================================================//
+	#if DETAILTEXTURE
+		// Integer Constants are for use with loops only...
+		int nDetailBlendMode = trunc(g_f1DetailBlendMode);
+	
+		float4 f4DetailTexture = tex2D(Sampler_DetailTexture, f2DetailUV);
+	
+		f4DetailTexture.rgb *= g_f3DetailTextureTint;
+		f4BaseTexture = TextureCombine(f4BaseTexture, f4DetailTexture, nDetailBlendMode);
+	#endif
+
+	// Always need DirectDiffuse separately for DirectSpecular
+	float3 f3DirectDiffuse = ComputeProjectedTextureDiffuse(f3WorldPos, f3NormalWS, PROJTEXSHADOWS);
+	float3 f3Result = f4BaseTexture.rgb * f3DirectDiffuse;
+
+	#if PHONG
+		// We prepare a Struct now with default Values
+		// This will be Setup using a Function, drastically compressing the Code
+		Phong_Data_t PhongData = Phong_Data_FakeConstructor(); // HLSL forced my Hand because it doesn't have constructors
+
+		// This reproduces the same Fresnel as the Stock Shaders.
+		float3 f3ViewDir = ComputeViewDir(f3WorldPos);
+		float f1NdotV = dot(f3NormalWS, -f3ViewDir);
+
+		// Phong needs some special fresnel functions to look correctly
+		SetupPhongFresnel(PhongData, f1NdotV);
+
+		// Now saturate.
+		f1NdotV = saturate(f1NdotV);
+
+		// Conditional Statement, yay!
+		if(g_bHasBaseAlphaPhongMask)
+			PhongData.f1AlphaMask = f4BaseTexture.w;
+		else
+			PhongData.f1AlphaMask = f4NormalTS.w;
+
+		#if EXPONENTTEXTURE
+			// Get the Pixel from the Texture into our float4.
+			PhongData.f4PhongExponentTexture = tex2D(Sampler_PhongExpTexture, f2BaseUV);
+		#endif
+
+		// Helper Function that sets up all our Phong Data
+		SetupPhongData(PhongData, f4BaseTexture.rgb);
+
+		float3 f3DirectSpecular = ComputeProjectedTextureSpecular(PhongData, f3WorldPos, f3NormalWS, reflect(f3ViewDir, f3NormalWS), f3DirectDiffuse);
+
+		f3Result += f3DirectSpecular;
+	#endif
+
+	// Need BaseTexture Alpha for Transparency Effects
+	float f1Alpha = f4BaseTexture.a;
+
+	// Here for consistency across LMG
+	if(g_bVertexColor)
+	{
+		f3Result *= f3VertexColors;
+	}
+
+    return LUX_Finalise(float4(f3Result, f1Alpha), f3WorldPos, f1Depth, g_f1AlphaModulation);
+}

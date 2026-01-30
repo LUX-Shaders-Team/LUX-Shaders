@@ -1,0 +1,168 @@
+//===================== File of the LUX Shader Project =====================//
+//
+//	Initial D.	:	03.01.2024 DMY
+//	Last Change :	 30.01.2026 DMY
+//
+//==========================================================================//
+
+//==========================================================================//
+//	Declare Static Combos
+//==========================================================================//
+//	STATIC: "BUMPMAPPED"				"0..1"
+
+//==========================================================================//
+//	Declare Dynamic Combos
+//==========================================================================//
+//  DYNAMIC: "SKINNING"                 "0..1"
+//	DYNAMIC: "COMPRESSION"				"0..1"
+
+//==========================================================================//
+//	Skipping undesired Combos
+//	The Order of Static Combos and Skips has a drastic Impact on Compile Time!
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Constants, Functions, Includes
+//==========================================================================//
+
+// Include for all Vertex Shaders
+#include "lux_common_vs_fxc.h"
+
+// Model specific Functions
+#include "lux_common_vs_model.h"
+
+const float4 g_TexCoordTransform[2] : register(LUX_VS_TEXTURETRANSFORM_01);
+
+//==========================================================================//
+//	VS Input
+//==========================================================================//
+struct VS_INPUT
+{
+    // This is all of the stuff that we ever use
+    float4 vPos                     : POSITION;
+	float4 vBoneWeights             : BLENDWEIGHT;	//	Despite no bones,
+	float4 vBoneIndices             : BLENDINDICES; //	we use these in SkinPositionAndNormal()
+    float4 vNormal                  : NORMAL;
+	float4 vTangent					: TANGENT;
+    float2 vTexCoord0               : TEXCOORD0;
+    float4 vUnusedTexCoord	        : TEXCOORD1;
+    float4 vMorphTexCoord			: TEXCOORD2;
+	float4 vColor                   : COLOR0;
+	float3 vSpecular				: COLOR1;
+
+	// User What now? How can we use that?
+	float4 vUserData				: TANGENT;
+
+	// Position and normal/tangent deltas
+	float4 vPosFlex					: POSITION1;
+	float4 vNormalFlex				: NORMAL1;
+
+	float vVertexID					: POSITION2;
+};
+
+//==========================================================================//
+//	VS Output
+//==========================================================================//
+struct VS_OUTPUT
+{
+    float4 ProjPosSetup			: POSITION; 
+	float4 WorldPos_ProjPosW	: TEXCOORD0;
+
+#if !BUMPMAPPED
+	float2 TexCoords					: TEXCOORD1;
+#else
+	float4 TexCoords					: TEXCOORD1;
+	float3 Tangent						: TANGENT;
+	float3 Binormal						: BINORMAL;
+#endif
+	float3 Normal						: NORMAL;
+};
+
+//==========================================================================//
+//	VS Entry Point
+//==========================================================================//
+VS_OUTPUT main( const VS_INPUT v )
+{
+	VS_OUTPUT o = ( VS_OUTPUT )0;
+	
+	//==========================================================================//
+	//	Handle Decompression
+	//==========================================================================//
+
+	float3 f3ObjectNormal;
+	#if !BUMPMAPPED
+		DecompressVertexNormal(v.vNormal, f3ObjectNormal);
+	#else
+		// Tangents are also compressed into the NORMAL Stream
+		// Compressed Verts get Normal, Tangent and Binormal Sign through the NORMAL Stream
+		// Uncompressed Verts get an Uncompressed NORMAL Stream,
+		// with Tangent and Binormal Sign on the TANGENT Stream
+		float4 f4ObjectTangents;
+		DecompressVertexNormal(v.vNormal, v.vTangent, f3ObjectNormal, f4ObjectTangents);
+	#endif
+
+	// Variable needed for Skinning and Morphing
+	float3 f3ObjectPosition = v.vPos.xyz;
+
+	//==========================================================================//
+	//	Handle Morphing
+	//==========================================================================//
+	#if BUMPMAPPED
+		ApplyMorph( v.vPosFlex, v.vNormalFlex, f3ObjectPosition, f3ObjectNormal, f4ObjectTangents.xyz );
+	#else
+		ApplyMorph( v.vPosFlex, v.vNormalFlex, f3ObjectPosition, f3ObjectNormal );
+	#endif
+	
+	//==========================================================================//
+	//	Handle Rotations and Offsets
+	//==========================================================================//
+		
+	float3 f3WorldNormal, f3WorldPos;
+	#if BUMPMAPPED
+		float3 f3WorldTangent, f3WorldBinormal;
+		AlignVertexInputs(SKINNING, float4(f3ObjectPosition, 1.0f), f3ObjectNormal, f4ObjectTangents,
+			v.vBoneWeights, v.vBoneIndices, f3WorldPos, f3WorldNormal, f3WorldTangent, f3WorldBinormal);
+	#else
+		AlignVertexInputs(SKINNING, float4(f3ObjectPosition, 1.0f), f3ObjectNormal,
+			v.vBoneWeights, v.vBoneIndices, f3WorldPos, f3WorldNormal);
+	#endif
+
+	//==========================================================================//
+	//	VS Output
+	//==========================================================================//
+
+	// POSITION	
+	float4 f4ProjPos = mul(float4(f3WorldPos, 1.0f), cViewProj);
+	o.ProjPosSetup = FixHPO(f4ProjPos); // Apply Half-Pixel Offset Fix
+	
+	// TEXCOORD0
+	// Set WorldPos and set ProjPosW for ScreenUV
+	o.WorldPos_ProjPosW.xyz = f3WorldPos;
+	o.WorldPos_ProjPosW.w = f4ProjPos.w;
+
+	// TEXCOORD1
+	// Screen UV for the 'Refract Texture' ( RT )
+	float2 f2RefractPos;
+	f2RefractPos.x = f4ProjPos.x;
+	f2RefractPos.y = -f4ProjPos.y;
+	f2RefractPos = (f2RefractPos + f4ProjPos.ww) * 0.5f;
+	o.TexCoords.xy = f2RefractPos;
+
+	// TEXCOORD1.zw, TANGENT, BINORMAL
+	#if BUMPMAPPED
+		// Stuffing 1.0f into .zw so all Components of the TexCoord Transform influence the UV
+		float4 f4UnmodifiedTexCoord = float4(v.vTexCoord0.xy, 1.0f, 1.0f);
+
+		o.TexCoords.z = dot(f4UnmodifiedTexCoord, g_TexCoordTransform[0]);
+		o.TexCoords.w = dot(f4UnmodifiedTexCoord, g_TexCoordTransform[1]);
+
+		o.Tangent = f3WorldTangent;
+		o.Binormal = f3WorldBinormal;
+	#endif
+
+	// NORMAL
+	o.Normal = f3WorldNormal;
+
+    return o;
+}

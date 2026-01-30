@@ -1,0 +1,130 @@
+//===================== File of the LUX Shader Project =====================//
+//
+//	Initial D.	:	18.11.2024 DMY
+//	Last Change :	 30.01.2026 DMY
+//
+//==========================================================================//
+
+//==========================================================================//
+//	Declare Static Combos
+//==========================================================================//
+//	STATIC:	"SRGB_ADAPTER"				"0..1"
+
+//==========================================================================//
+//	Declare Dynamic Combos
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Skipping undesired Combos
+//	The Order of Static Combos and Skips has a drastic Impact on Compile Time!
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Common Definitions
+//==========================================================================//
+
+// No Fog on this Shader or Alpha Outputs
+#define NO_FOG
+#define NO_DEPTHTODESTALPHA
+#define NO_WATERFOGTODESTALPHA
+
+// No Tonemap
+#define TONEMAP_SCALE_NONE
+//#define TONEMAP_SCALE_LINEAR
+//#define TONEMAP_SCALE_GAMMA
+
+//==========================================================================//
+//	Constants, Functions, Includes
+//==========================================================================//
+
+// Include for all Pixel Shaders
+#include "lux_common_ps_fxc.h"
+
+const float3 g_f3BlurFactor : register(REGISTER_FLOAT_000);
+
+float4 SampleTexture(float2 uv)
+{
+	float4 cSample = tex2D(Sampler_BaseTexture, uv);
+
+	// Is this even used..? Nuke it and see what happens.
+	#if SRGB_ADAPTER
+	{
+		cSample.rgb = max(cSample.rgb, 0.00001f); // rsqrt doesn't like inputs of zero
+
+		float3 ooSQRT;
+		ooSQRT.r = rsqrt(cSample.r);
+		ooSQRT.g = rsqrt(cSample.g); // Approximate linear-to-sRGB conversion
+		ooSQRT.b = rsqrt(cSample.b);
+		cSample.rgb *= ooSQRT.rgb;
+	}
+	#endif
+
+	return cSample;
+}
+
+//==========================================================================//
+//	PS Input
+//==========================================================================//
+struct PS_INPUT
+{
+	float4 TexCoord_12		: TEXCOORD0;
+	float4 TexCoord_34		: TEXCOORD1;
+	float4 TexCoord_56		: TEXCOORD2;
+	float4 TexCoord_78		: TEXCOORD3;
+	float4 TexCoord_910		: TEXCOORD4;
+	float4 TexCoord_1112	: TEXCOORD5;
+	float2 TexCoord_13		: TEXCOORD6;
+};
+ 
+//==========================================================================//
+//	PS Entry Point
+//==========================================================================//
+float4 main(PS_INPUT i) : COLOR
+{
+	// Get straight to rendering
+	float4 Result = 0.0f;
+
+	// "Sample taps with coordinates from VS"
+	float4 s0 = SampleTexture(i.TexCoord_12.xy);
+	float4 s1 = SampleTexture(i.TexCoord_12.zw);
+	float4 s2 = SampleTexture(i.TexCoord_34.xy);
+	float4 s3 = SampleTexture(i.TexCoord_34.zw);
+	float4 s4 = SampleTexture(i.TexCoord_56.xy);
+	float4 s5 = SampleTexture(i.TexCoord_56.zw);
+	float4 s6 = SampleTexture(i.TexCoord_78.xy);
+	
+	// Combine to free up Temp Registers
+	// ( Although thats not really an issue in this case for ps30 )
+	Result = s0 * 0.2013f;
+	Result += ( s1 + s4 ) * 0.2185f;
+	Result += ( s2 + s5 ) * 0.0821f;
+	Result += ( s3 + s6 ) * 0.0461f;
+
+	// Sample again using the remaining Offsets
+	s1 = SampleTexture(i.TexCoord_78.zw);
+	s2 = SampleTexture(i.TexCoord_910.xy);
+	s3 = SampleTexture(i.TexCoord_910.zw);
+	s4 = SampleTexture(i.TexCoord_1112.xy);
+	s5 = SampleTexture(i.TexCoord_1112.zw);
+	s6 = SampleTexture(i.TexCoord_13.xy);
+
+	// Combine
+	Result += ( s1 + s4 ) * 0.0262f;
+	Result += ( s2 + s5 ) * 0.0162f;
+	Result += ( s3 + s6 ) * 0.0102f;
+
+	// Blur Factor ( $BloomAmount )
+    Result.rgb *= g_f3BlurFactor.rgb;
+
+	// Could potentially be nuked
+	#if SRGB_ADAPTER
+	{
+		// Approximate sRGB-to-linear conversion
+		Result.rgb *= Result.rgb;
+	}
+	#endif
+
+	return LUX_Finalise(Result);
+}

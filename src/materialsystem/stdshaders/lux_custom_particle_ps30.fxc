@@ -1,0 +1,120 @@
+//===================== File of the LUX Shader Project =====================//
+
+//==========================================================================//
+//	Available Static Combos to the Shader
+//	Do not change anything here!
+//==========================================================================//
+// STATIC: "EXTRACTGREENALPHA"		"0..1"
+// STATIC: "ADDBASETEXTURE2"		"0..1"
+// STATIC: "DUALSEQUENCE"			"0..1"
+
+//	You may add 6 different Modes to your Shader
+//	STATIC: "ALTERNATIVE_MODE"			"0..5"
+
+//==========================================================================//
+//	Available Dynamic Combos to the Shader
+//	Do not change anything here!
+//==========================================================================//
+
+
+//==========================================================================//
+//	Skipped Combinations
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Remapping of Statics
+//==========================================================================//
+
+// You may add your own Remapping here
+
+//==========================================================================//
+//	Common Definitions
+//==========================================================================//
+
+// Select the desired Tonemap Scale.
+// TONEMAP_SCALE_NONE
+// TONEMAP_SCALE_LINEAR
+// TONEMAP_SCALE_GAMMA
+#define TONEMAP_SCALE_LINEAR
+
+// Usually no Fog and AlphaWrites on Particles.
+#define NO_FOG
+#define NO_DEPTHTODESTALPHA
+#define NO_WATERFOGTODESTALPHA
+
+// This messes with Particles when writing DepthToDestAlpha
+// Only use this if you really know what you are doing
+// #define DEPTH_RANGE_NEAR_Z 7
+// #define DEPTH_RANGE_FAR_Z 4096
+// #define CUSTOM_DEPTH_RANGE (1.0f / (DEPTH_RANGE_FAR_Z - DEPTH_RANGE_NEAR_Z))
+
+// Enables Radial Fog
+#define RADIALFOG
+
+//==========================================================================//
+//	Include Files here
+//==========================================================================//
+
+// Includes Constant Register Map available to this Shader
+// And a handy return Function.
+#include "lux_custom_common_ps.h"
+
+//==========================================================================//
+//	PS Input
+//==========================================================================//
+struct PS_INPUT
+{
+	// Always need WorldPos and Depth for Fog. So it's TEXCOORD0
+	// ( Radial Fog uses WorldPos, Range Fog uses Depth )	
+	float4	WorldPos_ProjPosZ		:	TEXCOORD0;
+	
+	// Can put anything you want here down to TEXCOORD8 / TEXCOORD9
+};
+ 
+//==========================================================================//
+//	Configurable Compiletime Constants
+//==========================================================================//
+
+// You can add Behaviour based on these preprocessor Definitions.
+/*
+	DUALSEQUENCE
+	ADDBASETEXTURE2
+	EXTRACTGREENALPHA
+	ALTERNATIVE_MODE	[0..5]
+*/
+
+//==========================================================================//
+//	Shader Entry point
+//==========================================================================//
+float4 main(PS_INPUT i) : COLOR
+{
+	//==========================================================================//
+	//	Getting Data from the PS_INPUT ( Interpolated Vertex Shader Output )
+	//==========================================================================//
+	float3	f3WorldPos		= i.WorldPos_ProjPosZ.xyz;
+	float	f1Depth			= i.WorldPos_ProjPosZ.w;
+	
+	// For Depth Blending
+	float f1DepthRangeFactor = g_DepthRangeFactor;
+
+	//==========================================================================//
+	//	Custom Code
+	//==========================================================================//
+
+	float3	f3Result = float3(0.0f, 0.0f, 0.0f);
+	float 	f1Alpha = 1.0f;
+
+
+
+	// Your Custom Code here
+
+
+
+	//==========================================================================//
+	//	Results
+	//==========================================================================//
+
+	// Return Function handles Fog, DepthToDestAlpha and WaterFogToDestAlpha for you
+	return LUX_Finalise(float4(f3Result, f1Alpha), f3WorldPos, f1Depth);
+}

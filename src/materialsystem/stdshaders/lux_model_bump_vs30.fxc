@@ -1,0 +1,194 @@
+//===================== File of the LUX Shader Project =====================//
+//
+//	Initial D.	:	06.08.2025 DMY
+//	Last Change :	 30.01.2026 DMY
+//
+//==========================================================================//
+
+//==========================================================================//
+//	Declare Static Combos
+//==========================================================================//
+//	STATIC: "TEXCOORDS"					"0..2"
+//  STATIC: "VERTEX_SWAY"				"0..2"
+//	STATIC:	"WRINKLEMAPS"				"0..1"
+
+//==========================================================================//
+//	Declare Dynamic Combos
+//==========================================================================//
+//	DYNAMIC: "COMPRESSION"				"0..1"
+//  DYNAMIC: "SKINNING"                 "0..1"
+
+//==========================================================================//
+//	Skipping undesired Combos
+//	The Order of Static Combos and Skips has a drastic Impact on Compile Time!
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Constants, Functions, Includes
+//==========================================================================//
+
+// Include for all Vertex Shaders
+#include "lux_common_vs_fxc.h"
+
+// Model specific Functions
+#include "lux_common_vs_model.h"
+
+// Tree Sway
+#include "lux_common_vs_sway.h"
+
+const float4 g_TexCoordTransform1[2] : register(LUX_VS_TEXTURETRANSFORM_01);
+const float4 g_TexCoordTransform2[2] : register(LUX_VS_TEXTURETRANSFORM_02);
+const float4 g_TexCoordTransform3[2] : register(LUX_VS_TEXTURETRANSFORM_03);
+const float4 g_TexCoordTransform4[2] : register(LUX_VS_TEXTURETRANSFORM_04);
+
+//==========================================================================//
+//	VS Input
+//==========================================================================//
+struct VS_INPUT
+{
+    // This is all of the stuff that we ever use
+    float4 vPos                     : POSITION;
+	float4 vBoneWeights             : BLENDWEIGHT;
+	float4 vBoneIndices             : BLENDINDICES;
+    float4 vNormal                  : NORMAL;
+	float4 vTangent					: TANGENT;
+    float2 vTexCoord0               : TEXCOORD0;
+    float4 vUnusedTexCoord	        : TEXCOORD1;
+    float4 vMorphTexCoord			: TEXCOORD2;
+	float4 vColor                   : COLOR0;
+	float3 vSpecular				: COLOR1;
+
+	// Holds uncompressed TangentS with Binormal Sign ( when not using compression )
+	float4 vUserData				: TANGENT;
+
+	// Position and normal/tangent deltas
+	float4 vPosFlex					: POSITION1;
+	float4 vNormalFlex				: NORMAL1;
+
+	// Morphing
+	float vVertexID					: POSITION2;
+};
+
+//==========================================================================//
+//	VS Output
+//==========================================================================//
+struct VS_OUTPUT
+{
+    float4 ProjPosSetup				: POSITION; 
+	float4 WorldPos_ProjPosZ		: TEXCOORD0;
+    float4 TexCoords1				: TEXCOORD1;
+	float4 TexCoords2				: TEXCOORD2;
+
+#if !PROJTEX
+	float4	LightAtten				: TEXCOORD3;
+#endif
+
+#if WRINKLEMAPS
+	float WrinkleWeight				: TEXCOORD4;
+#endif
+
+	float3 Tangent					: TANGENT;
+	float3 Binormal					: BINORMAL;
+	float3 Normal					: NORMAL;
+};
+
+//==========================================================================//
+//	VS Entry Point
+//==========================================================================//
+VS_OUTPUT main( const VS_INPUT v )
+{
+	VS_OUTPUT o = ( VS_OUTPUT )0;
+
+	//==========================================================================//
+	//	Handle Decompression
+	//==========================================================================//
+
+	// Tangents are also compressed into the NORMAL Stream
+	// Compressed Verts get Normal, Tangent and Binormal Sign through the NORMAL Stream
+	// Uncompressed Verts get an Uncompressed NORMAL Stream,
+	// with Tangent and Binormal Sign on the TANGENT Stream
+	float3 f3ObjectNormal;
+	float4 f4ObjectTangents;
+	DecompressVertexNormal(v.vNormal, v.vTangent, f3ObjectNormal, f4ObjectTangents);
+
+	// Variable needed for Skinning and Morphing
+	float3 f3ObjectPosition = v.vPos.xyz;
+
+	//==========================================================================//
+	//	Handle Morphing
+	//==========================================================================//
+
+	// TEXCOORD4 for Wrinklemaps
+	#if WRINKLEMAPS
+		ApplyMorph( v.vPosFlex, v.vNormalFlex, f3ObjectPosition, f3ObjectNormal, f4ObjectTangents.xyz, o.WrinkleWeight );
+	#else
+		ApplyMorph( v.vPosFlex, v.vNormalFlex, f3ObjectPosition, f3ObjectNormal, f4ObjectTangents.xyz );
+	#endif
+
+	//==========================================================================//
+	//	Handle Rotations and Offsets
+	//==========================================================================//
+
+	#if (VERTEX_SWAY != 0)
+		f3ObjectPosition = ComputeSway(f3ObjectPosition);
+	#endif
+		
+	float3 f3WorldNormal, f3WorldPos;
+	float3 f3WorldTangent, f3WorldBinormal;
+	AlignVertexInputs(SKINNING, float4(f3ObjectPosition, 1.0f), f3ObjectNormal, f4ObjectTangents,
+		v.vBoneWeights, v.vBoneIndices, f3WorldPos, f3WorldNormal, f3WorldTangent, f3WorldBinormal);
+
+	//==========================================================================//
+	//	VS Output
+	//==========================================================================//
+
+	// POSITION	
+	float4 f4ProjPos = mul(float4(f3WorldPos, 1.0f), cViewProj);
+	o.ProjPosSetup = FixHPO(f4ProjPos); // Apply Half-Pixel Offset Fix
+	
+	// TEXCOORD0
+	// Set WorldPos and compute Depth
+	o.WorldPos_ProjPosZ.xyz = f3WorldPos;
+	o.WorldPos_ProjPosZ.w = dot(float4(f3WorldPos, 1), cViewProjZ);
+
+	// Stuffing 1.0f into .zw so all Components of the TexCoord Transform influence the UV
+	float4 f4UnmodifiedTexCoord = float4(v.vTexCoord0.xy, 1.0f, 1.0f);
+	
+	// TEXCOORD1
+	#if (TEXCOORDS >= 0)
+		// Always one Texture	
+		o.TexCoords1.x = dot(f4UnmodifiedTexCoord, g_TexCoordTransform1[0]);
+		o.TexCoords1.y = dot(f4UnmodifiedTexCoord, g_TexCoordTransform1[1]);
+
+		o.TexCoords1.z = dot(f4UnmodifiedTexCoord, g_TexCoordTransform2[0]);
+		o.TexCoords1.w = dot(f4UnmodifiedTexCoord, g_TexCoordTransform2[1]);
+	#endif
+
+	// TEXCOORD2
+	#if (TEXCOORDS >= 1)
+		o.TexCoords2.x = dot(f4UnmodifiedTexCoord, g_TexCoordTransform3[0]);
+		o.TexCoords2.y = dot(f4UnmodifiedTexCoord, g_TexCoordTransform3[1]);
+
+		#if (TEXCOORDS >= 2)
+			o.TexCoords2.z = dot(f4UnmodifiedTexCoord, g_TexCoordTransform4[0]);
+			o.TexCoords2.w = dot(f4UnmodifiedTexCoord, g_TexCoordTransform4[1]);
+		#endif
+	#endif
+		
+	// TEXCOORD3
+	// Always need Light Attenuation for Normal Mapped Models
+	// Use a different VS Shader for ProjTex
+    o.LightAtten.x = ComputeLightAttenuation(f3WorldPos, 0);
+	o.LightAtten.y = ComputeLightAttenuation(f3WorldPos, 1);
+	o.LightAtten.z = ComputeLightAttenuation(f3WorldPos, 2);
+	o.LightAtten.w = ComputeLightAttenuation(f3WorldPos, 3);
+
+	// TANGENT, BINORMAL, NORMAL
+	o.Tangent	= f3WorldTangent;
+	o.Binormal	= f3WorldBinormal;
+	o.Normal	= f3WorldNormal;
+
+
+    return o;
+}

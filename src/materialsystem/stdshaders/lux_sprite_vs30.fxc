@@ -1,0 +1,99 @@
+//===================== File of the LUX Shader Project =====================//
+//
+//	Initial D.	:	22.07.2023 DMY
+//	Last Change :	 30.01.2026 DMY
+//
+//==========================================================================//
+
+//==========================================================================//
+//	Declare Static Combos
+//==========================================================================//
+//  STATIC: "VERTEXRGBA"	"0..1"
+//	STATIC: "TRANSFORM"		"0..1"
+
+//==========================================================================//
+//	Declare Dynamic Combos
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Skipping undesired Combos
+//	The Order of Static Combos and Skips has a drastic Impact on Compile Time!
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Constants, Functions, Includes
+//==========================================================================//
+
+// Include for all Vertex Shaders
+#include "lux_common_vs_fxc.h"
+
+#if TRANSFORM
+const float4 g_BaseTexCoordTransform[2]			: register(LUX_VS_TEXTURETRANSFORM_01);
+#endif
+
+//==========================================================================//
+//	VS Input
+//==========================================================================//
+struct VS_INPUT
+{
+    // This is all of the stuff that we ever use
+    float4 vPos                     : POSITION;
+//  float4 vNormal                  : NORMAL;
+    float2 vTexCoord0               : TEXCOORD0;
+	float4 vColor                   : COLOR0;
+};
+
+//==========================================================================//
+//	VS Output
+//==========================================================================//
+struct VS_OUTPUT
+{
+    float4 ProjPosSetup				: POSITION; 
+	float4 WorldPos_ProjPosZ		: TEXCOORD0;
+    float2 TexCoord0				: TEXCOORD1;
+
+	#if VERTEXRGBA
+		float4 VertexColor			:	COLOR0;
+	#endif
+};
+
+//==========================================================================//
+//	VS Entry Point
+//==========================================================================//
+VS_OUTPUT main( const VS_INPUT v )
+{
+	VS_OUTPUT o = ( VS_OUTPUT )0;
+	
+	// Compute world position from local position
+	float3	f3WorldPos = v.vPos.xyz;
+			f3WorldPos = mul4x3(float4(f3WorldPos, 1.0f), cModel[0]);
+
+	// POSITION
+	float4	f4ProjPos = mul(float4(f3WorldPos, 1.0f), cViewProj);
+			f4ProjPos = FixHPO(f4ProjPos); // Apply Half-Pixel Offset Fix
+			o.ProjPosSetup = f4ProjPos;
+
+	// TEXCOORD0
+	o.WorldPos_ProjPosZ.xyz = f3WorldPos;
+	o.WorldPos_ProjPosZ.w = dot(float4(f3WorldPos, 1.0f ), cViewProjZ);
+	
+	// TEXCOORD1
+	#if TRANSFORM
+		// Stuffing 1.0f into .zw so all Components of the TexCoord Transform influence the UV
+		float4 f4UnmodifiedTexCoord = float4(v.vTexCoord0.xy, 1.0f, 1.0f);
+
+		o.TexCoord0.x = dot(f4UnmodifiedTexCoord, g_BaseTexCoordTransform[0]);
+		o.TexCoord0.y = dot(f4UnmodifiedTexCoord, g_BaseTexCoordTransform[1]);
+	#else
+		o.TexCoord0.xy = v.vTexCoord0.xy;
+	#endif
+
+	// COLOR0
+	#if VERTEXRGBA
+		o.VertexColor = v.vColor;
+	#endif
+
+    return o;
+}

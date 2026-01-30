@@ -1,0 +1,448 @@
+//===================== File of the LUX Shader Project =====================//
+//
+//	Initial D.	:	31.03.2025 DMY
+//	Last Change :	 30.01.2026 DMY
+//
+//==========================================================================//
+
+//==========================================================================//
+//	Declare Static Combos
+//==========================================================================//
+// STATIC:	"MODE_BUMP"					"0..2"
+// STATIC:	"TRIPLANAR_BUMP"			"0..1"
+// STATIC:	"ENVMAPMODE"				"0..2"
+// STATIC:	"TRIPLANAR_ENVMAPMASK"		"0..1"
+// STATIC:	"DETAILTEXTURES"			"0..2"
+// STATIC:	"TRIPLANAR_DETAIL"			"0..1"
+// STATIC:	"BLENDMODULATE"				"0..1"
+// STATIC:	"TRIPLANAR_BLENDMODULATE"	"0..1"
+// STATIC:	"TRIPLANAR_BASE"			"0..1"
+
+// Base, Bump, EnvMapMask, Detail, Modulate Triplanar Combos are
+// separate unlike the other Triplanar Shaders
+// because otherwise this gets *incredibly* complicated.
+// Would have to resort to compressing into one big static and then decompressing..
+
+//==========================================================================//
+//	Declare Dynamic Combos
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Skipping undesired Combos
+//	The Order of Static Combos and Skips has a drastic Impact on Compile Time!
+//==========================================================================//
+// SKIP: (!$TRIPLANAR_BUMP && !$TRIPLANAR_ENVMAPMASK && !$TRIPLANAR_DETAIL && !$TRIPLANAR_BLENDMODULATE && !$TRIPLANAR_BASE)
+// SKIP: ($MODE_BUMP == 0 && $TRIPLANAR_BUMP)
+// SKIP: ($ENVMAPMODE != 2 && $TRIPLANAR_ENVMAPMASK)
+// SKIP: ($DETAILTEXTURES == 0 && $TRIPLANAR_DETAIL)
+// SKIP: (!$BLENDMODULATE && $TRIPLANAR_BLENDMODULATE)
+
+//==========================================================================//
+//	Unpack Combos
+//==========================================================================//
+#if (MODE_BUMP != 0)
+	#define BUMPMAPPING 1
+#else
+	#define BUMPMAPPING 0
+#endif
+
+#if (MODE_BUMP == 2)
+	#define SSBUMP 1
+#else
+	#define SSBUMP 0
+#endif
+
+#if (DETAILTEXTURES != 0)
+	#define ANYDETAILTEXTURE 1
+
+	#if (DETAILTEXTURES == 1)
+		#define DETAIL1 1
+	#else
+		#define DETAIL1 1
+		#define DETAIL2 1
+	#endif
+#else
+	#define ANYDETAILTEXTURE 0
+	#define DETAIL1 0
+	#define DETAIL2 0
+#endif
+
+//==========================================================================//
+//	Common Definitions
+//==========================================================================//
+
+//#define TONEMAP_SCALE_NONE
+#define TONEMAP_SCALE_LINEAR
+//#define TONEMAP_SCALE_GAMMA
+
+//==========================================================================//
+//	Constants, Functions, Includes
+//==========================================================================//
+
+// Include for all Pixel Shaders
+#include "lux_common_ps_fxc.h"
+
+#include "lux_common_detailtexture.h"
+#include "lux_common_triplanar.h"
+#include "lux_common_envmap.h"
+#include "lux_common_lightmapped.h"
+
+#define	g_bHasBlendModulateTransparency		Bools[9]
+
+// c52 onward are free, so lets use those
+const float3 g_f3Triplanar_Scales_Base			: register(c52);
+const float3 g_f3Triplanar_Offset_Base			: register(c53);
+const float3 g_f3Triplanar_Scales_Detail		: register(c54);
+const float3 g_f3Triplanar_Offset_Detail		: register(c55);
+const float3 g_f3Triplanar_Scales_Bump			: register(c56);
+const float3 g_f3Triplanar_Offset_Bump			: register(c57);
+const float3 g_f3Triplanar_Scales_EnvMapMask	: register(c58);
+const float3 g_f3Triplanar_Offset_EnvMapMask	: register(c59);
+const float3 g_f3Triplanar_Scales_BlendModulate	: register(c60);
+const float3 g_f3Triplanar_Offset_BlendModulate : register(c61);
+
+//		Sampler_BaseTexture
+sampler Sampler_BaseTexture2	: register(s1);
+//		Sampler_NormalMap		: register(s2);
+sampler Sampler_NormalMap2		: register(s3);
+//		Sampler_DetailTexture	: register(s4);
+//		Sampler_EnvMapMask		: register(s5);
+
+sampler Sampler_EnvMapMask2		: register(s9);
+sampler Sampler_DetailTexture2	: register(s10);
+//		Sampler_Lightmap		: register(s11);
+sampler Sampler_BlendModulate	: register(s12);
+
+//==========================================================================//
+//	PS Input
+//==========================================================================//
+struct PS_INPUT
+{
+	// lux_displacement_vs30
+
+	float4 WorldPos_ProjPosZ		: TEXCOORD0;
+	float4 TexCoords1				: TEXCOORD1;
+	float4 TexCoords2				: TEXCOORD2;
+	float4 TexCoords3				: TEXCOORD3;
+	float4 TexCoords4				: TEXCOORD4;
+	float4 TexCoords5				: TEXCOORD5;
+	float3 BlendData				: TEXCOORD6;
+
+	#if BUMPMAPPING
+		float3 Tangent					: TANGENT;
+		float3 Binormal					: BINORMAL;
+	#endif
+	float3 Normal						: NORMAL;
+};
+
+//==========================================================================//
+//	PS Entry Point
+//==========================================================================//
+float4 main(PS_INPUT i) : COLOR
+{
+	//	Correctly Mapped TexCoords
+	//==========================================================================//
+
+	// TRIPLANAR_BUMP TRIPLANAR_ENVMAPMASK TRIPLANAR_DETAIL TRIPLANAR_BLENDMODULATE 
+	// A tad complicated but minimises used TexCoords and allows us to reuse 
+	// existing Vertex Shaders for Triplanar
+	// Bias: Base, Bump, EnvMapMask and Detail upwards in that Order
+	// ( So that Base is lower than Bump, Bump is lower than EnvMapMask and so on )
+	#if !TRIPLANAR_BASE
+		float2 f2Base1UV = i.TexCoords1.xy;
+		float2 f2Base2UV = i.TexCoords1.zw;
+
+		#if (BUMPMAPPING && !TRIPLANAR_BUMP)
+			float2 f2Normal1UV = i.TexCoords2.xy;
+			float2 f2Normal2UV = i.TexCoords2.zw;
+
+			#if (ENVMAPMASK && !TRIPLANAR_ENVMAPMASK)
+				float2 f2EnvMapMask1UV = i.TexCoords3.xy;
+				float2 f2EnvMapMask2UV = i.TexCoords3.zw;
+
+				#if (ANYDETAILTEXTURE && !TRIPLANAR_DETAIL)
+					float2 f2Detail1UV = i.TexCoords4.xy;
+					float2 f2Detail2UV = i.TexCoords4.zw;
+				#endif
+			#elif (ANYDETAILTEXTURE && !TRIPLANAR_DETAIL)
+				float2 f2Detail1UV = i.TexCoords3.xy;
+				float2 f2Detail2UV = i.TexCoords3.zw;
+			#endif
+		#else
+			#if (ENVMAPMASK && !TRIPLANAR_ENVMAPMASK)
+				float2 f2EnvMapMask1UV = i.TexCoords2.xy;
+				float2 f2EnvMapMask2UV = i.TexCoords2.zw;
+
+				#if (ANYDETAILTEXTURE && !TRIPLANAR_DETAIL)
+					float2 f2Detail1UV = i.TexCoords3.xy;
+					float2 f2Detail2UV = i.TexCoords3.zw;
+				#endif
+			#elif (ANYDETAILTEXTURE && !TRIPLANAR_DETAIL)
+				float2 f2Detail1UV = i.TexCoords2.xy;
+				float2 f2Detail2UV = i.TexCoords2.zw;
+			#endif
+		#endif
+	#else
+		#if (BUMPMAPPING && !TRIPLANAR_BUMP)
+			float2 f2Normal1UV = i.TexCoords1.xy;
+			float2 f2Normal2UV = i.TexCoords1.zw;
+
+			#if (ENVMAPMASK && !TRIPLANAR_ENVMAPMASK)
+				float2 f2EnvMapMask1UV = i.TexCoords2.xy;
+				float2 f2EnvMapMask2UV = i.TexCoords2.zw;
+
+				#if (ANYDETAILTEXTURE && !TRIPLANAR_DETAIL)
+					float2 f2Detail1UV = i.TexCoords3.xy;
+					float2 f2Detail2UV = i.TexCoords3.zw;
+				#endif
+			#elif (ANYDETAILTEXTURE && !TRIPLANAR_DETAIL)
+				float2 f2Detail1UV = i.TexCoords2.xy;
+				float2 f2Detail2UV = i.TexCoords2.zw;
+			#endif
+		#else
+			#if (ENVMAPMASK && !TRIPLANAR_ENVMAPMASK)
+				float2 f2EnvMapMask1UV = i.TexCoords1.xy;
+				float2 f2EnvMapMask2UV = i.TexCoords1.zw;
+
+				#if (ANYDETAILTEXTURE && !TRIPLANAR_DETAIL)
+					float2 f2Detail1UV = i.TexCoords2.xy;
+					float2 f2Detail2UV = i.TexCoords2.zw;
+				#endif
+			#elif (ANYDETAILTEXTURE && !TRIPLANAR_DETAIL)
+				float2 f2Detail1UV = i.TexCoords1.xy;
+				float2 f2Detail2UV = i.TexCoords1.zw;
+			#endif
+		#endif
+	#endif
+
+	#if (BLENDMODULATE && !TRIPLANAR_BLENDMODULATE)
+		float2 f2BlendModulateUV = i.BlendData.xy;
+	#endif
+
+	// TEXCOORD0
+	float3 f3WorldPos = i.WorldPos_ProjPosZ.xyz;
+	float f1Depth = i.WorldPos_ProjPosZ.w;
+
+	// TEXCOORD5
+	#if BUMPMAPPING
+		// Packed Offsets into .zw so we need one less float2
+		float2 f2Lightmap1UV = i.TexCoords5.xy;
+		float2 f2Lightmap2UV = f2Lightmap1UV + i.TexCoords5.zw;
+		float2 f2Lightmap3UV = f2Lightmap2UV + i.TexCoords5.zw;
+
+		// Function expects it like this
+		float4 f4LightmapUVs1 = float4(f2Lightmap1UV, 0.0f, 0.0f);
+		float4 f4LightmapUVs2 = float4(f2Lightmap2UV, f2Lightmap3UV);
+	#else
+		float2 f2LightmapUV = i.TexCoords5.xy;
+	#endif
+
+	// TEXCOORD6
+	float f1BlendFactor = i.BlendData.z;
+
+	// TANGENT, BINORMAL, NORMAL
+	#if BUMPMAPPING
+		float3x3 TBN_Matrix = float3x3(i.Tangent, i.Binormal, i.Normal);
+		float3 f3NormalWS = i.Normal;
+	#else
+	    float3 f3NormalWS = i.Normal;
+	#endif
+
+	// Triplanar Weights always needed
+	float3 f3TriplanarWeights = Triplanar_ComputeWeights(f3NormalWS);
+
+	//==========================================================================//
+	//	Getting the current Pixels Color from the Samplers
+	//==========================================================================//
+
+	// First, BlendModulate. Reduces some required branching
+	float3 f3UVW;
+	#if BLENDMODULATE
+		float4 f4BlendModulate;
+		#if TRIPLANAR_BLENDMODULATE
+			f3UVW = f3WorldPos * g_f3Triplanar_Scales_BlendModulate + g_f3Triplanar_Offset_BlendModulate;
+			f4BlendModulate = Triplanar_tex2D(Sampler_BlendModulate, f3TriplanarWeights, f3UVW);
+		#else
+			f4BlendModulate = tex2D(Sampler_BlendModulate, f2BlendModulateUV);
+		#endif
+
+		// Stock-Consistency
+		float minb = saturate(f4BlendModulate.g - f4BlendModulate.r);
+		float maxb = saturate(f4BlendModulate.g + f4BlendModulate.r);
+		f1BlendFactor = smoothstep(minb, maxb, f1BlendFactor);
+	#endif
+
+	float4 f4BaseTexture;
+	float4 f4BaseTexture2;
+	#if TRIPLANAR_BASE
+		f3UVW = f3WorldPos * g_f3Triplanar_Scales_Base + g_f3Triplanar_Offset_Base;
+		f4BaseTexture = Triplanar_tex2D(Sampler_BaseTexture, f3TriplanarWeights, f3UVW);
+		f4BaseTexture2 = Triplanar_tex2D(Sampler_BaseTexture2, f3TriplanarWeights, f3UVW);
+	#else
+		f4BaseTexture = tex2D(Sampler_BaseTexture, f2Base1UV);
+		f4BaseTexture2 = tex2D(Sampler_BaseTexture2, f2Base2UV);
+	#endif
+
+	// Blended Version
+	float4 f4BlendedBase = lerp(f4BaseTexture, f4BaseTexture2, f1BlendFactor);
+
+	#if ANYDETAILTEXTURE
+		float4 f4DetailTexture;
+		float4 f4DetailTexture2;
+
+		#if TRIPLANAR_DETAIL
+			f3UVW = f3WorldPos * g_f3Triplanar_Scales_Detail + g_f3Triplanar_Offset_Detail;
+			f4DetailTexture = Triplanar_tex2D(Sampler_DetailTexture, f3TriplanarWeights, f3UVW);
+			f4DetailTexture2 = f4DetailTexture;
+
+			#if DETAIL2
+				f4DetailTexture2 = Triplanar_tex2D(Sampler_DetailTexture2, f3TriplanarWeights, f3UVW);
+			#endif
+		#else
+			f4DetailTexture = tex2D(Sampler_DetailTexture, f2Detail1UV);
+			f4DetailTexture2 = f4DetailTexture;
+
+			#if DETAIL2
+				f4DetailTexture2 = tex2D(Sampler_DetailTexture2, f2Detail2UV);
+			#endif
+		#endif
+
+		// Blended Version
+		float4 f4BlendedDetail = lerp(f4DetailTexture, f4DetailTexture2, f1BlendFactor);
+	#endif
+
+	#if BUMPMAPPING
+		float4 f4NormalTS;
+		float4 f4NormalTS2;
+		#if TRIPLANAR_BUMP
+			f3UVW = f3WorldPos * g_f3Triplanar_Scales_Bump + g_f3Triplanar_Offset_Bump;
+			f4NormalTS = Triplanar_tex2D(Sampler_NormalMap, f3TriplanarWeights, f3UVW);
+			f4NormalTS2 = Triplanar_tex2D(Sampler_NormalMap2, f3TriplanarWeights, f3UVW);
+		#else
+			f4NormalTS = tex2D(Sampler_NormalMap, f2Normal1UV);
+			f4NormalTS2 = tex2D(Sampler_NormalMap2, f2Normal2UV);
+		#endif
+
+		// Blended Version
+		float4 f4BlendedNormal = lerp(f4NormalTS, f4NormalTS2, f1BlendFactor);
+	#endif
+
+	#if ENVMAPMASK
+		float4 f4EnvMapMask;
+		float4 f4EnvMapMask2;
+		#if TRIPLANAR_ENVMAPMASK
+			f3UVW = f3WorldPos * g_f3Triplanar_Scales_EnvMapMask + g_f3Triplanar_Offset_EnvMapMask;
+			f4EnvMapMask = Triplanar_tex2D(Sampler_EnvMapMask, f3TriplanarWeights, f3UVW);
+			f4EnvMapMask2 = Triplanar_tex2D(Sampler_EnvMapMask2, f3TriplanarWeights, f3UVW);
+		#else
+			f4EnvMapMask = tex2D(Sampler_EnvMapMask, f2EnvMapMask1UV);
+			f4EnvMapMask2 = tex2D(Sampler_EnvMapMask2, f2EnvMapMask2UV);
+		#endif
+
+		// Blended Version
+		float4 f4BlendedEnvMapMask = lerp(f4EnvMapMask, f4EnvMapMask2, f1BlendFactor);
+	#endif
+
+	//==========================================================================//
+	//	Detail
+	//==========================================================================//
+
+	// If we have a detail Texture AND a second detailtexture mix them before passing them on
+	#if ANYDETAILTEXTURE
+		int nDetailBlendMode = trunc(g_f1DetailBlendMode);
+
+		f4BlendedDetail.rgb *= g_f3DetailTextureTint;
+		f4BlendedBase = TextureCombine(f4BlendedBase, f4BlendedDetail, nDetailBlendMode);
+	#endif	
+
+	//==========================================================================//
+	//	Lighting
+	//==========================================================================//
+	#if BUMPMAPPING
+		float3 f3NormalTS = f4BlendedNormal.xyz;
+
+		#if !SSBUMP
+			// Regular Tangent Space Normal Maps get perturbed
+			// This scales the Normal Map to [-1..+1] Range
+			f3NormalTS = f3NormalTS.xyz * 2.0f - 1.0f;
+		#endif
+
+		// This is both Direct and Indirect Diffuse
+		#if ANYDETAILTEXTURE
+			float3 f3DiffuseLighting = ComputeBumpedLightmap(f3NormalTS, f4LightmapUVs1, f4LightmapUVs2, nDetailBlendMode, f4BlendedDetail.xyz);
+		#else
+		
+			float3 f3DiffuseLighting = ComputeBumpedLightmap(f3NormalTS, f4LightmapUVs1, f4LightmapUVs2);
+		#endif
+	#else
+		float3 f3DiffuseLighting = ComputeLightmap(f2LightmapUV) * g_f1LightmapScaleFactor;
+	#endif
+
+	// Direct Diffuse + Indirect Diffuse 
+	float3 f3Result = f4BlendedBase.rgb * f3DiffuseLighting; 
+
+	//==========================================================================//
+	// Cubemaps
+	//==========================================================================//
+	#if ENVMAP
+		float3 f3IndirectSpecular = 0.0f;
+		float3 f3ViewDir = ComputeViewDir(f3WorldPos);
+
+		#if BUMPMAPPING
+			// If we used an SSBump we must convert it or bad Things happen to our Cubemaps...
+			// ShiroDkxtro2: This does not appear to be affected by the SSBumpMathIssue
+			#if SSBUMP
+				// Use the original f4 for the math, as the f3 is being overwritten
+				f3NormalTS  = mxBumpBasis[0] * f4NormalTS.xxx;
+				f3NormalTS += mxBumpBasis[1] * f4NormalTS.yyy;
+				f3NormalTS += mxBumpBasis[2] * f4NormalTS.zzz;
+				f3NormalTS  = normalize(f3NormalTS);
+			#endif
+
+			// Convert from Tangent Space to World Space, using the Tangent Matrix
+			// NOTE: Matrix Vector Components are aligned horizontally, so Matrix goes into the mul() last
+			f3NormalWS = normalize(mul(f3NormalTS, TBN_Matrix));
+		#endif
+
+		#if ENVMAPMASK
+			f3IndirectSpecular = ComputeEnvMap(f3DiffuseLighting, f3WorldPos, f3NormalWS, f3ViewDir, f4BlendedEnvMapMask.rgb);
+		#elif BUMPMAPPING
+			f3IndirectSpecular = ComputeEnvMap(f3DiffuseLighting, f3WorldPos, f3NormalWS, f3ViewDir, f4BlendedBase.w, f4BlendedNormal.w);
+		#else
+			f3IndirectSpecular = ComputeEnvMap(f3DiffuseLighting, f3WorldPos, f3NormalWS, f3ViewDir, f4BlendedBase.w);
+		#endif
+
+		// We are missing Direct Specular since we aren't doing Phong
+		f3Result += f3IndirectSpecular;
+	#endif
+
+	//==========================================================================//
+	// SelfIllum / Additive Lighting
+	//==========================================================================//
+	#if DETAILTEXTURE
+		f3Result = TextureCombinePostLighting(f3Result, f4DetailTexture.rgb, nDetailBlendMode);
+	#endif
+	
+	//==========================================================================//
+	// Results
+	//==========================================================================//
+
+	// Pass Basealpha onwards
+	float f1Alpha;
+	#if BLENDMODULATE
+	if(g_bHasBlendModulateTransparency)
+	{
+		// Suggestion made by MrFunreal!
+		// Alpha of the Basetexture(s) might be used for BlendTintByBaseAlpha, SelfIllum or AlphaEnvMapMask.
+		// This allows Artists to use the unused channels of the BlendModulate Texture for Transparency!
+		f1Alpha = lerp(f4BlendModulate.b, f4BlendModulate.a, f1BlendFactor);
+	}
+	else
+	#endif
+	{
+		f1Alpha = f4BlendedBase.a; // Already Blended!
+	}
+
+    return LUX_Finalise(float4(f3Result, f1Alpha), f3WorldPos, f1Depth, g_f1AlphaModulation);
+}

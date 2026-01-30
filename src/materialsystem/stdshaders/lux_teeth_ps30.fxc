@@ -1,0 +1,312 @@
+//===================== File of the LUX Shader Project =====================//
+//
+//	Initial D.	:	18.08.2024 DMY
+//	Last Change :	 30.01.2026 DMY
+//
+//==========================================================================//
+
+//==========================================================================//
+//	Declare Static Combos
+//==========================================================================//
+// STATIC:	"PROJTEX"					"0..1"
+// STATIC:	"ENVMAPMODE"				"0..2"
+// STATIC:	"LIGHTING_MODE"				"0..3" // Vertex-Lit (0), Pixel-Lit (1), Per-Pixel-Phong (2), PhongExponentTexture(3)
+// STATIC:	"DETAILTEXTURE"				"0..1"
+
+//==========================================================================//
+//	Declare Dynamic Combos
+//==========================================================================//
+// DYNAMIC: "PROJTEXSHADOWS"			"0..1"
+// DYNAMIC: "NUM_LIGHTS_COMBO"			"0..4"
+
+//==========================================================================//
+//	Skipping undesired Combos
+//	The Order of Static Combos and Skips has a drastic Impact on Compile Time!
+//==========================================================================//
+// SKIP: ($PROJTEX == 1 && $ENVMAPMODE != 0)
+// SKIP: ($PROJTEX == 1 && $LIGHTING_MODE != 0)
+
+//==========================================================================//
+//	Common Definitions
+//==========================================================================//
+
+// No Lightwarp
+#define NOLIGHTWARP
+
+// This Shader USES Phong
+#if (LIGHTING_MODE > 1)
+	#define PHONG
+
+	// This Enabled $PhongExponentTexture behaviour
+	// We reuse this behaviour for the special functionality of the Teeth Shader,
+	// where Normal Map Alpha gets used as the Phong Exponent
+	#define PHONGEXPONENTTEXTURE
+#endif
+
+//#define TONEMAP_SCALE_NONE
+#define TONEMAP_SCALE_LINEAR
+//#define TONEMAP_SCALE_GAMMA
+
+//==========================================================================//
+//	Constants, Functions, Includes
+//==========================================================================//
+
+// Include for all Pixel Shaders
+#include "lux_common_ps_fxc.h"
+
+#if DETAILTEXTURE
+#include "lux_common_detailtexture.h"
+#endif
+
+// EnvMapping Data
+#include "lux_common_envmap.h"
+
+// Common Lighting functions
+#if (LIGHTING_MODE > 0)
+	#include "lux_common_lighting.h"
+
+	#if (LIGHTING_MODE > 1)
+	// Phong lighting functions
+	#include "lux_common_phong.h"
+	#endif
+#endif
+
+#if (LIGHTING_MODE > 1 && PROJTEX)
+	#include "lux_common_phong_flashlight.h"
+#elif (PROJTEX)
+	#include "lux_common_flashlight.h"
+#endif
+
+//==========================================================================//
+//	PS Input
+//==========================================================================//
+struct PS_INPUT
+{
+	float2 ProjPos					: SV_POSITION;
+	float4	WorldPos_ProjPosZ		: TEXCOORD0;
+
+#if (LIGHTING_MODE > 0)
+    float3 BaseTexCoord				: TEXCOORD1;
+	float4 LightAtten				: TEXCOORD2;
+#else
+    float2 BaseTexCoord				: TEXCOORD1;
+	float4 VertexLighting			: TEXCOORD2;
+#endif
+
+#if (LIGHTING_MODE > 0)
+	float3 Tangent					: TANGENT;
+	float3 Binormal					: BINORMAL;
+#endif
+	float3 Normal					: NORMAL;
+
+};
+ 
+//==========================================================================//
+//	PS Entry Point
+//==========================================================================//
+float4 main(PS_INPUT i) : COLOR
+{
+	//	Getting our PS_INPUT
+	//==========================================================================//
+
+	// TEXCOORD0
+	float3 f3WorldPos = i.WorldPos_ProjPosZ.xyz;
+	float  f1Depth = i.WorldPos_ProjPosZ.w;
+	
+	// TEXCOORD1
+	// Only one TexCoord for this Shader
+	// It should be relatively unlikely that you'd want a moving BumpMap on your Teeth..
+	float2 f2BaseTextureUV = i.BaseTexCoord.xy;
+
+	// TANGENT, BINORMAL, NORMAL
+	#if (LIGHTING_MODE > 0)
+		float3x3 TBN_Matrix = float3x3(i.Tangent, i.Binormal, i.Normal);
+	#endif
+
+	// NORMAL
+	float3 f3VNormal = i.Normal;
+
+	//==========================================================================//
+	//	Getting the current Pixels Color from the Samplers
+	//==========================================================================//
+	float4 f4BaseTexture = tex2D(Sampler_BaseTexture, f2BaseTextureUV);
+		   f4BaseTexture.rgb *= g_f3DefaultTint;
+
+ 	#if DETAILTEXTURE
+		int nDetailBlendMode = trunc(g_f1DetailBlendMode);
+		float2 f2DetailTextureUV = i.BaseTexCoord.xy; // No DetailTexCoord here!
+
+		float4 f4DetailTexture = tex2D(Sampler_DetailTexture, f2DetailTextureUV);
+		f4DetailTexture.xyz *= g_f3DetailTextureTint;
+
+		f4BaseTexture = TextureCombine(f4BaseTexture, f4DetailTexture, nDetailBlendMode);
+	#endif
+
+	// Prepare these for $Phong and $EnvMap
+	// Compiler will optimise and remove them if unused
+	float3 f3ViewDir = ComputeViewDir(f3WorldPos);
+
+	// Direct Diffuse
+	// Used later for $EnvMapLightScale
+	float3 f3DirectDiffuse = 0.0f;
+
+	// Indirect Diffuse
+	float3 f3IndirectDiffuse = 0.0f; 
+
+	// Direct Specular ( $Phong )
+	float3 f3DirectSpecular = 0.0f;
+
+	// Indirect Specular ( $EnvMap )
+	float3 f3IndirectSpecular = 0.0f;
+
+	// Prepare for Cubemaps later on Vertex-Lit Path
+	float3 f3NormalWS = f3VNormal;
+
+	// Not used when VertexLit
+	float f1IlluminationFactor = 1.0f; 
+
+	// Two Paths from here
+	// A. Vertex-Lit
+	// B. Pixel-Lit
+	// Lets start with A. first
+
+	//==========================//
+	//	Vertex-Lit
+	//==========================//
+#if (LIGHTING_MODE == 0)
+	#if PROJTEX
+		f3DirectDiffuse = ComputeProjectedTextureDiffuse(f3WorldPos, f3NormalWS, PROJTEXSHADOWS);
+	#else
+		// Yeah. Thats all of it.
+		f3DirectDiffuse = i.VertexLighting.rgb;
+	#endif
+#else
+	// Get our Tangent Space Normal Map
+	float4 f4NormalTS = tex2D(Sampler_NormalMap, f2BaseTextureUV);
+
+	// Regular Tangent Space Normal Maps get perturbed
+	// This scales the Normal Map to [-1..+1] Range
+	float3 f3NormalTS = f4NormalTS.xyz * 2.0f - 1.0f;
+
+	// Convert from Tangent Space to World Space, using the Tangent Matrix
+	// NOTE: Matrix Vector Components are aligned horizontally, so Matrix goes into the mul() last
+	// NOTE2: f3NormalWS already prepared as its needed for Cubemaps Later
+	f3NormalWS = normalize(mul(f3NormalTS, TBN_Matrix));
+
+	// Needed only for Bumped Lighting
+	f1IlluminationFactor = i.BaseTexCoord.z;
+
+	//==========================//
+	//	Per-Pixel Bumped Lighting
+	//==========================//
+	#if (LIGHTING_MODE > 0) // Lets do Bumped Lighting
+		#if PROJTEX
+			f3DirectDiffuse = ComputeProjectedTextureDiffuse(f3WorldPos, f3NormalWS, PROJTEXSHADOWS);
+		#else
+			f3DirectDiffuse = ComputeDirectDiffuse(f3WorldPos, f3NormalWS, i.LightAtten);
+			f3IndirectDiffuse = ComputeIndirectDiffuse(f3NormalWS);
+		#endif
+	#endif
+
+	//==========================//
+	//	Per-Pixel Phong Lighting
+	//==========================//
+	#if (LIGHTING_MODE > 1)
+
+		float f1NdotV = dot(f3VNormal, -f3ViewDir); // Unsaturated!!!
+
+		// We prepare a Struct now with default Values
+		// This will be Setup using a Function, drastically compressing the Code
+		Phong_Data_t PhongData = Phong_Data_FakeConstructor(); // HLSL forced my Hand because it doesn't have constructors
+
+		// Phong needs some special fresnel functions to look correctly
+		SetupPhongFresnel(PhongData, f1NdotV);
+
+		// Now saturate.
+		f1NdotV = saturate(f1NdotV);
+
+		//---------------------------------------------------------------------------//
+		// $PhongExponentTexture Data
+		//---------------------------------------------------------------------------//
+		#if (LIGHTING_MODE == 3)
+			// Get the Pixel from the Texture into our float4.
+			PhongData.f4PhongExponentTexture = tex2D(Sampler_PhongExpTexture, f2BaseTextureUV);
+
+			// Conditional Statement, yay!
+			if(g_bHasBaseAlphaPhongMask) // This is the default
+				PhongData.f1AlphaMask = f4BaseTexture.w;
+			else
+				PhongData.f1AlphaMask = f4NormalTS.w;
+		#else
+			// Special case for the Teeth Shader. Exponent comes from the Normal Map Alpha Channel
+			// (( $PhongExponent > 0 override handled later ))
+			PhongData.f4PhongExponentTexture.x = f4NormalTS.w;
+
+			// No longer an option to take it from somewhere else
+			PhongData.f1AlphaMask = f4BaseTexture.w;
+		#endif
+
+		// Helper Function that sets up all our Phong Data
+		SetupPhongData(PhongData, f4BaseTexture.rgb);
+
+		// Phong is delayed for Projected Textures.
+		// We mess with Lighting in a bit and we need Lighting for Phong on Projected Textures
+		#if !PROJTEX
+			f3DirectSpecular = ComputeDirectSpecular(PhongData, f3WorldPos, f3NormalWS, f3ViewDir, i.LightAtten);
+		#endif
+	#endif
+#endif
+	
+	//==========================//
+	// Lighting Hacks
+	//==========================//
+
+	// Stock-Consistency, apply Illum Factor for Both
+	float3 f3DiffuseComponent = f3DirectDiffuse + f3IndirectDiffuse;
+
+	// Apply Illumination Factor to the Lighting
+	// This way $EnvMapLightScale has a correct Shadowing Value
+	// In case of VertexLighting this will be stripped by the Compiler, as f1IlluminationFactor is 1.0f by Default
+	f3DiffuseComponent *= f1IlluminationFactor;
+
+	#if PROJTEX
+		// Stock Consistency:
+		// "Without this, unshadowed teeth always seem to glow"
+		// ShiroDkxtro2: Look at that.. so close.. 1/pi.. Almost had it..
+		f3DiffuseComponent *= 0.35f;
+
+		#if (LIGHTING_MODE > 1)
+			// *Now* compute Projected Texture Specular, after we applied everything we wanted to Direct Diffuse
+			f3DirectSpecular = ComputeProjectedTextureSpecular(PhongData, f3WorldPos, f3NormalWS, reflect(f3ViewDir, f3NormalWS), f3DiffuseComponent, PROJTEXSHADOWS);
+		#endif
+	#endif
+
+	//==========================//
+	// $EnvMap and related
+	//==========================//
+
+	// Cubemaps
+	#if ENVMAP
+		#if ENVMAPMASK
+			float4 f4EnvMapMask	= tex2D(Sampler_EnvMapMask, f2BaseTextureUV); // Using BaseTextureUV on this Shader!!!
+			f3IndirectSpecular = ComputeEnvMap(f3DirectDiffuse, f3WorldPos, f3VNormal, f3ViewDir, f4EnvMapMask.xyz);
+		#else
+			// $NormalMapAlphaEnvMapMask only available when $BumpMap'ing
+			#if (LIGHTING_MODE > 0)
+				f3IndirectSpecular = ComputeEnvMap(f3DirectDiffuse, f3WorldPos, f3VNormal, f3ViewDir, f4BaseTexture.w, f4NormalTS.w);
+			#else
+				f3IndirectSpecular = ComputeEnvMap(f3DirectDiffuse, f3WorldPos, f3VNormal, f3ViewDir, f4BaseTexture.w);
+			#endif
+		#endif
+	#endif
+	
+	//==========================//
+	// Results
+	//==========================//
+
+	// Direct Diffuse + Indirect Diffuse + Direct Specular + Indirect Specular
+	float3 f3Result = f4BaseTexture.rgb * f3DiffuseComponent + f3DirectSpecular + f3IndirectSpecular;
+	float f1Alpha = f4BaseTexture.a;
+
+	return LUX_Finalise(float4(f3Result, f1Alpha), f3WorldPos, f1Depth);
+}

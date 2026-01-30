@@ -1,0 +1,304 @@
+//===================== File of the LUX Shader Project =====================//
+//
+//	Initial D.	:	29.10.2024 DMY
+//	Last Change :	 30.01.2026 DMY
+//
+//==========================================================================//
+
+//==========================================================================//
+//	Declare Static Combos
+//==========================================================================//
+// STATIC:	"MATERIAL_TYPE"				"0..3" // Brush, Model, Unlit, Projected Textures
+// STATIC:	"VERTEX_COLORS"				"0..1" // Not for Brushes
+// STATIC:	"DETAILTEXTURE"				"0..3" // Detail, Alpha from Detail, BlendTintByBaseAlpha
+// STATIC:	"SOFT_MASK"					"0..1"
+// STATIC:	"OUTLINE"					"0..1"
+// STATIC:	"OUTER_GLOW"				"0..1"
+
+//==========================================================================//
+//	Declare Dynamic Combos
+//==========================================================================//
+// DYNAMIC: "LIGHTMAPPED_MODEL"			"0..1"
+// DYNAMIC: "PROJTEXSHADOWS"			"0..1"
+
+//==========================================================================//
+//	Skipping undesired Combos
+//	The Order of Static Combos and Skips has a drastic Impact on Compile Time!
+//==========================================================================//
+// None
+
+//==========================================================================//
+//	Unpacking Combos
+//==========================================================================//
+
+#if (MATERIAL_TYPE == 0)
+	#define BRUSH 1
+	#define MODEL 0
+	#define UNLIT 0
+	#define PROJTEX 0
+#elif (MATERIAL_TYPE == 1)
+	#define BRUSH 0
+	#define MODEL 1
+	#define UNLIT 0
+	#define PROJTEX 0
+#elif (MATERIAL_TYPE == 2)
+	#define BRUSH 0
+	#define MODEL 1
+	#define UNLIT 1
+	#define PROJTEX 0
+#elif (MATERIAL_TYPE == 3)
+	#define BRUSH 0
+	#define MODEL 0
+	#define UNLIT 0
+	#define PROJTEX 1
+#endif
+
+// FIXME: Decompress DETAILTEXTURE Combo
+
+//==========================================================================//
+//	Common Definitions
+//==========================================================================//
+
+//#define TONEMAP_SCALE_NONE
+#define TONEMAP_SCALE_LINEAR
+//#define TONEMAP_SCALE_GAMMA
+
+// Always need Alpha for Transparency!!!
+#define NO_DEPTHTODESTALPHA
+#define NO_WATERFOGTODESTALPHA
+
+//==========================================================================//
+//	Constants, Functions, Includes
+//==========================================================================//
+
+// Include for all Pixel Shaders
+#include "lux_common_ps_fxc.h"
+
+#include "lux_common_detailtexture.h"
+
+// Both Brushes and Lightmapped Models need this Header
+#if BRUSH
+	#include "lux_common_lightmapped.h"
+#elif (MODEL && !UNLIT)
+	sampler Sampler_Lightmap		: register(s11);
+#elif PROJTEX
+	#include "lux_common_flashlight.h"
+#endif
+
+//==========================================================================//
+//	Constants unique to this Shader
+//	This is mostly just copied from a Stock Shader
+//==========================================================================//
+const float4 cGlowParameters : register( c5 );
+const float4 cGlowColor : register( c6 );
+#define GLOW_UV_OFFSET cGlowParameters.xy
+#define OUTER_GLOW_MIN_DVALUE cGlowParameters.z
+#define OUTER_GLOW_MAX_DVALUE cGlowParameters.w
+#define OUTER_GLOW_COLOR cGlowColor
+
+// NOTE: On the C++ portion we pack first the start and then the end
+// So start = max, end = min
+// Which is kinda odd
+const float4 cDistanceAlphaParams : register( c7 );
+#define g_f1SoftMask_Max (cDistanceAlphaParams.x)
+#define g_f1SoftMask_Min (cDistanceAlphaParams.y)
+
+const float4 cOutlineColor : register( c8 );
+#define OUTLINE_COLOR (cOutlineColor)
+
+// "these are ordered this way for optimal ps20 swizzling"
+const float4 g_f4OutlineParams : register( c9 );
+
+//==========================================================================//
+//	PS Input
+//==========================================================================//	
+struct PS_INPUT
+{
+	// ProjTex	= lux_model_simplified_vs30
+	// Brush	= lux_brush_vs30
+	// Model	= lux_model_vs30
+	// Unlit	= lux_model_simplified_vs30
+
+	// The same for them all
+	float4 WorldPos_ProjPosZ		: TEXCOORD0;
+	float4 TexCoords1				: TEXCOORD1;
+	float4 TexCoords2				: TEXCOORD2;
+
+	// COLOR Size varies per Shader since some of them don't ever use Alpha
+	#if (PROJTEX || UNLIT)
+		float4 VertexColors			: COLOR0;
+	#elif BRUSH
+		float4 LightmapTexCoord		: TEXCOORD3;
+		float3 VertexColors			: COLOR0;
+	#elif MODEL
+		float3 VertexLighting		: TEXCOORD3;
+		float2 SpecialTexCoord		: TEXCOORD4;
+		float4 VertexColors			: COLOR0;
+	#endif
+
+	float3 Normal					: NORMAL;
+};
+
+//==========================================================================//
+//	PS Entry Point
+//==========================================================================//
+float4 main(PS_INPUT i) : COLOR
+{
+	//	Getting our PS_INPUT
+	//==========================================================================//
+
+	// TEXCOORD0
+	float3 f3WorldPos = i.WorldPos_ProjPosZ.xyz;
+	float  f1Depth = i.WorldPos_ProjPosZ.w;
+
+	// TEXCOORD1
+	float2 f2BaseUV = i.TexCoords1.xy;
+	float2 f2DetailUV = i.TexCoords1.xy;
+
+	// TEXCOORD2
+	// NOPE
+
+	// TEXCOORD3
+	float3 f3NormalWS = i.Normal;
+
+	// TEXCOORD4
+	#if (!UNLIT && MODEL)
+		float2 f2LightmapUV = i.SpecialTexCoord;
+
+	// TEXCOORD6
+	#elif BRUSH
+		float2 f2LightmapUV = i.LightmapTexCoord.xy;
+	#endif
+
+	// TEXCOORD6
+	#if (!UNLIT && MODEL)
+		float3 f3VertexLighting = i.VertexLighting;
+	#endif
+
+	// COLOR0
+	float3 f3VertexRGB = i.VertexColors.rgb;
+	float  f1VertexAlpha = 1.0f;
+	#if MODEL
+		f1VertexAlpha = i.VertexColors.a;
+	#endif
+
+	//==========================================================================//
+	//	Lighting
+	//==========================================================================//
+
+	float3 f3Lighting = 1.0f; // Fallback for Unlit
+
+	#if BRUSH
+		f3Lighting = ComputeLightmap(f2LightmapUV) * g_f1LightmapScaleFactor;
+	#elif (!UNLIT && MODEL)
+		#if LIGHTMAPPED_MODEL
+			f3Lighting = GammaToLinear(tex2D(Sampler_Lightmap, f2LightmapUV).rgb * 2.0f);
+		#else
+			f3Lighting = f3VertexLighting;
+		#endif
+	#elif PROJTEX
+		f3Lighting = ComputeProjectedTextureDiffuse(f3WorldPos, f3NormalWS, PROJTEXSHADOWS);
+	#endif
+
+	//==========================================================================//
+	//	Distance Alpha & BaseTexture
+	//==========================================================================//
+	float4 f4BaseTexture = tex2D(Sampler_BaseTexture, f2BaseUV);
+	float f1DistanceAlphaMask = f4BaseTexture.a;
+
+	// ShiroDkxtro2:
+	// More could be done with this,
+	// but due to how DISTANCEALPHAFROMDETAIL
+	// on the original Shader works,
+	// we can't really change this without breaking existing Materials..
+	// Its a very niche feature.
+	// If you want my personal Suggestion on what to change:
+	// Make the Alpha ( Opacity Mask / Signed Distance Field ) 
+	// Come from the Detail Alpha, but DON'T modify the original Alpha
+	#if (DETAILTEXTURE > 0)
+		float4 f4DetailTexture = tex2D(Sampler_DetailTexture, f2DetailUV);
+		f4DetailTexture.xyz *= g_f3DetailTextureTint;
+
+		// This is DISTANCEALPHAFROMDETAIL
+		// In which case, we need to set the Detail Alpha to 1.0f,
+		// as some Blendmodes use it.. Very shortsighted design honestly
+		#if (DETAILTEXTURE > 1)
+			f1DistanceAlphaMask = f4DetailTexture.a;
+			f4DetailTexture.a = 1.0f;
+		#endif
+
+		// Now do Detail Texture Shenanigans
+		int nDetailBlendMode = trunc(g_f1DetailBlendMode); // Integer Constants are for use with loops only...
+		f4BaseTexture = TextureCombine(f4BaseTexture, f4DetailTexture, nDetailBlendMode);
+	#endif
+	
+	// NOTE: Special alignment for the params here. We run [min, max, max, min] against [min, max, max, min]
+	// Instead of [min, max, min, max] vs [max, min, max, min]
+	#if OUTLINE
+		float4 f4DistanceAlphaFactors = smoothstep(g_f4OutlineParams.xyzw, g_f4OutlineParams.wzyx, f1DistanceAlphaMask);
+		f4BaseTexture = lerp(f4BaseTexture, OUTLINE_COLOR, f4DistanceAlphaFactors.x * f4DistanceAlphaFactors.y);
+	#endif
+
+	float f1MaskUsed;
+	#if SOFT_MASK
+		f1MaskUsed = smoothstep(g_f1SoftMask_Min, g_f1SoftMask_Max, f1DistanceAlphaMask);
+		f4BaseTexture.a *= f1MaskUsed; // In case of DISTANCEALPHAFROMDETAIL, this will modify the *actual* Alpha instead
+	#else
+		// 1.0f if above 0.5f
+		f1MaskUsed = f1DistanceAlphaMask >= 0.5f;
+
+		// This is odd because when you use DISTANCEALPHAFROMDETAIL, it will *still* mess with BaseTexture Alpha
+		#if (DETAILTEXTURE > 0)
+			f4BaseTexture.a *= f1MaskUsed;
+		#else
+			f4BaseTexture.a = f1MaskUsed;
+		#endif
+	#endif
+
+	#if OUTER_GLOW
+		#if (DETAILTEXTURE > 1)
+			float4 f4GlowColor = tex2D(Sampler_DetailTexture, f2DetailUV + GLOW_UV_OFFSET);
+		#else
+			float4 f4GlowColor = tex2D(Sampler_BaseTexture, f2BaseUV + GLOW_UV_OFFSET);
+		#endif
+
+		f4GlowColor = OUTER_GLOW_COLOR * smoothstep( OUTER_GLOW_MIN_DVALUE, OUTER_GLOW_MAX_DVALUE, f4GlowColor.a );
+		f4BaseTexture = lerp(f4GlowColor, f4BaseTexture, f1MaskUsed);
+	#endif
+
+	// Distance Alpha is basically done now
+	// So we can focus on the rest now.
+
+	// Lets start with BlendTintByBaseAlpha
+	// This is on DetailTexture 3 because on the original Shader
+	// ( vertexlit_and_unlit_generic_vs20.fxc )
+	// It would only allow you to have BlendTintByBaseAlpha
+	// if DISTANCEALPHAFROMDETAIL was also true, reusing DetailTexture
+	// means no useless static+1 and a gazillion combos that are unusable
+	// NOTE: GlowColor affects Alpha. This might look wrong with OUTER_GLOW.
+	#if (DETAILTEXTURE == 3)
+	float3	f3TintedBaseTexture	= f4BaseTexture.xyz * g_f3DefaultTint;
+			f3TintedBaseTexture	= lerp(f3TintedBaseTexture, g_f3DefaultTint, g_f1DefaultAlphaFactor);
+			f4BaseTexture.xyz	= lerp(f4BaseTexture.xyz, f3TintedBaseTexture, f4BaseTexture.w);
+	#endif
+
+	// Compute Result. Which is just BaseTexture * Lighting
+	float3 f3Result = f4BaseTexture.rgb * f3Lighting;
+	
+	// No additional Renderpasses for this Shader, so do dtbm5 here!
+	#if DETAILTEXTURE
+		f3Result = TextureCombinePostLighting(f3Result, f4DetailTexture.rgb, nDetailBlendMode);
+	#endif
+
+	// Need a final Alpha Value, we computed Distance Alpha into the BaseTexture Alpha
+	// Which makes DISTANCEALPHAFROMDETAIL useless imo
+	float f1Alpha = f4BaseTexture.a;
+
+	// Needed for Hammer's Shaded Texture Polygons View
+#if VERTEX_COLORS
+	f3Result *= f3VertexRGB;
+	f1Alpha *= f1VertexAlpha;
+#endif
+	
+    return LUX_Finalise(float4(f3Result, f1Alpha), f3WorldPos, f1Depth, g_f1AlphaModulation);
+}

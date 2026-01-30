@@ -1,0 +1,222 @@
+//===================== File of the LUX Shader Project =====================//
+//
+//	Initial D.	:	16.09.2025 DMY
+//	Last Change :	 30.01.2026 DMY
+//
+//==========================================================================//
+
+//==========================================================================//
+//	Declare Static Combos
+//==========================================================================//
+//	STATIC: "BRUSH"						"0..1"
+//	STATIC:	"VERTEXCOLORS"				"0..1"
+//	STATIC:	"SECONDTEXCOORD"			"0..2"
+
+//==========================================================================//
+//	Declare Dynamic Combos
+//==========================================================================//
+//	DYNAMIC: "COMPRESSION"				"0..1"
+//  DYNAMIC: "SKINNING"                 "0..1"
+
+//==========================================================================//
+//	Skipping undesired Combos
+//	The Order of Static Combos and Skips has a drastic Impact on Compile Time!
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Constants, Functions, Includes
+//==========================================================================//
+
+// Include for all Vertex Shaders
+#include "lux_common_vs_fxc.h"
+
+// Include for all Vertex Shaders
+#include "lux_common_vs_fxc.h"
+
+// Depending on the Type of Geometry we need different Includes
+#if !BRUSH
+	#include "lux_common_vs_model.h"
+#else
+	#include "lux_common_vs_brush.h"
+#endif
+
+const float4 g_TexCoordTransform1[2] : register(LUX_VS_TEXTURETRANSFORM_01);
+const float4 g_TexCoordTransform2[2] : register(LUX_VS_TEXTURETRANSFORM_02);
+
+//==========================================================================//
+//	VS Input
+//==========================================================================//
+struct VS_INPUT
+{
+	float4 vPos : POSITION;
+
+	#if !BRUSH
+		float4 vBoneWeights             : BLENDWEIGHT;
+		float4 vBoneIndices             : BLENDINDICES;
+		float4 vNormal                  : NORMAL;
+		float4 vTangent					: TANGENT;
+		float2 vTexCoord0               : TEXCOORD0;
+		float2 vTexCoord1		        : TEXCOORD1;
+		float4 vMorphTexCoord			: TEXCOORD2;
+		float4 vColor                   : COLOR0;
+		float3 vSpecular				: COLOR1;
+
+		// Holds uncompressed TangentS with Binormal Sign ( when not using compression )
+		float4 vUserData				: TANGENT;
+
+		// Position and normal/tangent deltas
+		float4 vPosFlex					: POSITION1;
+		float4 vNormalFlex				: NORMAL1;
+
+		// Morphing
+		float vVertexID					: POSITION2;
+	#else
+		float3 vTangentS				: TANGENT;
+		float3 vTangentT				: BINORMAL;
+		float4 vNormal                  : NORMAL;
+		float2 vTexCoord0               : TEXCOORD0;
+		float4 vLightmapTexCoord        : TEXCOORD1;
+		float4 vLightmapTexCoordOffset  : TEXCOORD2;
+		float4 vColor                   : COLOR0;
+	#endif
+};
+
+//==========================================================================//
+//	VS Output
+//==========================================================================//
+struct VS_OUTPUT
+{
+    float4 ProjPosSetup				: POSITION;
+	float4 WorldPos_ProjPosZ		: TEXCOORD0;
+    float4 TexCoords				: TEXCOORD1;
+	float3 ProjPosXYW				: TEXCOORD2;
+
+	float4 VertexColor				: COLOR0;
+
+	// TBN
+	float3 Tangent					: TANGENT;
+	float3 Binormal					: BINORMAL;
+	float3 Normal					: NORMAL;
+};
+
+//==========================================================================//
+//	VS Entry Point
+//==========================================================================//
+VS_OUTPUT main( const VS_INPUT v )
+{
+	VS_OUTPUT o = ( VS_OUTPUT )0;
+
+	//==========================================================================//
+	//	Get the basic Vertex Shader Inputs
+	//==========================================================================//
+
+	// Forward Declare these Variables, we always need Results for these
+	float3 f3WorldPos = 0.0f;
+	float3 f3WorldTangent = 0.0f;
+	float3 f3WorldBinormal = 0.0f;
+	float3 f3WorldNormal = 0.0f;
+
+	// Two Paths here.
+	// 1. Model
+	// 2. Brush
+	#if !BRUSH
+		
+		//==========================================================================//
+		//	Handle Decompression
+		//==========================================================================//
+
+		// Tangents are also compressed into the NORMAL Stream
+		// Compressed Verts get Normal, Tangent and Binormal Sign through the NORMAL Stream
+		// Uncompressed Verts get an Uncompressed NORMAL Stream,
+		// with Tangent and Binormal Sign on the TANGENT Stream
+		float3 f3ObjectNormal;
+		float4 f4ObjectTangents;
+		DecompressVertexNormal(v.vNormal, v.vTangent, f3ObjectNormal, f4ObjectTangents);
+
+		// Variable needed for Skinning and Morphing
+		float3 f3ObjectPosition = v.vPos.xyz;
+
+		//==========================================================================//
+		//	Handle Morphing
+		//==========================================================================//
+		ApplyMorph(v.vPosFlex, v.vNormalFlex, f3ObjectPosition, f3ObjectNormal, f4ObjectTangents.xyz);
+		
+		//==========================================================================//
+		//	Handle Rotations and Offsets
+		//==========================================================================//
+		AlignVertexInputs(SKINNING, float4(f3ObjectPosition, 1.0f), f3ObjectNormal, f4ObjectTangents,
+			v.vBoneWeights, v.vBoneIndices, f3WorldPos, f3WorldNormal, f3WorldTangent, f3WorldBinormal);
+
+	// else we are dealing with Brush based Geometry
+	#else
+
+		//==========================================================================//
+		//	Handle Decompression
+		//==========================================================================//
+
+		float3 f3ObjectNormal;
+		DecompressVertexNormal(v.vNormal, f3ObjectNormal);
+
+		// Variable needed for Offset and Rotation
+		float3 f3ObjectPosition = v.vPos.xyz;
+		float3 f3ObjectTangent = v.vTangentS.xyz;
+		float3 f3ObjectBinormal = v.vTangentT.xyz;
+
+		//==========================================================================//
+		//	Handle Rotations and Offsets
+		//==========================================================================//
+
+		// "SKINNING"
+		AlignInputWithOffset(f3ObjectPosition, f3WorldPos);
+		AlignInputWithoutOffset(f3ObjectNormal, f3WorldNormal);
+		AlignInputWithoutOffset(f3ObjectTangent, f3WorldTangent);
+		AlignInputWithoutOffset(f3ObjectBinormal, f3WorldBinormal);
+	#endif
+
+	// POSITION	
+	float4 f4ProjPos = mul(float4(f3WorldPos, 1.0f), cViewProj);
+	f4ProjPos = FixHPO(f4ProjPos); // Apply Half-Pixel Offset Fix
+	o.ProjPosSetup = f4ProjPos; 
+
+	// TEXCOORD0
+	o.WorldPos_ProjPosZ.xyz = f3WorldPos;
+	o.WorldPos_ProjPosZ.w = dot(float4(f3WorldPos, 1), cViewProjZ);
+
+	// TEXCOORD1
+	// Stuffing 1.0f into .zw so all Components of the TexCoord Transform influence the UV
+	float4 f4UnmodifiedTexCoord = float4(v.vTexCoord0.xy, 1.0f, 1.0f);
+
+	// Always one Texture	
+	o.TexCoords.x = dot(f4UnmodifiedTexCoord, g_TexCoordTransform1[0]);
+	o.TexCoords.y = dot(f4UnmodifiedTexCoord, g_TexCoordTransform1[1]);
+
+	#if SECONDTEXCOORD
+		o.TexCoords.z = dot(f4UnmodifiedTexCoord, g_TexCoordTransform2[0]);
+		o.TexCoords.w = dot(f4UnmodifiedTexCoord, g_TexCoordTransform2[1]);
+	#endif
+
+	// Screen Coordinate for Refraction Rendertarget
+	float2 f2RefractPos;
+	f2RefractPos.x = f4ProjPos.x;
+	f2RefractPos.y = -f4ProjPos.y;
+	f2RefractPos   = (f2RefractPos + f4ProjPos.ww) * 0.5f;
+	o.ProjPosXYW.xy = f2RefractPos;
+
+	// TEXCOORD2
+	o.ProjPosXYW.z = f4ProjPos.w;
+
+	// COLOR
+	#if VERTEXCOLORS
+		o.VertexColor = v.vColor;
+	#else
+		o.VertexColor = 1.0f;
+	#endif
+
+	// TANGENT, BINORMAL, NORMAL
+	o.Tangent = f3WorldTangent;
+	o.Binormal = f3WorldBinormal;
+	o.Normal = f3WorldNormal;
+
+    return o;
+}

@@ -1,0 +1,116 @@
+//===================== File of the LUX Shader Project =====================//
+//
+//	Initial D.	:	26.01.2026 DMY
+//	Last Change :	 30.01.2026 DMY
+//
+//==========================================================================//
+
+//==========================================================================//
+//	Declare Static Combos
+//==========================================================================//
+// STATIC: "PROJTEX"					"0..1"
+
+//==========================================================================//
+//	Declare Dynamic Combos
+//==========================================================================//
+// DYNAMIC: "PROJTEXSHADOWS"			"0..1"
+
+//==========================================================================//
+//	Skipping undesired Combos
+//	The Order of Static Combos and Skips has a drastic Impact on Compile Time!
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Unpack Combos
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Common Definitions
+//==========================================================================//
+
+//#define TONEMAP_SCALE_NONE
+#define TONEMAP_SCALE_LINEAR
+//#define TONEMAP_SCALE_GAMMA
+
+//==========================================================================//
+//	Constants, Functions, Includes
+//==========================================================================//
+
+// Include for all Pixel Shaders
+#include "lux_common_ps_fxc.h"
+
+#if PROJTEX
+	#include "lux_common_flashlight.h"
+#endif
+
+sampler Sampler_IrisTexture : register(s1);
+sampler Sampler_GlintTexture : register(s2);
+
+const float g_f1GlintFactor : register(REGISTER_FLOAT_000);
+
+//==========================================================================//
+//	PS Input
+//==========================================================================//	
+struct PS_INPUT
+{
+	// lux_eyes_vs30
+	float4 WorldPos_ProjPosZ	: TEXCOORD0;
+    float4 TexCoords1			: TEXCOORD1;
+	float2 TexCoords2			: TEXCOORD2;
+	
+	#if !PROJTEX
+		float3 VertexLighting	: TEXCOORD3;
+	#else
+		float3 Normal			: NORMAL;
+	#endif
+};
+ 
+//==========================================================================//
+//	PS Entry Point
+//==========================================================================//
+float4 main(PS_INPUT i) : COLOR
+{
+	//	Getting our PS_INPUT
+	//==========================================================================//
+
+	// TEXCOORD0
+	float3 f3WorldPos = i.WorldPos_ProjPosZ.xyz;
+	float  f1Depth = i.WorldPos_ProjPosZ.w;
+
+	// TEXCOORD1, TEXCOORD2
+	float2 f2BaseUV = i.TexCoords1.xy;
+    float2 f2IrisUV = i.TexCoords1.zw;
+    float2 f2GlintUV = i.TexCoords2.xy;
+	
+	//==========================================================================//
+	//	..
+	//==========================================================================//
+	float4 f4BaseTexture	= tex2D(Sampler_BaseTexture, f2BaseUV);
+    float4 f4IrisTexture	= tex2D(Sampler_IrisTexture, f2IrisUV);
+    
+    float3 f3Result;
+	#if !PROJTEX
+		f3Result = lerp(f4BaseTexture.rgb, f4IrisTexture.rgb, f4IrisTexture.a);
+		f3Result *= g_f3DefaultTint; // Allow for Tint
+		
+		// Apply Vertex Lighting
+		f3Result *= i.VertexLighting;
+	
+		// Apply Glint
+	    f3Result += g_f1GlintFactor * tex2D(Sampler_GlintTexture, f2GlintUV).rgb;
+	#else
+		f3Result = lerp(f4BaseTexture.rgb, f4IrisTexture.rgb, f4IrisTexture.a);
+		
+		float3 f3DirectDiffuse = ComputeProjectedTextureDiffuse(f3WorldPos, i.Normal, PROJTEXSHADOWS);
+			
+		// Apply Shadow
+		f3Result *= f3DirectDiffuse;
+	#endif
+		
+	// Pass Basealpha onwards since it's free.
+	float f1Alpha = f4BaseTexture.a;
+
+    return LUX_Finalise(float4(f3Result, f1Alpha), f3WorldPos, f1Depth, g_f1AlphaModulation);
+}

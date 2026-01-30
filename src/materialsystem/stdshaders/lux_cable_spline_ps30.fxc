@@ -1,0 +1,121 @@
+//===================== File of the LUX Shader Project =====================//
+//
+//	Initial D.	:	31.08.2024 DMY
+//	Last Change :	 30.01.2026 DMY
+//
+//==========================================================================//
+
+//==========================================================================//
+//	Declare Static Combos
+//==========================================================================//
+// STATIC:	"DEPTH_WRITE"				"0..1"
+// STATIC:	"IGNOREVERTEXALPHA"			"0..1"
+// STATIC:	"IGNORELIGHTDIR"			"0..1"
+
+//==========================================================================//
+//	Declare Dynamic Combos
+//==========================================================================//
+// None
+
+//==========================================================================//
+//	Skipping undesired Combos
+//	The Order of Static Combos and Skips has a drastic Impact on Compile Time!
+//==========================================================================//
+// SKIP: ($DEPTH_WRITE == 1 && $IGNOREVERTEXALPHA != 0)
+// SKIP: ($DEPTH_WRITE == 1 && $IGNORELIGHTDIR != 0)
+
+//==========================================================================//
+//	Common Definitions
+//==========================================================================//
+
+//#define TONEMAP_SCALE_NONE
+#define TONEMAP_SCALE_LINEAR
+//#define TONEMAP_SCALE_GAMMA
+
+//==========================================================================//
+//	Constants, Functions, Includes
+//==========================================================================//
+
+// Include for all Pixel Shaders
+#include "lux_common_ps_fxc.h"
+
+// We want Normal Maps
+#include "lux_common_normalmap.h"
+
+const float3 g_f3LightDir : register(REGISTER_FLOAT_010);
+
+//==========================================================================//
+//	PS Input
+//==========================================================================//
+struct PS_INPUT
+{
+#if !DEPTH_WRITE
+	float4 WorldPos_ProjPosZ	: TEXCOORD0;
+	float4 VertexLighting		: TEXCOORD1;
+	float4 TexCoords			: TEXCOORD2;
+#endif
+};
+ 
+//==========================================================================//
+//	PS Entry Point
+//==========================================================================//
+float4 main(PS_INPUT i) : COLOR
+{
+// Need to render nothing for Depth
+#if DEPTH_WRITE
+	return float4(0.0f, 0.0f, 0.0f, 1.0f);
+#else
+	//	Getting our PS_INPUT
+	//==========================================================================//
+
+	// This is mostly just copied from the regular Cable Shader
+	// So its slightly adapted on the TexCoords here.
+	// We only have one TexCoord for both.
+
+	// TEXCOORD0
+	float3 f3WorldPosition = i.WorldPos_ProjPosZ.xyz;
+	float  f1Depth = i.WorldPos_ProjPosZ.w;
+
+	// TEXCOORD1
+	float2 f2BaseTextureUV = i.TexCoords.xy;
+	float2 f2NormalTextureUV = i.TexCoords.zw;
+
+	// TEXCOORD2
+	float4 f4VertexLighting = i.VertexLighting;
+
+	// Color
+	float4 f4BaseTexture = tex2D(Sampler_BaseTexture, f2BaseTextureUV);
+
+	// Allow for tinting from $Color, $Color2, $sRGBTint
+	f4BaseTexture.xyz *= g_f3DefaultTint;
+	
+	float3 f3Result = f4BaseTexture.rgb * f4VertexLighting.rgb;
+	float f1Alpha = f4BaseTexture.a;
+
+#if !IGNORELIGHTDIR
+	// Shader was so old, it did (xyz - 0.5f) * 2.0f
+	float4 f4NormalCompressed = tex2D(Sampler_NormalMap, f2NormalTextureUV);
+	float3 f3NormalTS = f4NormalCompressed.xyz * 2.0f - 1.0f;
+
+	// Half-Lambert NdotL
+	float f1NdL = dot(f3NormalTS, g_f3LightDir);
+	f1NdL = f1NdL * 0.5f + 0.5f;
+	f1NdL *= f1NdL;
+
+	f3Result *= f1NdL;
+#endif
+
+#if !IGNOREVERTEXALPHA
+	// ShiroDkxtro2 : I literally cannot think of a conceivable Reason why this is done..
+	// I've seen crazy many people wanting to use Transparency Effects on Ropes,
+	// Just for this to mess them up.
+	// Devs preferred to use UnlitGeneric with no Lighting whatsoever over THIS!!
+	// It causes every Material to be partially translucent
+	// And $AlphaTestReference was not a thing on the Shader either.
+	f1Alpha *= f4VertexLighting.a;
+#endif
+
+	return LUX_Finalise(float4(f3Result, f1Alpha), f3WorldPosition, f1Depth);
+
+#endif // endif of !DEPTH_WRITE
+}

@@ -1,0 +1,337 @@
+//===================== File of the LUX Shader Project =====================//
+//
+//	Initial D.	:	03.12.2024 DMY
+//	Last Change :	 30.01.2026 DMY
+//
+//==========================================================================//
+
+//==========================================================================//
+//	Declare Static Combos
+//==========================================================================//
+// STATIC:	"EFFECTMODE"				"0..3" // Reflect, Refract, Both
+// STATIC:	"REFLECTIONLIGHTSCALE"		"0..2" // SSBump Path Included
+// STATIC:	"DIFFUSETEXTURE"			"0..2" // Basetexture + Bumped Lightmap, SSBump
+// STATIC:	"DETAILTEXTURE"				"0..1"
+// STATIC:	"EMM"						"0..2"
+
+//==========================================================================//
+//	Declare Dynamic Combos
+//==========================================================================//
+// DYNAMIC: "BICUBIC_FILTERING"			"0..1"
+
+//==========================================================================//
+//	Skipping undesired Combos
+//	The Order of Static Combos and Skips has a drastic Impact on Compile Time!
+//==========================================================================//
+// No Reflections, no Reflection LightScale
+// SKIP: ( $EFFECTMODE == 0 && $REFLECTIONLIGHTSCALE != 0)
+// SKIP: ( $EFFECTMODE == 2 && $REFLECTIONLIGHTSCALE != 0)
+// Duplicate Scenario
+// SKIP: ( $REFLECTIONLIGHTSCALE == 2 && $DIFFUSETEXTURE == 2)
+// No BaseTexture, no DetailTexture, No LightScale
+// SKIP: ( $DIFFUSETEXTURE == 0 && $DETAILTEXTURE == 1)
+//==========================================================================//
+//	Unpack Combos
+//==========================================================================//
+
+// We want an 'EnvMapMask', 2 will enable all the EnvMap Related Parameter Constants
+// in lux_common_envmap.h
+#if (EMM > 0)
+#define ENVMAPMODE 2
+#else
+#define ENVMAPMODE 1
+#endif
+
+// SSBumping on these cases
+#if (DIFFUSETEXTURE > 1 || REFLECTIONLIGHTSCALE == 2)
+#define SSBUMP 1
+#endif
+
+// EnvMapMask + SelfIllum
+#if (EMM == 2)
+#define SELFILLUM_ENVMAPMASK_ALPHA 1
+#define SELFILLUM 1
+#else
+#define SELFILLUM_ENVMAPMASK_ALPHA 0
+#define SELFILLUM 0
+#endif
+
+//==========================================================================//
+//	Common Definitions
+//==========================================================================//
+
+// Stock-Consistency: No Tonemap Scale
+#define TONEMAP_SCALE_NONE
+//#define TONEMAP_SCALE_LINEAR
+//#define TONEMAP_SCALE_GAMMA
+
+//==========================================================================//
+//	Constants, Functions, Includes
+//==========================================================================//
+
+// Include for all Pixel Shaders
+#include "lux_common_ps_fxc.h"
+
+#if DETAILTEXTURE
+#include "lux_common_detailtexture.h"
+#endif
+
+// Lightmapping related functions
+#include "lux_common_lightmapped.h"
+
+// SelfIllum Data
+#include "lux_common_selfillum.h"
+
+// EnvMapping Data
+#include "lux_common_envmap.h"
+
+sampler Sampler_ReflectTexture : register(s1);
+sampler Sampler_RefractTexture : register(s3);
+
+const float4	g_ReflectTint			: register( c3 );
+#define f3ReflectTint (g_ReflectTint.rgb)
+#define f1Reflectance (g_ReflectTint.w)
+
+const float4	g_RefractTint			: register( c4 );
+#define f3RefractTint (g_RefractTint.rgb)
+
+const float4	g_ReflectRefractScale	: register( c5 );
+
+//==========================================================================//
+//	PS Input
+//==========================================================================//
+struct PS_INPUT
+{
+	// lux_lightmappedreflective_vs30
+	float4 WorldPos_ProjPosZ			: TEXCOORD0;
+    float4 TexCoords1					: TEXCOORD1;
+	float4 TexCoords2					: TEXCOORD2;
+	float4 ReflectRefractTexCoord		: TEXCOORD3;
+	float  ProjPosW						: TEXCOORD4;
+
+	#if (DIFFUSETEXTURE > 0 || REFLECTIONLIGHTSCALE > 0)
+		float4 LightmapTexCoord			: TEXCOORD5; // Two more floats could be packed here
+		float4 LightmapTexCoord2And3	: TEXCOORD6;
+	#endif
+
+	float3 VertexColor					: COLOR0;
+	float3 Normal						: NORMAL;
+};
+ 
+//==========================================================================//
+//	PS Entry Point
+//==========================================================================//
+float4 main(PS_INPUT i) : COLOR
+{
+	//	Getting our PS_INPUT
+	//==========================================================================//
+
+	// TEXCOORD0
+	float3 f3WorldPos			= i.WorldPos_ProjPosZ.xyz;
+	float  f1Depth				= i.WorldPos_ProjPosZ.w; 
+
+	// TEXCOORD1
+	float2 f2BaseTextureUV = i.TexCoords1.xy;
+	float2 f2NormalUV = i.TexCoords1.zw;
+
+	// TEXCOORD2
+	// Detail is on .zw when we have an EMM
+	float2 f2EnvMapMaskUV = i.TexCoords2.xy;
+	#if (EMM > 0 && DETAILTEXTURE)
+		float2 f2DetailTextureUV = i.TexCoords2.zw;
+	#else
+		float2 f2DetailTextureUV = i.TexCoords2.xy;
+	#endif
+
+	// TEXCOORD3
+	float4 f4ReflectRefractUV	= i.ReflectRefractTexCoord;
+
+	// TEXCOORD4
+	float  f1OneOverW			= 1.0f / i.ProjPosW;
+
+	// TEXCOORD5
+	#if (DIFFUSETEXTURE > 0 || REFLECTIONLIGHTSCALE > 0)
+		float4 f4LightmapUV1 = i.LightmapTexCoord;
+		float4 f4LightmapUV2 = i.LightmapTexCoord2And3;
+	#endif
+
+	// NORMAL
+    float3 f3VNormal = i.Normal;
+
+	//==========================================================================//
+	//	Getting the current Pixels Color from the Samplers
+	//==========================================================================//
+	float4 f4BaseTexture = tex2D(Sampler_BaseTexture, f2BaseTextureUV);	
+	float4 f4NormalTS = tex2D(Sampler_NormalMap, f2NormalUV);	
+
+	#if DETAILTEXTURE
+		// Integer Constants are for use with loops only...
+		int nDetailBlendMode = trunc(g_f1DetailBlendMode);
+		float4 f4DetailTexture = tex2D(Sampler_DetailTexture, f2DetailTextureUV);
+		f4DetailTexture.xyz *= g_f3DetailTextureTint;
+	#endif
+
+	// $EnvMapMask
+	#if (EMM > 0)
+		float4 f4EnvMapMask = tex2D(Sampler_EnvMapMask, f2EnvMapMaskUV);
+	#endif
+
+	// Define it into a f3 instead of f4
+	float3 f3NormalTS = f4NormalTS.xyz;
+
+	#if !SSBUMP
+		// Regular Tangent Space Normal Maps get perturbed
+		// This scales the Normal Map to [-1..+1] Range
+		f3NormalTS = f3NormalTS.xyz * 2.0f - 1.0f;
+	#endif
+
+	// Only do Lighting when there is a $BaseTexture
+	float3 f3Lightmap = 1.0f;
+	#if (DIFFUSETEXTURE > 0 || REFLECTIONLIGHTSCALE > 0)
+		// Sample the lightmap
+		#if DETAILTEXTURE
+			f3Lightmap = ComputeBumpedLightmap(f3NormalTS, f4LightmapUV1, f4LightmapUV2, nDetailBlendMode, f4DetailTexture.xyz);
+		#else // !DIFFUSETEXTURE && REFLECTIONLIGHTSCALE
+			f3Lightmap = ComputeBumpedLightmap(f3NormalTS, f4LightmapUV1, f4LightmapUV2);
+		#endif
+	#endif
+
+		// If we used an SSBump we must convert it or bad Things happen to our Cubemaps...
+		// ShiroDkxtro2: This does not appear to be affected by the SSBumpMathIssue
+		#if SSBUMP
+			// Use the original f4 for the math, as the f3 is being overwritten
+			f3NormalTS  = mxBumpBasis[0] * f4NormalTS.xxx;
+			f3NormalTS += mxBumpBasis[1] * f4NormalTS.yyy;
+			f3NormalTS += mxBumpBasis[2] * f4NormalTS.zzz;
+			f3NormalTS  = normalize(f3NormalTS);
+		#endif
+
+	#if DETAILTEXTURE
+		f4BaseTexture = TextureCombine(f4BaseTexture, f4DetailTexture, nDetailBlendMode);
+	#endif
+
+	// Not on this Shader....
+	/*
+	#if defined(LIGHTWARP)
+		if (bLightWarpTexture)
+		{
+			f3Lightmap = 2.0f * tex2D(Sampler_LightWarpTexture, float2( 0.5f * length(f3Lightmap) , 0 ));
+		}
+	#endif
+	*/
+
+	// Apply Lighting, happens separately because of SelfIllum
+	#if (DIFFUSETEXTURE > 0)
+		float3 f3LitSurface = f4BaseTexture.xyz * f3Lightmap;
+
+		#if SELFILLUM_ENVMAPMASK_ALPHA
+			f3LitSurface.xyz = lerp(f3LitSurface.xyz, f4BaseTexture.xyz * g_f3SelfIllumTint, f4EnvMapMask.w);
+		#endif
+	#endif
+
+	//==========================================================================//
+	// Now the crux of the Shader, surface goes bling bling
+	//==========================================================================//
+
+	// I don't trust the compiler to correctly interpret the xyxy swizzel, since it failed to turn .x into .xxx for SSBumps
+	// ...Even though that kinda swizzel is mentioned specifically as a feature for the Shadermodel in Microsofts Documentation...
+	// Anyways -- This will force it to do xyxy
+	float4 f4NormalScale = float4(f3NormalTS.xy, f3NormalTS.xy);
+
+	// Apply Masking
+	f4NormalScale *= f4NormalTS.aaaa;
+	f4NormalScale *= g_ReflectRefractScale;
+
+	float4 f4RefCoord = f4NormalScale + f4ReflectRefractUV * f1OneOverW;
+	float2 f2ReflectUV = f4RefCoord.xy;
+	float2 f2RefractUV = f4RefCoord.zw;
+
+	// Incident View Dir
+	float3 f3ViewDir			= ComputeViewDir(f3WorldPos);
+	float  f1NdotV				= saturate(dot(f3VNormal, -f3ViewDir));
+
+	// Replicating Stock Fresnel but without TangentSpace ViewDir
+	// It looks kinda off but I don't think anyone is just going to notice..
+	// This might get reconsidered later and be turned into TSViewDir
+	float f1Fresnel = f1Reflectance + ((1.0f - f1Reflectance) * pow(1.0f - f1NdotV, 5.0f));
+
+	// Prepare a Result Variable
+	float3 f3Result = 0.0f;
+
+	// Refraction first since its the basic Result
+	#if (EFFECTMODE == 2 || EFFECTMODE == 3)
+		float3 f3Refraction = tex2D(Sampler_RefractTexture, f2RefractUV).rgb;
+		f3Refraction *= f3RefractTint;
+
+		// Applying Result now
+		f3Result = f3Refraction * (1.0f - f1Fresnel);
+	#endif
+
+	// Reflection
+	#if (EFFECTMODE == 1 || EFFECTMODE == 3)
+		float3 f3Reflection = tex2D(Sampler_ReflectTexture, f2ReflectUV).rgb;
+		f3Reflection *= f3ReflectTint;
+		f3Reflection *= f1Fresnel;
+
+		#if (EMM > 0)
+			f3Reflection *= f4EnvMapMask.rgb;
+		#endif
+
+		// Apply Lighting to Reflections if desired
+		#if (REFLECTIONLIGHTSCALE > 0)
+			f3Reflection *= f3Lightmap;
+		#endif
+
+		f3Result += f3Reflection;
+	#endif
+
+	// Apply $BaseTexture Results
+	#if (DIFFUSETEXTURE > 0 && EFFECTMODE != 0)
+		#if (EMM > 0)
+			f3Result += lerp(f3LitSurface, f3LitSurface * (1.0f - f1Fresnel), f4EnvMapMask.rgb);
+		#else
+			// ShiroDkxtro2: Above we are replicating Stock Behaviour
+			// But a non $EnvMapMask Case was never considered
+			// Here is my idea behind this..
+			// Since this in practice replaces an EnvMap, where we would usually do Base + Specular
+			// I'm applying the result here on the same area as the reflection
+			// Something that the above *doesn't* do, only refractive areas receive the BaseTexture * Lightmap
+			f3Result += f3LitSurface * f1Fresnel;
+		#endif
+	#elif (DIFFUSETEXTURE > 0 && EFFECTMODE == 0)
+
+		// Previously just f3LitSurface, however since the shaders whole purpose is reflections/refraction on a brush
+		// I think we should at least apply Fresnel to distinguish the surface from regular lightmappedgeneric!
+		// If someone applies a Material with this Shader to a surface without knowing its using the Shader,
+		// the result would look identical to LightmappedGeneric..
+		// This way they're will notice and go 'oh, something is wrong'
+		// .. Well that or someone finds a usecase for Fresnel'd DIffuse Component :)
+		f3Result = f3LitSurface * f1Fresnel;
+	#endif
+
+	// Unlike VertexLitGeneric we always do this Singlepass
+	// Doesn't function without a $BaseTexture even though none is needed for this to work..
+	// OVERSIGHT:
+	#if DETAILTEXTURE
+		f3Result = TextureCombinePostLighting(f3Result, f4DetailTexture.rgb, nDetailBlendMode);
+	#endif
+
+	// Pass BaseAlpha onwards for Transparency
+	// Stock-Consistency (ASW) : Alpha works as the "refraction mask" ( no it doesn't )
+	// Used for $Translucent but only when not doing Refraction and Reflection...
+	// So its pretty much just Base LMG Behaviour
+	float f1Alpha = 1.0f;
+	#if (DIFFUSETEXTURE > 0 && EFFECTMODE == 0)
+		f1Alpha = f4BaseTexture.a;
+	#endif
+
+	// Needed for Hammer's Shaded Texture Polygons View
+	// NOTE: This will look wrong with Reflections, but Hammer doesn't have Reflections
+	// And the Game doesn't have Hammer. So this should be fine!
+	if(g_bVertexColor)
+	{
+		f3Result *= i.VertexColor.rgb;
+	}
+
+    return LUX_Finalise(float4(f3Result, f1Alpha), f3WorldPos, f1Depth, g_f1AlphaModulation);
+}

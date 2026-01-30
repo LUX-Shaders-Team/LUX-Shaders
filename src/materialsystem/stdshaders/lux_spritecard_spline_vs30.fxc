@@ -1,0 +1,109 @@
+//===================== File of the LUX Shader Project =====================//
+//
+//	Initial D.	:	22.05.2024 DMY
+//	Last Change :	 30.01.2026 DMY
+//
+//==========================================================================//
+
+//==========================================================================//
+//	Available Static Combos to the Shader
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Available Dynamic Combos to the Shader
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Skipped Combinations
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Decompress Combos
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Constants, Functions, Includes
+//==========================================================================//
+
+// Include for all Vertex Shaders
+#include "lux_common_vs_fxc.h"
+
+// Spline Functions
+#include "lux_common_spline.h"
+
+//==========================================================================//
+//	VS Input
+//==========================================================================//
+struct VS_INPUT
+{
+    // This is all of the stuff that we ever use
+	float4 vTint			: COLOR;
+	float4 vParams			: POSITION;		// T V side_id
+	float4 vSplinePt0		: TEXCOORD0;	// x y z rad
+	float4 vSplinePt1		: TEXCOORD1;	// x y z rad
+	float4 vSplinePt2		: TEXCOORD2;	// x y z rad
+	float4 vSplinePt3		: TEXCOORD3;	// x y z rad
+};
+
+//==========================================================================//
+//	VS Output
+//==========================================================================//
+struct VS_OUTPUT
+{
+    float4 ProjPosSetup			: POSITION;
+	float4 WorldPos_ProjPosZ	: TEXCOORD0;
+    float4 TexCoord1And2		: TEXCOORD1;
+	float4 Blendfactor0			: TEXCOORD2;
+	float4 ScreenPos			: TEXCOORD3;
+
+	// Always want ARGB Colors
+	float4 ARGB_Color :	COLOR0;
+};
+
+//==========================================================================//
+//	VS Entry Point
+//==========================================================================//
+VS_OUTPUT main( const VS_INPUT v )
+{
+	VS_OUTPUT o = ( VS_OUTPUT )0;
+
+	float4 f4PosRad = CatmullRomSpline(v.vSplinePt0, v.vSplinePt1, v.vSplinePt2, v.vSplinePt3, v.vParams.x);
+	float3 f3EyeToPos = (f4PosRad.xyz - g_f3EyePos);
+	float3 f3Tangent = DCatmullRomSpline3(v.vSplinePt0.xyz, v.vSplinePt1.xyz, v.vSplinePt2.xyz, v.vSplinePt3.xyz, v.vParams.x);
+
+	float3 ofs = normalize(cross(f3EyeToPos, normalize(f3Tangent)));
+	f4PosRad.xyz += ofs * (f4PosRad.w * ( v.vParams.z - 0.5f ));
+
+	// POSITION
+    float4 f4ProjPos = mul(float4(f4PosRad.xyz, 1.0f), cViewProj);
+	f4ProjPos = FixHPO(f4ProjPos); // Apply Half-Pixel Offset Fix
+    o.ProjPosSetup = f4ProjPos;
+
+	// TEXCOORD0
+    o.WorldPos_ProjPosZ.xyz = f4PosRad.xyz;
+    o.WorldPos_ProjPosZ.w = dot(float4(f4PosRad.xyz, 1.0f), cViewProjZ);
+	
+	// TEXCOORD1
+	float2 f2_UV = float2(1.0f - v.vParams.z, v.vParams.y);
+	o.TexCoord1And2.xy = f2_UV;
+
+	// We just don't send anything, one less instruction
+	// Its impossible to do anything with BaseTexture2 on the Pixel Shader using this Vertex Shader.
+	// So might as well just do nothing and simply condition the instructions away.
+//	o.TexCoord1And2.zw = f2_UV; // Second UV is first UV
+
+	// TEXCOORD1
+    o.Blendfactor0 = float4(0.0f, 0.0f, 0.0f, 0.0f);
+	
+	// TEXCOORD2
+    o.ScreenPos = float4(0.0f, 0.0f, 0.0f, 0.0f);
+	
+	// COLOR0
+    o.ARGB_Color = v.vTint;
+	
+    return o;
+}

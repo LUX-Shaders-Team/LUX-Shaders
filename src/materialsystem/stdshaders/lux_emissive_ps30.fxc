@@ -1,0 +1,170 @@
+//===================== File of the LUX Shader Project =====================//
+//
+//	Initial D.	:	27.12.2023 DMY
+//	Last Change :	 30.01.2026 DMY
+//
+//==========================================================================//
+
+//==========================================================================//
+//	Declare Static Combos
+//==========================================================================//
+// STATIC:	"EMISSIVEBLEND"				"0..2" // 1 == regular, 2 == linear->gamma
+// STATIC:	"NOFLOW"					"0..1" // 1 == Disable flow and use UV instead
+// STATIC:	"DETAILTEXTURE"				"0..2"
+// STATIC:	"SELFILLUMTEXTURE"			"0..1"
+// STATIC:	"MINIMUMLIGHT"				"0..1"
+
+//==========================================================================//
+//	Declare Dynamic Combos
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Skipping undesired Combos
+//	The Order of Static Combos and Skips has a drastic Impact on Compile Time!
+//==========================================================================//
+// Can't have No Flow when not using Emissive Blend
+// SKIP: ($EMISSIVEBLEND == 0 && $NOFLOW == 1)
+
+//==========================================================================//
+//	Common Definitions
+//==========================================================================//
+
+//#define TONEMAP_SCALE_NONE
+#define TONEMAP_SCALE_LINEAR
+//#define TONEMAP_SCALE_GAMMA
+
+// Don't write literally anything to the alpha
+#define NO_DEPTHTODESTALPHA
+#define NO_WATERFOGTODESTALPHA
+
+//==========================================================================//
+//	Constants, Functions, Includes
+//==========================================================================//
+
+// Include for all Pixel Shaders
+#include "lux_common_ps_fxc.h"
+
+#include "lux_common_detailtexture.h"
+
+// s0, s1, s2
+// EmissiveBlend BaseTexture, FlowTexture, EmissiveTexture
+//	Sampler_BaseTexture			: register(s0);
+sampler Sampler_FlowTexture		: register(s1);
+sampler Sampler_EmissiveTexture : register(s2);
+
+// s4
+// SelfIllumTexture
+sampler Sampler_SelfIllum		: register(s3);
+
+// s4
+// Detail Texture ( lux_common_detailtexture.h )
+
+// s5
+// Real BaseTexture
+sampler Sampler_RealBaseTexture : register(s5);
+
+// c32
+const float3 g_f3MinimumLightTint : register(c32);
+
+// c33, c34 used for the Detail Texture
+
+// c36 EmissiveBlendTint
+const float4 cEmissiveBlendTint			: register(REGISTER_FLOAT_036);
+#define	g_f3EmissiveBlendTint				(cEmissiveBlendTint.rgb)
+
+// c37 EmissiveBlend Scroll Vector
+const float4 cEmissiveBlendControls		: register(REGISTER_FLOAT_037);
+#define	g_f2EmissiveScrollVector			(cEmissiveBlendControls.xy)
+
+//==========================================================================//
+//	PS Input
+//==========================================================================//
+struct PS_INPUT
+{
+	float4 WorldPos_ProjPosZ		: TEXCOORD0;
+	#if (EMISSIVEBLEND != 0)
+		float4 EmissiveTexCoords		: TEXCOORD1;
+
+		#if (DETAILTEXTURE || SELFILLUMTEXTURE)
+			float4 AdditiveTexCoords		: TEXCOORD2;
+			float2 BaseTexCoord				: TEXCOORD3;
+		#else
+			float2 BaseTexCoord				: TEXCOORD2;
+		#endif
+	#else
+		#if (DETAILTEXTURE || SELFILLUMTEXTURE)
+			float4 AdditiveTexCoords		: TEXCOORD1;
+			float2 BaseTexCoord				: TEXCOORD2;
+		#else
+			float2 BaseTexCoord				: TEXCOORD1;
+		#endif
+	#endif
+};
+ 
+//==========================================================================//
+//	PS Entry Point
+//==========================================================================//
+float4 main(PS_INPUT i) : COLOR
+{
+	float3 f3Result = 0.0f;
+
+	// EmissiveBlend
+	#if (EMISSIVEBLEND > 0)
+		float2 f2EmissiveBaseUV = i.EmissiveTexCoords.xy;
+		float2 f2EmissiveNoFlowUV = i.EmissiveTexCoords.zw;
+
+		float4 f4EmissiveBase = tex2D(Sampler_BaseTexture, i.EmissiveTexCoords.xy);
+
+		// We multiplied the Tint with the BlendStrength
+		// Instead of doing it every Pixel every Frame..
+		f4EmissiveBase.rgb *= g_f3EmissiveBlendTint;
+
+		// Scrolling UV
+		#if NOFLOW
+			float2 f2EmissiveUV = f2EmissiveNoFlowUV;
+		#else
+			// Time is now precomputed into the ScrollVector
+			// Instead of doing it every Pixel every Frame..
+			float2 f2FlowValue = tex2D(Sampler_FlowTexture, i.EmissiveTexCoords.xy).rg;
+			float2 f2EmissiveUV = f2FlowValue + g_f2EmissiveScrollVector;
+		#endif
+
+		// Emissive Texture
+		float4 f4EmissiveTexture = tex2D(Sampler_EmissiveTexture, f2EmissiveUV);
+		f4EmissiveTexture.rgb *= f4EmissiveBase.rgb;
+
+		// Stock Shader uses a Linear->Gamma 1D LUT
+		#if (EMISSIVEBLEND == 2)
+			f4EmissiveTexture.rgb = LinearToGamma(f4EmissiveTexture.rgb);
+		#endif
+
+		f3Result += f4EmissiveTexture.rgb;
+	#endif
+
+	// DetailBlendMode 5 and 6
+	#if (DETAILTEXTURE > 0)
+		// We only have one of two modes on this Shader
+		#if (DETAILTEXTURE == 1)
+			int nDetailBlendMode = 5;
+		#else
+			int nDetailBlendMode = 6;
+		#endif
+
+		float4 f4DetailTexture	= tex2D(Sampler_DetailTexture, i.AdditiveTexCoords.xy);
+		f4DetailTexture.rgb *= g_f3DetailTextureTint;
+		f3Result = TextureCombinePostLighting(f3Result, f4DetailTexture.rgb, nDetailBlendMode);
+	#endif
+
+	#if SELFILLUMTEXTURE
+		f3Result += tex2D(Sampler_SelfIllum, i.AdditiveTexCoords.zw).rgb;
+	#endif
+
+	// Could use the BaseTexture Alpha here to mask away AlphaBlended and AlphaTest
+	#if MINIMUMLIGHT
+		float4 f4BaseTexture = tex2D(Sampler_RealBaseTexture, i.BaseTexCoord);
+		f3Result += f4BaseTexture.rgb * g_f3MinimumLightTint;
+	#endif
+
+	return LUX_Finalise(float4(f3Result, 0.0f), i.WorldPos_ProjPosZ.xyz, i.WorldPos_ProjPosZ.w);
+}

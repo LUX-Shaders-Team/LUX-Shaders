@@ -1,0 +1,22 @@
+//
+// vs 3.0   ps 3.0   shaders collection
+//
+//  These shaders are forced to compile as shader model 3.0
+//  using the new compiler.
+//	    _ps30.vcs
+//	    _vs30.vcs
+//
+//	ShiroDkxtro2 :	You must add the filename WITH extension. Example :
+//					lux_newshader_ps30.fxc
+
+//============================================
+// All fxc Files used in Post-Process 
+//============================================
+
+lux_screenspace_vs30.fxc
+lux_screenspace_ps30.fxc
+lux_bloom_ps30.fxc
+lux_blurgaussian_ps30.fxc
+lux_blurfilters_vs30.fxc
+lux_blurfilters_ps30.fxc
+lux_engine_post_ps30.fxc

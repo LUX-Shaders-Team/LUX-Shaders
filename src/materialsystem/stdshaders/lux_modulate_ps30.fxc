@@ -1,0 +1,132 @@
+//===================== File of the LUX Shader Project =====================//
+//
+//	Initial D.	:	26.03.2025 DMY
+//	Last Change :	 30.01.2026 DMY
+//
+//==========================================================================//
+
+//==========================================================================//
+//	Declare Static Combos
+//==========================================================================//
+// STATIC:	"VERTEXLIT"					"0..1"
+// STATIC:	"DETAILTEXTURE"				"0..1"
+// STATIC:	"VERTEXCOLORS"				"0..1"
+
+//==========================================================================//
+//	Declare Dynamic Combos
+//==========================================================================//
+// DYNAMIC:	"LIGHTMAPPED_MODEL"			"0..1"
+
+//==========================================================================//
+//	Skipping undesired Combos
+//	The Order of Static Combos and Skips has a drastic Impact on Compile Time!
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Common Definitions
+//==========================================================================//
+
+// NO Tonemap Scale!!
+#define TONEMAP_SCALE_NONE
+//#define TONEMAP_SCALE_LINEAR
+//#define TONEMAP_SCALE_GAMMA
+
+//==========================================================================//
+//	Constants, Functions, Includes
+//==========================================================================//
+
+// Include for all Pixel Shaders
+#include "lux_common_ps_fxc.h"
+
+#include "lux_common_detailtexture.h"
+
+sampler Sampler_Lightmap : register(s11);
+
+//==========================================================================//
+//	PS Input
+//==========================================================================//	
+struct PS_INPUT
+{
+	// lux_model_vs30
+	float4 WorldPos_ProjPosZ	: TEXCOORD0;
+    float4 TexCoords1			: TEXCOORD1;
+	float4 TexCoords2			: TEXCOORD2;
+	float3 VertexLighting		: TEXCOORD3;
+	float2 SpecialTexCoord		: TEXCOORD4;
+	float4 VertexColor			: COLOR0;
+};
+ 
+//==========================================================================//
+//	PS Entry Point
+//==========================================================================//
+float4 main(PS_INPUT i) : COLOR
+{
+	//	Getting our PS_INPUT
+	//==========================================================================//
+
+	// TEXCOORD0
+	float3 f3WorldPosition = i.WorldPos_ProjPosZ.xyz;
+	float  f1Depth = i.WorldPos_ProjPosZ.w;
+
+	// TEXCOORD1
+	float2 f2BaseUV = i.TexCoords1.xy;
+	float2 f2DetailUV = i.TexCoords1.zw;
+
+	// TEXCOORD3
+	float3 f3VertexLighting = i.VertexLighting;
+
+	// TEXCOORD5
+	float2 f2LightmapUV = i.SpecialTexCoord;
+
+	//==========================================================================//
+	//	..
+	//==========================================================================//
+	float4	f4BaseTexture = tex2D(Sampler_BaseTexture, f2BaseUV);
+	
+	// Use PS Constant for Tint and $Alpha instead of cModulationColor from the Vertex Shader
+	f4BaseTexture.rgb *= g_f3DefaultTint;		// $Color, $Color2, $sRGBTint
+    f4BaseTexture.a *= g_f1DefaultAlphaFactor;	// $Alpha, $Alpha2
+
+	#if DETAILTEXTURE
+		float4	f4DetailTexture	= tex2D(Sampler_DetailTexture, f2DetailUV);
+				f4DetailTexture.rgb *= g_f3DetailTextureTint;
+
+		// RGB only
+		f4BaseTexture.rgb *= lerp(1.0f, f4DetailTexture.rgb * 2.0f, g_f1DetailBlendFactor);
+	#endif
+
+	float4 f4Result = f4BaseTexture;
+
+	// This should probably be applied differently for mod2x
+	// But this will work fine for regular Modulation
+	#if LIGHTMAPPED_MODEL
+		// This should probably use its own TexCoord, so BaseTextureTransform can be used for TexCoords.xy
+		// Multiply by cOverbright and convert from Gamma to Linear
+		f4Result.rgb *= GammaToLinear(tex2D(Sampler_Lightmap, f2LightmapUV).rgb * 2.0f);
+	#elif VERTEXLIT
+		f4Result.rgb *= f3VertexLighting;
+	#endif
+
+	// $VertexColor && $VertexAlpha
+	#if VERTEXCOLORS
+		f4Result *= i.VertexColor;
+	#endif
+
+	// Stock-Consistency: Saturate after Vertex Colors and Tints
+	f4Result = saturate(f4Result);
+
+	// NOTE: Originally the Textures were in Gamma Space
+	// To keep the same looks we also have to return this as Gamma
+	// Yes, Linear/Gamma Outputs have different Results even WITH sRGBWrite
+    f4Result.rgb = SrgbLinearToGamma(f4Result.rgb);
+
+	// NOTE: This has to happen in Gamma to replicate Stock Behaviour
+	// Lerp to .5f based on Alpha
+	// Some existing Materials on Team Fortress 2 ( Cap Points for Example ), have Sine Proxies hooked to $Alpha
+	// But Stock Shaders didn't actually use it anywhere?
+	// I'm applying it here like it's applied on other Shaders.
+    f4Result.rgb = lerp(0.5f, f4Result.rgb, f4Result.a);
+	
+	return LUX_Finalise(f4Result, f3WorldPosition, f1Depth);
+}

@@ -1,0 +1,280 @@
+//===================== File of the LUX Shader Project =====================//
+//
+//	Initial D.	:	24.12.2023 DMY
+//	Last Change :	 30.01.2026 DMY
+//
+//==========================================================================//
+
+//==========================================================================//
+//	Declare Static Combos
+//==========================================================================//
+// STATIC:	"LIGHTCOMBO"				"0..3"
+// STATIC:	"WRINKLEMAPS"				"0..1"
+// STATIC:	"XBYBASEALPHA"				"0..2"
+// STATIC:	"DETAILTEXTURE"				"0..1"
+
+//==========================================================================//
+//	Declare Dynamic Combos
+//==========================================================================//
+// DYNAMIC: "PROJTEXSHADOWS"			"0..1"
+
+//==========================================================================//
+//	Skipping undesired Combos
+//	The Order of Static Combos and Skips has a drastic Impact on Compile Time!
+//==========================================================================//
+// SKIP: ( $LIGHTCOMBO < 2 && $WRINKLEMAPS != 0 )
+
+//==========================================================================//
+//	Unpack Combos
+//==========================================================================//
+
+#if (LIGHTCOMBO > 0)
+	#define BUMPMAPPING 1
+
+	#if (LIGHTCOMBO > 1)
+		#define PHONG 1
+		
+		#if (LIGHTCOMBO == 3)
+			#define PHONGEXPONENTTEXTURE 1
+		#else
+			#define PHONGEXPONENTTEXTURE 0
+		#endif
+	#else
+		#define PHONG 0
+		#define PHONGEXPONENTTEXTURE 0
+	#endif
+#else
+	#define BUMPMAPPING 0
+	#define PHONG 0
+	#define PHONGEXPONENTTEXTURE 0
+#endif
+
+// $BlendTintByBaseAlpha and $DesatureWithBaseAlpha
+#if (XBYBASEALPHA > 0)
+	#if (XBYBASEALPHA == 1)
+		#define BLENDTINTBYBASEALPHA 1
+		#define DESATURATEWITHBASEALPHA 0
+	// == 2
+	#else
+		#define BLENDTINTBYBASEALPHA 0
+		#define DESATURATEWITHBASEALPHA 1		
+	#endif
+#else
+	#define BLENDTINTBYBASEALPHA 0
+	#define DESATURATEWITHBASEALPHA 0
+#endif
+
+//==========================================================================//
+//	Common Definitions
+//==========================================================================//
+
+// We are on a Projected Texture
+#define PROJTEX 1
+
+//#define TONEMAP_SCALE_NONE
+#define TONEMAP_SCALE_LINEAR
+//#define TONEMAP_SCALE_GAMMA
+
+//==========================================================================//
+//	Constants, Functions, Includes
+//==========================================================================//
+
+// Include for all Pixel Shaders
+#include "lux_common_ps_fxc.h"
+
+#include "lux_common_normalmap.h"
+#include "lux_common_detailtexture.h"
+#if PHONG
+#include "lux_common_phong_flashlight.h"
+#else
+#include "lux_common_flashlight.h"
+#endif
+
+#if WRINKLEMAPS
+sampler Sampler_Compress		: register(s1);
+sampler Sampler_Stretch			: register(s3);
+sampler Sampler_BumpCompress	: register(s9);
+sampler Sampler_BumpStretch		: register(s10);
+#endif
+
+//==========================================================================//
+//	PS Input
+//==========================================================================//	
+struct PS_INPUT
+{
+    float4 ProjPosSetup				: POSITION; 
+	float4 WorldPos_ProjPosZ		: TEXCOORD0;
+    float4 TexCoords1				: TEXCOORD1;
+	float4 TexCoords2				: TEXCOORD2;
+
+	#if BUMPMAPPING
+		#if WRINKLEMAPS
+			float WrinkleWeight	: TEXCOORD4;
+		#endif
+
+		float3 Tangent					: TANGENT;
+		float3 Binormal					: BINORMAL;
+	#endif
+	float3 Normal						: NORMAL;
+};
+ 
+//==========================================================================//
+//	PS Entry Point
+//==========================================================================//
+float4 main(PS_INPUT i) : COLOR
+{
+	//	Getting our PS_INPUT
+	//==========================================================================//
+
+	// TEXCOORD0
+	float3 f3WorldPos = i.WorldPos_ProjPosZ.xyz;
+	float  f1Depth = i.WorldPos_ProjPosZ.w;
+
+	// TEXCOORD1, TEXCOORD2
+	float2 f2BaseUV = i.TexCoords1.xy;
+	#if BUMPMAPPING
+		float2 f2NormalUV = i.TexCoords1.zw;
+		float2 f2DetailUV = i.TexCoords2.xy;
+	#else
+		float2 f2DetailUV = i.TexCoords1.zw;
+	#endif
+
+	// TANGENT, BINORMAL, NORMAL
+	#if BUMPMAPPING
+		float3x3 TBN_Matrix = float3x3(i.Tangent, i.Binormal, i.Normal);
+	#else
+		float3 f3NormalWS = i.Normal;
+	#endif
+
+	//==========================================================================//
+	//	..
+	//==========================================================================//
+	float4 f4BaseTexture = tex2D(Sampler_BaseTexture, f2BaseUV);	
+
+	#if BUMPMAPPING
+		float4 f4NormalTS = tex2D(Sampler_NormalMap, f2NormalUV);
+	#endif
+
+	#if WRINKLEMAPS
+		float f1WrinkleWeight = i.WrinkleWeight;
+	
+		// WrinkleWeight comes in [-1.0, +1.0f] Range
+		// Compression will happen with negative Values and Stretching with positive Values.
+		// Stock Shader does saturate(-WrinkleWeight) and saturate(WrinkleWeight)
+		// I assume the Compiler will 'optimise' this as
+		// min r0.x 0.0f f1WrinkleWeight
+		// max r0.y 0.0f -f1WrinkleWeight
+		// abs r0.y r0.y
+		// Unless it can find an Instruction with _abs (doubt) or _sat
+		// I think mad_sat is a thing?
+		// I doubt the Compiler is smart enough to optimise the Equation we use the Weights on though.. ( it should have 1x MUL and 2x MAD )
+		float f1CompressWeight = saturate(-f1WrinkleWeight); 
+		float f1StretchWeight = saturate(f1WrinkleWeight);
+	
+		// Should sum to 1
+		float f1TextureWeight = 1.0f - f1CompressWeight - f1StretchWeight;
+	
+		// The Textures:
+		// If we use $BumpCompress and $BumpStretch but not $Compress and $Stretch, these two will just be the $BaseTexture
+		float4 f4CompressTexture = tex2D(Sampler_Compress, f2BaseUV);
+		float4 f4StretchTexture  = tex2D(Sampler_Stretch, f2BaseUV);
+	
+		// If we use $Compress and $Stretch but not $BumpCompress and $BumpStretch, these two will just be $BumpMap
+		float4 f4BumpCompressTexture = tex2D(Sampler_BumpCompress, f2NormalUV);
+		float4 f4BumpStretchTexture  = tex2D(Sampler_BumpStretch, f2NormalUV);
+	
+		// $BaseTexture WrinkleMapping
+		// Stock-Consistency: Only apply to .rgb
+		f4BaseTexture.rgb =  f1TextureWeight  * f4BaseTexture.rgb;
+		f4BaseTexture.rgb += f1CompressWeight * f4CompressTexture.rgb;
+		f4BaseTexture.rgb += f1StretchWeight  * f4StretchTexture.rgb;
+	
+		// $BumpMap WrinkleMapping
+		f4NormalTS = f1TextureWeight  * f4NormalTS;
+		f4NormalTS += f1CompressWeight * f4BumpCompressTexture;
+		f4NormalTS += f1StretchWeight  * f4BumpStretchTexture;
+	#endif
+
+	// $BlendTintByBaseAlpha and $DesatureWithBaseAlpha
+    ComputeTintAndXByBaseAlpha(f4BaseTexture, g_f3DefaultTint, g_f1DefaultAlphaFactor, BLENDTINTBYBASEALPHA, DESATURATEWITHBASEALPHA);
+
+	//==========================================================================//
+	//	Detail Texture. Blendmodes 0 to 9
+	//==========================================================================//
+	#if DETAILTEXTURE
+		int nDetailBlendMode = trunc(g_f1DetailBlendMode);
+
+		float4 f4DetailTexture = tex2D(Sampler_DetailTexture, f2DetailUV);
+
+		f4DetailTexture.xyz *= g_f3DetailTextureTint;
+		f4BaseTexture = TextureCombine(f4BaseTexture, f4DetailTexture, nDetailBlendMode);
+	#endif
+
+	//==========================================================================//
+	//	Lighting Data
+	//==========================================================================//
+
+	#if BUMPMAPPING
+		// Regular Tangent Space Normal Maps get perturbed
+		// This scales the Normal Map to [-1..+1] Range
+		float3 f3NormalTS = f4NormalTS.xyz * 2.0f - 1.0f;
+
+		#if PHONG
+			// Stock-Consistency.
+			// $BaseMapAlphaPhongMask forces a flat Normal, even when using $BumpMap
+			// This can be overriden now with $PhongFlatNormal
+			if(g_bUseFlatNormal)
+				f3NormalTS = float3(0.0f, 0.0f, 1.0f);
+		#endif
+
+		// Convert from Tangent Space to World Space, using the Tangent Matrix
+		// NOTE: Matrix Vector Components are aligned horizontally, so Matrix goes into the mul() last
+		float3 f3NormalWS = normalize(mul(f3NormalTS, TBN_Matrix));
+	#endif
+
+	// Always need Diffuse Lighting, in case of Phong we want it without BaseTexture
+	float3 f3DiffuseLighting = ComputeProjectedTextureDiffuse(f3WorldPos, f3NormalWS, PROJTEXSHADOWS);
+	float3 f3Result = f4BaseTexture.rgb * f3DiffuseLighting;
+
+	#if PHONG
+		// Need these for Fresnel Terms
+		float3	f3ViewDir = ComputeViewDir(f3WorldPos);
+		float	f1NdotV = dot(f3NormalWS, -f3ViewDir); // Unsaturated!!
+
+		// We prepare a Struct now with default Values
+		// This will be Setup using a Function, drastically compressing the Code
+		Phong_Data_t PhongData = Phong_Data_FakeConstructor(); // HLSL forced my Hand because it doesn't have constructors
+
+		// Phong needs some special fresnel functions to look correctly
+		SetupPhongFresnel(PhongData, f1NdotV);
+
+		// Now saturate
+		f1NdotV = saturate(f1NdotV);
+
+		// Conditional Statement, yay!
+		if(g_bHasBaseAlphaPhongMask)
+			PhongData.f1AlphaMask = f4BaseTexture.w;
+		else
+			PhongData.f1AlphaMask = f4NormalTS.w;
+
+		#if PHONGEXPONENTTEXTURE
+			// Get the Pixel from the Texture into our float4.
+			PhongData.f4PhongExponentTexture = tex2D(Sampler_PhongExpTexture, f2BaseUV);
+		#endif
+
+		// Helper Function that sets up all our Phong Data
+		SetupPhongData(PhongData, f4BaseTexture.rgb);
+		
+		// Diffuse + Specular. Perfect.
+		f3Result += ComputeProjectedTextureSpecular(PhongData, f3WorldPos, f3NormalWS, reflect(f3ViewDir, f3NormalWS), f3DiffuseLighting);
+	#endif
+
+	//==========================================================================//
+	// Results
+	//==========================================================================//
+
+	// Need Basetexture Alpha for transparency Effects
+	float f1Alpha = f4BaseTexture.a;
+
+    return LUX_Finalise(float4(f3Result, f1Alpha), f3WorldPos, f1Depth, g_f1AlphaModulation);
+}

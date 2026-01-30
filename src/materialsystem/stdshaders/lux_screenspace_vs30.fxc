@@ -1,0 +1,73 @@
+//===================== File of the LUX Shader Project =====================//
+//
+//	Initial D.	:	28.03.2023 DMY
+//	Last Change :	 30.01.2026 DMY
+//
+//==========================================================================//
+
+//==========================================================================//
+//	Declare Static Combos
+//==========================================================================//
+//  STATIC:  "X360APPCHOOSER"    "0..1"
+
+//==========================================================================//
+//	Declare Dynamic Combos
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Skipping undesired Combos
+//	The Order of Static Combos and Skips has a drastic Impact on Compile Time!
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Constants, Functions, Includes
+//==========================================================================//
+
+// Include for all Vertex Shaders
+#include "lux_common_vs_fxc.h"
+
+//-----------------------------------------------------------------------------
+// Input vertex format
+//-----------------------------------------------------------------------------
+struct VS_INPUT
+{
+	// This is all of the stuff that we ever use
+	float4 vPos                     : POSITION;
+	float2 vTexCoord0               : TEXCOORD0;
+	float4 vColor                   : COLOR0;
+};
+
+struct VS_OUTPUT
+{
+	float4 ProjPosSetup		: POSITION; 
+	float2 BaseTexCoord		: TEXCOORD0;
+ 
+	// Need this for backwards Compat. of some ancient Loading-Screen Background Materials
+#if X360APPCHOOSER
+	float4 VertexColors     : TEXCOORD3;
+#endif
+};
+
+//-----------------------------------------------------------------------------
+// Main shader entry point
+//-----------------------------------------------------------------------------
+VS_OUTPUT main( const VS_INPUT v )
+{
+	VS_OUTPUT o = ( VS_OUTPUT )0;
+	
+	float4 f4ProjPos;
+#if X360APPCHOOSER
+	o.VertexColors = v.vColor.rgba;    
+	f4ProjPos = mul(float4(v.vPos.xyz, 1.0f), cModelViewProj);
+#else
+	f4ProjPos = float4(v.vPos.xyz, 1.0f);
+#endif
+	o.ProjPosSetup = FixHPO(f4ProjPos); // Apply Half-Pixel Offset Fix    
+	
+	// Input TexCoord is output TexCoord
+	o.BaseTexCoord = v.vTexCoord0;
+
+	return o;
+}

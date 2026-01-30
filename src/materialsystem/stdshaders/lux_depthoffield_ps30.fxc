@@ -1,0 +1,111 @@
+//===================== File of the LUX Shader Project =====================//
+//
+//	Initial D.	:	09.09.2025 DMY
+//	Last Change :	 30.01.2026 DMY
+//
+//	Purpose of this File :	PixelShader for ps20b or above. For Screenspace_General
+//
+//==========================================================================//
+
+//==========================================================================//
+//	Declare Static Combos
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Declare Dynamic Combos
+//==========================================================================//
+//	DYNAMIC: "QUALITY"		"0..3"
+
+//==========================================================================//
+//	Skipping undesired Combos
+//	The Order of Static Combos and Skips has a drastic Impact on Compile Time!
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Unpack Combos
+//==========================================================================//
+
+#if (QUALITY == 3)
+	#define NUM_SAMPLES 32
+#elif (QUALITY == 2)
+	#define NUM_SAMPLES 16
+#elif (QUALITY == 1)
+	#define NUM_SAMPLES 16
+#else
+	#define NUM_SAMPLES 8
+#endif
+
+//==========================================================================//
+//	Available Constants
+//==========================================================================//
+
+sampler	Sampler_FullFB		: register(s0);
+sampler	Sampler_SmallFB		: register(s1);
+
+float4 g_vDists : register(c0);
+#define g_flNearBlurDist		g_vDists.x
+#define g_flNearFocusDist		g_vDists.y
+#define g_flFarFocusDist		g_vDists.z
+#define g_flFarBlurDist			g_vDists.w
+
+float3 g_vBlurAmounts : register(c1);
+#define g_flMaxBlurRadius		g_vBlurAmounts.x
+#define g_flNearBlurStrength	g_vBlurAmounts.y
+#define g_flFarBlurStrength		g_vBlurAmounts.z
+
+float3 g_vNearFarDists : register(c2);
+#define g_flNearPlaneDist		g_vNearFarDists.x
+#define g_flFarPlaneDist		g_vNearFarDists.y
+#define g_flDepthConv			g_vNearFarDists.z
+
+float4 g_vMagicConsts : register(c3);
+
+const float4 cReg_00 : register(c0);
+#define f1NearBlurDistance		(cReg_00.x)
+#define f1FarBluristance		(cReg_00.y)
+#define f1NearFocusDistance		(cReg_00.z)
+#define f1FarFocusDistance		(cReg_00.w)
+
+const float4 cReg_01 : register(c1);
+#define f1NearPlaneDist			(cReg_01.x)
+#define f1FarPlaneDist			(cReg_01.y)
+
+const float4 cReg_02 : register(c2);
+#define f1MagicConstMul1 (cReg_02.x)
+#define f1MagicConstAdd1 (cReg_02.y)
+#define f1MagicConstMul2 (cReg_02.z)
+#define f1MagicConstAdd2 (cReg_02.w)
+
+const float4 cPoissonOffsets[NUM_SAMPLES/2] : register(c3);
+
+const float4 cReg_04 : register(c4);
+const float4 cReg_05 : register(c5);
+const float4 cReg_06 : register(c6);
+const float4 cReg_07 : register(c7);
+
+#define f2TexelSize_Texture0 (cReg_04.xy)
+#define f2TexelSize_Texture1 (cReg_05.xy)
+#define f2TexelSize_Texture2 (cReg_06.xy)
+#define f2TexelSize_Texture3 (cReg_07.xy)
+
+//==========================================================================//
+//	Everything Vertex Shader is outputting, enters here
+//==========================================================================//
+struct PS_INPUT
+{
+	float2 TexCoord : TEXCOORD0;
+};
+ 
+//==========================================================================//
+//	Rendering Start - Entry point
+//==========================================================================//
+float4 main(PS_INPUT i) : COLOR
+{
+	float2 f2ScreenUV = i.TexCoord.xy;
+
+	float4 f4Result = 0.0f;
+
+	return f4Result;
+}
