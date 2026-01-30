@@ -250,7 +250,7 @@ See **[Parallax corrected Cubemaps](https://github.com/mapbase-source/source-sdk
  - **[LUX Valve Developer Wiki Page](https://developer.valvesoftware.com/wiki/LUX)**
 
 ## Contact
-* Join the **[LUX Discord Server](https://discord.gg/qN7Ue3QA)**
+* Join the **[LUX Discord Server](https://discord.gg/cGv8GGSkpc)**
 
 ## Legal
 Any Game or Modification that incorporates **LUX** or any Portion of its Codebase is required to include and redistribute the **`thirdpartylegalnotice.txt`** File.
