@@ -9,7 +9,7 @@ It serves as a drag & drop `materialsystem\` Replacement on the **[Source Engine
 <br>
 
 ## Features
-For more specific Details, see **[LUX Github Wiki]()**.
+For more specific Details, see **[LUX Github Wiki](https://github.com/LUX-Shaders-Team/LUX-Shaders/wiki)**.
 <details>
 <summary> Total Overhaul of the materialsystem\ Folder </summary>
 Implementing LUX is intended to be as easy as possible.<br>
@@ -196,15 +196,16 @@ You can find the Patch for the TF2SDK at **[Srcbox](https://github.com/Zeldaboy1
 
 ## Build instructions
 Steps for building **LUX**:  
-1. Run ```createallprojects.bat ``` to generate the `.sln` Solution File.
-2. Compile the `game_shader_generic_example.dll` using the 'Shaders' Project in the .sln File.<br>
-( This results in a `game_shader_dx9.dll` for SDK2013SP )<br>
 
-3. Run `src\materialsystem\stdshaders\!Compile_All.bat` to compile all the Shaders.<br>
+1. Run `src\materialsystem\stdshaders\!Compile_All.bat` to compile all the Shaders.<br>
 The Time this takes depends on your Hardware. This Step is CPU intensive.<br>
 
-4. Copy the compiled Shaders found in `game\lux\shaders\fxc\` to your `mod\shaders\fxc\` Folder.<br>
-And the previously mentioned .dll File from `game\lux\bin\` your `mod\bin\` Folder.<br>
+2. Run ```createallprojects.bat ``` to generate the `.sln` Solution File.
+3. Compile the `game_shader_generic_example.dll` using the 'Shaders' Project in the .sln File.<br>
+( This results in a `game_shader_dx9.dll` for SDK2013SP )<br>
+
+4. Copy the compiled Shaders found in `game\mod_tf\shaders\fxc\` to your `mod\shaders\fxc\` Folder.<br>
+And the previously mentioned .dll File from `game\mod_tf\bin\` your `mod\bin\` Folder.<br>
 
 The copying Process can be automated.<br>
 To do so, the Destination Folder in the $Compile .bat Files and the VPC Scripts need to be adjusted.<br>
@@ -236,10 +237,10 @@ It is recommended you nuke `materialsystem` in it's entirety, commit it and then
 
 ## Technical
 For developing with **LUX** either as a Programmer, Artist or both see also:<br>
- - **[LUX Shader Wiki]()**<br>
- - **[LUX replaced Shaders Table]()**<br>
- - **[Debugging Shaders]()**<br>
- - **[Writing new Shaders on LUX]()**<br>
+ - **[LUX Shader Wiki](https://github.com/LUX-Shaders-Team/LUX-Shaders/wiki)**<br>
+ - **[LUX replaced Shaders Table](https://github.com/LUX-Shaders-Team/LUX-Shaders/wiki#replaced-shaders)**<br>
+ - **[Debugging Shaders](https://github.com/LUX-Shaders-Team/LUX-Shaders/wiki/DebuggingMethods)**<br>
+ - **[Writing new Shaders on LUX](https://github.com/LUX-Shaders-Team/LUX-Shaders/wiki/WritingShadersOnLux)**<br>
 
 ## Additional Resources
 * Vanilla `vbsp.exe` does not recognize custom Shaders.<br>
