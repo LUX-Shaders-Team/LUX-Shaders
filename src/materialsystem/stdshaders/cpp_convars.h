@@ -1,7 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	30.05.2024 DMY
-//	Last Change :	 30.01.2026 DMY
+//	Last Change :	01.02.2026 DMY
 //
 //	Purpose of this File :	Include Header for ConVars
 //							Previously just used extern
@@ -24,22 +24,17 @@ extern ConVar lux_oldshaders;
 // Stock ConVars
 //==========================================================================//
 
-extern ConVar CVarDeveloper;
-extern ConVar mat_fullbright;
-extern ConVar mat_specular;
+extern int CVarDeveloper();
+extern int mat_fullbright();
+extern int mat_specular();
+extern int mat_luxels();
+extern int mat_queue_mode();
+extern int mat_reduceparticles();
 
-// Used in Water.cpp
+extern ConVar rope_min_pixel_diameter;
 extern ConVar r_waterforceexpensive;
-
-#ifdef DEBUG_LUXELS
-extern ConVar mat_luxels;
-#endif
-
 extern ConVar mat_disable_lightwarp;
 extern ConVar r_lightmap_bicubic;
-extern ConVar r_rimlight;
-
-// Used on Sky Shaders
 extern ConVar mat_use_compressed_hdr_textures;
 
 //==========================================================================//

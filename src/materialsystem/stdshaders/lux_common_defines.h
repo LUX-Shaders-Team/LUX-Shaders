@@ -1,7 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	20.01.2023 DMY
-//	Last Change :	 30.01.2026 DMY
+//	Last Change :	01.02.2026 DMY
 //
 //	Purpose of this File :	Define what features should be used
 //							Define If we use sdk2013 MP or SP
@@ -71,13 +71,6 @@
 #define REPLACE_WATER
 #define REPLACE_REFRACT
 #define REPLACE_EYES
-
-// !!! TF2C RELEASE !!! +FIXME:
-// ShiroDkxtro2: If something goes horribly wrong and you have to disable this Shader,
-// I used ifdef NOLUX for TF2C Engine Post to get rid of unused ConVars with regular Engine Post.
-// If you comment this to use the Fallback YOU MUST ALSO remove the ifdef NOLUX in tf2c_engine_post.cpp !!!
-// The FIXME for this is to remove tf2c_engine_post after release ( if nothing goes wrong )
-// AND to clean-up both this comment + the cpp_convars from the stock engine_post convars
 #define REPLACE_ENGINE_POST
 
 // This is a very safe 'replace'

@@ -1,9 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	20.01.2023 DMY
-//	Last Change :	 30.01.2026 DMY
-//
-//	Purpose of this File :	Attempt at creating a more functional & useful DetailSprite/Particle Shader
+//	Last Change :	01.02.2026 DMY
 //
 //==========================================================================//
 
@@ -47,9 +45,7 @@ int GetDefaultDepthFeatheringValue(void) //Allow the command-line to go against 
 	}
 
 	// On low end parts on the Mac, we reduce particles and shut off depth blending here
-	// FIXME PRE-RELEASE: Move to ConVars C++
-	static ConVarRef mat_reduceparticles("mat_reduceparticles");
-	if (mat_reduceparticles.GetBool())
+	if (mat_reduceparticles())
 	{
 		iRetVal = 0;
 	}

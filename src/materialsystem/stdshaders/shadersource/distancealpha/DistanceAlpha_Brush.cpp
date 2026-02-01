@@ -2,7 +2,7 @@
 //
 //	Original D. :	29.10.2024 DMY
 //	Initial D.	:	11.11.2025 DMY
-//	Last Change :	 30.01.2026 DMY
+//	Last Change :	01.02.2026 DMY
 //
 //==========================================================================//
 
@@ -51,7 +51,7 @@ SHADER_INIT_PARAMS()
 	DefaultFloat(EdgeSoftnessEnd, 0.5);
 	DefaultFloat(OutlineAlpha, 1.0);
 
-	if (CVarDeveloper.GetInt() > 0)
+	if (CVarDeveloper() > 0)
 	{
 		if (!IsDefined(BaseTexture) && !GetBool(DistanceAlphaFromDetail))
 		{
@@ -237,7 +237,7 @@ SHADER_DRAW
 		//==========================================================================//
 
 #ifdef DEBUG_FULLBRIGHT2 
-		if (mat_fullbright.GetInt() == 2 && !HasFlag(MATERIAL_VAR_NO_DEBUG_OVERRIDE))
+		if (mat_fullbright() == 2 && !HasFlag(MATERIAL_VAR_NO_DEBUG_OVERRIDE))
 			BindTexture(SAMPLER_BASETEXTURE, TEXTURE_GREY);
 		else
 #endif
@@ -248,7 +248,7 @@ SHADER_DRAW
 
 #ifdef DEBUG_LUXELS
 		// Debug Luxel Texture
-		if (mat_luxels.GetBool())
+		if (mat_luxels())
 		{
 			BindTexture(SAMPLER_LIGHTMAP, TEXTURE_DEBUG_LUXELS);
 		}

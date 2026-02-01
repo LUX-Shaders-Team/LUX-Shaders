@@ -2,7 +2,7 @@
 //
 //	Original D.	:	26.03.2025 DMY
 //	Initial D.	:	28.09.2025 DMY
-//	Last Change :	 30.01.2026 DMY
+//	Last Change :	01.02.2026 DMY
 //
 //==========================================================================//
 
@@ -867,7 +867,7 @@ SHADER_DRAW
 	if(IsDynamicState())
 	{
 #ifdef DEBUG_FULLBRIGHT2 
-		if (mat_fullbright.GetInt() == 2 && !HasFlag(MATERIAL_VAR_NO_DEBUG_OVERRIDE))
+		if (mat_fullbright() == 2 && !HasFlag(MATERIAL_VAR_NO_DEBUG_OVERRIDE))
 		{
 			BindTexture(SHADER_SAMPLER0, TEXTURE_GREY);
 			BindTexture(SHADER_SAMPLER1, TEXTURE_GREY);
@@ -895,7 +895,7 @@ SHADER_DRAW
 #endif
 
 #ifdef DEBUG_LUXELS
-		if (mat_luxels.GetBool())
+		if (mat_luxels())
 			BindTexture(SAMPLER_LIGHTMAP, TEXTURE_DEBUG_LUXELS);
 #endif
 	}

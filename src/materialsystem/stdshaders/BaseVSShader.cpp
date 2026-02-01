@@ -10,7 +10,6 @@
 #include "BaseVSShader.h"
 #include "mathlib/vmatrix.h"
 #include "mathlib/bumpvects.h"
-#include "convar.h"
 
 // Commonly Shared Definitions, Defines and Data for all Shaders
 #include "cpp_lux_shared.h"
@@ -628,7 +627,7 @@ void CBaseVSShader::SetModulationPixelShaderDynamicState_LinearColorSpace_Linear
 void CBaseVSShader::SetEnvMapTintPixelShaderDynamicState( int pixelReg, int tintVar, int alphaVar, bool bConvertFromGammaToLinear )
 {
 	float color[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
-	if( g_pConfig->bShowSpecular && mat_fullbright.GetInt() != 2 )
+	if( g_pConfig->bShowSpecular && mat_fullbright() != 2 )
 	{
 		IMaterialVar* pAlphaVar = NULL;
 		if( alphaVar >= 0 )
@@ -1099,7 +1098,7 @@ float4 CBaseVSShader::ComputeTint(const bool bAllowDiffuseModulation, const int 
 
 	// Shouldn't this happen before bShowDiffuse?
 	// This will cancel bShowDiffuse...
-	if (mat_fullbright.GetInt() == 2)
+	if (mat_fullbright() == 2)
 		f4Result.xyz = 1.0f;
 
 	return f4Result;

@@ -1183,7 +1183,7 @@ void CBaseShader::ComputeModulationColor( float* color )
 	{
 		color[0] = color[1] = color[2] = 0.0f;
 	}
-	if( mat_fullbright.GetInt() == 2 )
+	if( mat_fullbright() == 2 )
 	{
 		color[0] = color[1] = color[2] = 1.0f;
 	}
@@ -1231,7 +1231,6 @@ void CBaseShader::SetNormalBlendingShadowState( int textureVar, bool isBaseTextu
 	}
 }
 
-//ConVar mat_debug_flashlight_only( "mat_debug_flashlight_only", "0" );
 void CBaseShader::SetAdditiveBlendingShadowState( int textureVar, bool isBaseTexture )
 {
 	Assert( IsSnapshotting() );
