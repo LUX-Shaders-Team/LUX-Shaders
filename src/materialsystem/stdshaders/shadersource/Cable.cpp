@@ -1,9 +1,8 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	20.01.2023 DMY
-//	Last Change :	 30.01.2026 DMY
+//	Last Change :	01.02.2026 DMY
 //
-//	Purpose of this File :	Cable Shaders
 //	TODO: Figure out if using the Lightstate works for this Shader
 //
 //==========================================================================//
@@ -243,7 +242,7 @@ SHADER_DRAW
 		//==========================================================================//
 		// if mat_fullbright 2. Bind a standard white Texture...
 #ifdef DEBUG_FULLBRIGHT2 
-		if (mat_fullbright.GetInt() == 2 && !HasFlag(MATERIAL_VAR_NO_DEBUG_OVERRIDE))
+		if (mat_fullbright() == 2 && !HasFlag(MATERIAL_VAR_NO_DEBUG_OVERRIDE))
 		BindTexture(SAMPLER_BASETEXTURE, TEXTURE_GREY);
 		else
 #endif
@@ -315,8 +314,6 @@ END_SHADER
 //==========================================================================//
 // SplineRope Shader Start
 //==========================================================================//
-// FIXME PRE-RELEASE: Move to ConVars c++
-static ConVar rope_min_pixel_diameter("rope_min_pixel_diameter", "2.0", FCVAR_CHEAT);
 
 BEGIN_VS_SHADER(LUX_Cable_Spline, "A Shader used for Ropes and Cables made using keyframe_rope/move_rope Entities. (Note: Use LUX_Rope_Router instead)." )
 SHADER_INFO_GEOMETRY	("See LUX_Rope_Router for more Information.")
@@ -475,7 +472,7 @@ SHADER_DRAW
 			//==========================================================================//
 			// if mat_fullbright 2. Bind a standard white Texture...
 #ifdef DEBUG_FULLBRIGHT2 
-			if (mat_fullbright.GetInt() == 2 && !HasFlag(MATERIAL_VAR_NO_DEBUG_OVERRIDE))
+			if (mat_fullbright() == 2 && !HasFlag(MATERIAL_VAR_NO_DEBUG_OVERRIDE))
 				BindTexture(SAMPLER_BASETEXTURE, TEXTURE_GREY);
 			else
 #endif

@@ -2,7 +2,7 @@
 //
 //	Original D. :	20.01.2023 DMY
 //	Initial D.	:	10.12.2025 DMY
-//	Last Change :	 30.01.2026 DMY
+//	Last Change :	01.02.2026 DMY
 //
 //==========================================================================//
 
@@ -56,7 +56,7 @@ SHADER_INIT_PARAMS()
 	// Render it at the back at all times
 	SetFlag(MATERIAL_VAR_IGNOREZ);
 
-	if (CVarDeveloper.GetInt() > 0 && !IsDefined(BaseTexture))
+	if (CVarDeveloper() > 0 && !IsDefined(BaseTexture))
 	{
 		ShaderDebugMessage("(A Skybox Material) has no BaseTexture, binding black one instead!\n\n");
 	}

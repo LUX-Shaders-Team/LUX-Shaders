@@ -17,7 +17,6 @@
 #include "materialsystem/imaterialvar.h"
 #include "materialsystem/ishaderapi.h"
 #include "materialsystem/imaterialsystemhardwareconfig.h"
-#include "convar.h"
 #include "ProxyShaderShadow.h"
 #include "ProxyShaderAPI.h"
 

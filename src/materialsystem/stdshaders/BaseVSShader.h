@@ -17,8 +17,6 @@
 // Now uses the actual headers!
 #include "../shaderlib/cshader.h"
 #include "../shaderlib/BaseShader.h"
-
-#include "convar.h"
 #include <renderparm.h>
 
 // LUX

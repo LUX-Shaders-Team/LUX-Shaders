@@ -1,9 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	25.11.2024 DMY
-//	Last Change :	 30.01.2026 DMY
-//
-//	Purpose of this File :	LUX_LightmappedReflective Shader for func_reflective_glass Entities
+//	Last Change :	01.02.2026 DMY
 //
 //==========================================================================//
 
@@ -472,7 +470,7 @@ SHADER_DRAW
 	if(IsDynamicState())
 	{
 #ifdef DEBUG_FULLBRIGHT2 
-		if (mat_fullbright.GetInt() == 2 && !HasFlag(MATERIAL_VAR_NO_DEBUG_OVERRIDE))
+		if (mat_fullbright() == 2 && !HasFlag(MATERIAL_VAR_NO_DEBUG_OVERRIDE))
 		{
 			BindTexture(bHasBaseTexture, SAMPLER_BASETEXTURE, TEXTURE_GREY);
 		}
@@ -498,7 +496,7 @@ SHADER_DRAW
 		#endif
 
 #ifdef DEBUG_LUXELS
-		if (bNeedsLightmap && mat_luxels.GetBool())
+		if (bNeedsLightmap && mat_luxels())
 		{
 			BindTexture(SAMPLER_LIGHTMAP, TEXTURE_DEBUG_LUXELS);
 		}

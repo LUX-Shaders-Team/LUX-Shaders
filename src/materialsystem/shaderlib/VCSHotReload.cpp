@@ -1,7 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	21.09.2025 DMY
-//	Last Change :	 30.01.2026 DMY
+//	Last Change :	01.02.2026 DMY
 //
 //==========================================================================//
 
@@ -60,14 +60,6 @@ bool g_bHotReloadCacheEnabled = false;
 		1. Constructor of this Class *and* Deconstructor should call Cleanup Routine
 		2. Go through all Files in shaders/fxc/ and nuke all Files with the indexed Namepattern
 */
-
-// FIXME PRE-RELEASE: Throw to cpp_convars
-int GetQueueMode()
-{
-	// This has to be in a Function or the ConVarRef won't init correctly
-	static ConVarRef mat_queue_mode("mat_queue_mode");
-	return mat_queue_mode.GetInt();
-}
 
 VCSReferences_t* CShaderReload::FindReference(const char* ccVCS)
 {
@@ -384,7 +376,7 @@ void CShaderReload::ReloadPulse()
 		return;
 
 	// Only ever do this with a single thread
-	if(GetQueueMode() != 0)
+	if(mat_queue_mode() != 0)
 		return; // Silent for this one
 
 	// Make sure we init'd
@@ -456,7 +448,7 @@ CON_COMMAND_F(lux_vcshotreloads_toggle, "Enable/Disable .vcs reloading.\n", FCVA
 	if(g_bHotReloadEnabled)
 	{
 		// Only ever do this with a single thread
-		if(GetQueueMode() != 0)
+		if(mat_queue_mode() != 0)
 		{
 			Msg("%s\n", "CShaderReload Functions may only be used with mat_queue_mode 0.");
 			g_bHotReloadEnabled = false;
@@ -494,7 +486,7 @@ CON_COMMAND_F(lux_vcshotreloads_cache,
 "Once this is done, you can use lux_vcshotreloads_pulse.\n", FCVAR_CHEAT)
 {
 	// Only ever do this with a single thread
-	if(GetQueueMode() != 0)
+	if(mat_queue_mode() != 0)
 	{
 		Msg("%s\n", "CShaderReload Functions may only be used with mat_queue_mode 0.");
 		return;
@@ -519,7 +511,7 @@ CON_COMMAND_F(lux_vcshotreloads_pulse,
 	}
 
 	// Only ever do this with a single thread
-	if(GetQueueMode() != 0)
+	if(mat_queue_mode() != 0)
 	{
 		Msg("%s\n", "CShaderReload Functions can only be used with mat_queue_mode 0.");
 		return;
@@ -531,7 +523,7 @@ CON_COMMAND_F(lux_vcshotreloads_pulse,
 CON_COMMAND_F(lux_vcshotreloads_read, "Debug ConCommand to read the List of VCS References found\n", FCVAR_CHEAT)
 {
 	// Only ever do this with a single thread
-	if(GetQueueMode() != 0)
+	if(mat_queue_mode() != 0)
 	{
 		Msg("%s\n", "CShaderReload Functions may only be used with mat_queue_mode 0.");
 		return;
@@ -549,7 +541,7 @@ CON_COMMAND_F(lux_vcshotreloads_read, "Debug ConCommand to read the List of VCS 
 CON_COMMAND_F(lux_vcshotreloads_clear, "Debug ConCommand to read the List of VCS References found\n", FCVAR_CHEAT)
 {
 	// Only ever do this with a single thread
-	if(GetQueueMode() != 0)
+	if(mat_queue_mode() != 0)
 	{
 		Msg("%s\n", "CShaderReload Functions may only be used with mat_queue_mode 0.");
 		return;

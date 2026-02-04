@@ -1,7 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	20.01.2023 DMY
-//	Last Change :	 30.01.2026 DMY
+//	Last Change :	01.02.2026 DMY
 //
 //==========================================================================//
 
@@ -348,7 +348,7 @@ SHADER_INIT
 	LoadTexture(FlowMap, 0);
 	LoadTexture(Flow_Noise_Texture, 0);
 
-	if (!IsDefined(NormalTexture) && CVarDeveloper.GetInt() > 0)
+	if (!IsDefined(NormalTexture) && CVarDeveloper() > 0)
 		ShaderDebugMessage("Water Material %s has no Normal Map? Might be unintentional.\n");
 
 	// According to Ficool2 ( aka Engine Code knowledge we shouldn't have or need ),
@@ -820,7 +820,6 @@ void DrawCheap(IShaderShadow* pShaderShadow, IShaderDynamicAPI* pShaderAPI, bool
 	// HasEnvMap = Should enable the Feature
 	// UseEnvMap = Should actually use the Feature
 	bool bHasEnvMap = IsTextureLoaded(EnvMap);
-	bool bUseEnvMap = mat_specular.GetBool() && bHasEnvMap;
 	bool bPCC = bHasEnvMap && GetBool(EnvMapParallax);
 
 	// ShiroDkxtro2 :
@@ -997,7 +996,7 @@ void DrawCheap(IShaderShadow* pShaderShadow, IShaderDynamicAPI* pShaderAPI, bool
 		BindTexture(bUsingLightmap, SAMPLER_LIGHTMAP, TEXTURE_LIGHTMAP);
 
 		// s14
-		BindTexture(bUseEnvMap, SAMPLER_ENVMAPTEXTURE, EnvMap, EnvMapFrame);
+		BindTexture(bHasEnvMap, SAMPLER_ENVMAPTEXTURE, EnvMap, EnvMapFrame);
 
 		//==========================================================================//
 		// Setup Constant Registers
@@ -1094,7 +1093,7 @@ void DrawCheap(IShaderShadow* pShaderShadow, IShaderDynamicAPI* pShaderAPI, bool
 
 		// c35, c38, c39, c40, c41, c42
 		// c46, c51
-		if (bUseEnvMap)
+		if (bHasEnvMap)
 		{
 			// $EnvMapTint, $EnvMapLightScale
 			float4 f4EnvMapTint_LightScale;
