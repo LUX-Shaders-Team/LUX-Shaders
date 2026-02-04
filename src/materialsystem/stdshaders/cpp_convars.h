@@ -1,7 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	30.05.2024 DMY
-//	Last Change :	01.02.2026 DMY
+//	Last Change :	04.02.2026 DMY
 //
 //	Purpose of this File :	Include Header for ConVars
 //							Previously just used extern
