@@ -496,11 +496,11 @@ SHADER_DRAW
 
 		if(bHasPhong)
 		{
-			if (lux_phong_forcelambert_value.GetBool() == 1)
+			if (lux_phong_forcelambert_value.GetInt() == 1)
 			{
 				pContextData->m_bHalfLambert = false;
 			}
-			else if (lux_phong_forcelambert_value.GetBool() == 2)
+			else if (lux_phong_forcelambert_value.GetInt() == 2)
 			{
 				pContextData->m_bHalfLambert = true;
 			}
