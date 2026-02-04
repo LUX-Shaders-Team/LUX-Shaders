@@ -1770,11 +1770,21 @@ void LuxVertexLitGeneric_Shader_Draw(IShaderShadow* pShaderShadow, IShaderDynami
 		// $PhongDisableHalfLambert overrides *that* for existing Materials
 		if (bHasPhong)
 		{
-			if (GetBool(PhongDisableHalfLambert))
+			if (lux_phong_forcelambert_value.GetInt() == 1)
+			{
 				bHalfLambert = false;
-			else if (lux_phong_defaulthalflambert.GetBool())
+			}
+			else if (lux_phong_forcelambert_value.GetInt() == 2)
+			{
 				bHalfLambert = true;
-
+			}
+			else
+			{
+				if (GetBool(PhongDisableHalfLambert))
+					bHalfLambert = false;
+				else if (lux_phong_defaulthalflambert.GetBool())
+					bHalfLambert = true;
+			}
 			// else it will be set to $HalfLambert. So that it can still be overriden by Materials.
 		}
 

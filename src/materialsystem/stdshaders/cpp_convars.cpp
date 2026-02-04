@@ -111,6 +111,8 @@ ConVar lux_envmap_forcelerp("lux_envmap_forcelerp", "0", FCVAR_RELOAD_MATERIALS,
 ConVar lux_envmap_lerptime("lux_envmap_lerptime", "1.5", FCVAR_NONE, "The Time it will take to transition between two Cubemaps, in Seconds.");
 ConVar lux_envmap_flipbasealpha("lux_envmap_flipbasealpha", "1", FCVAR_NONE, "By default BaseMapAlpha is flipped for the EnvMapMask. This isn't the case since Alien Swarm. This disables the default flip Behaviour.");
 
+ConVar lux_phong_forcelambert_value("lux_phong_forcelambert_value", "0", FCVAR_ARCHIVE, "1. Force Full-Lambert on VertexLitGeneric - Phong \n 2. Force Half-Lambert on VertexLitGeneric - Phong");
+
 //==========================================================================//
 // Cable Shader
 //==========================================================================//
