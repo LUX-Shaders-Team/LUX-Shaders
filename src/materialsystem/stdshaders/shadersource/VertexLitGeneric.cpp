@@ -252,7 +252,7 @@ void LuxVertexLitGeneric_ParamsDebugger()
 
 	// All Textures
 	bool bHasBaseTexture = IsDefined(BaseTexture);
-	bool bHasNormalTexture = IsDefined(NormalTexture);
+	bool bHasNormalTexture = IsDefined(BumpMap) || IsDefined(NormalTexture);
 	bool bHasDetailTexture = IsDefined(Detail);
 	bool bHasLightWarpTexture = IsDefined(LightWarpTexture);
 	bool bHasLightWarpNoBump = GetBool(LightWarpNoBump);
