@@ -1,7 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	20.01.2023 DMY
-//	Last Change :	 30.01.2026 DMY
+//	Last Change :	06.02.2025 DMY
 //
 //==========================================================================//
 
@@ -69,12 +69,27 @@ void EmissiveBlend_Shader_Draw(CBaseVSShader* pShader, IShaderShadow* pShaderSha
 		return;
 		// *** NOTHING ***
 	}
+
 	// Instantly abort if we are on any kind of projected Texture Pass
 	// We can't use $ReceiveProjectedTextures since this is a second Pass
 	else if (pShader->HasFlashlight())
 	{
 		pShader->Draw(false);
 		return;
+	}
+
+	// Stock-Consistency: EmissiveBlend does not care about $BaseTexture Opacity.
+	// I made it a ConVar so that can be changed
+	bool bNeedsBaseForOpacity = false;
+	bool bEmissiveBlendOpacity = bEmissiveBlend && lux_emissiveblend_allowopacity.GetBool();
+	if(bHasDetail || bHasSelfIllumTexture || bMinimumLight || bEmissiveBlendOpacity)
+	{
+		// Need to check this in both Snapshot and Dynamic State
+		BlendType_t nBlendType = pShader->EvaluateBlendRequirements(info.Base.m_nBaseTexture, true, info.Detail.m_nDetail);
+		if (nBlendType == BT_BLEND || nBlendType == BT_BLENDADD)
+		{
+			bNeedsBaseForOpacity = true;
+		}
 	}
 
 	bool bHasFlowTexture = bEmissiveBlend && pShader->IsTextureLoaded(info.m_nEmissiveBlendFlowTexture);
@@ -131,7 +146,7 @@ void EmissiveBlend_Shader_Draw(CBaseVSShader* pShader, IShaderShadow* pShaderSha
 			pShader->EnableSampler(SHADER_SAMPLER4, true);
 
 		// $BaseTexture
-		if(bMinimumLight)
+		if(bMinimumLight || bNeedsBaseForOpacity)
 			pShader->EnableSampler(SHADER_SAMPLER5, true);
 
 		//==========================================================================//
@@ -142,21 +157,39 @@ void EmissiveBlend_Shader_Draw(CBaseVSShader* pShader, IShaderShadow* pShaderSha
 		SET_STATIC_VERTEX_SHADER_COMBO(EMISSIVEBLENDMODE, bEmissiveBlend + bHasNoFlow);
 		SET_STATIC_VERTEX_SHADER_COMBO(DETAILTEXTURE, bHasDetail);
 		SET_STATIC_VERTEX_SHADER_COMBO(SELFILLUMTEXTURE, bHasSelfIllumTexture);
-		SET_STATIC_VERTEX_SHADER_COMBO(MINIMUMLIGHT, bMinimumLight);
+		SET_STATIC_VERTEX_SHADER_COMBO(NEEDSBASETEXTURE, bMinimumLight || bNeedsBaseForOpacity);
 		SET_STATIC_VERTEX_SHADER(lux_emissive_vs30);
 
+		// 0 = None
+		// 1 = EmissiveBlend Enabled
+		// 2 = Convert to Gamma
+		// 3 = Need Opacity
+		// 4 = Convert to Gamma && Opacity
+		int nEmissiveBlendMode = bEmissiveBlend;
+		nEmissiveBlendMode += (bEmissiveBlend && g_pHardwareConfig->NeedsShaderSRGBConversion());
+		nEmissiveBlendMode += 2 * (bEmissiveBlend && bNeedsBaseForOpacity && bEmissiveBlendOpacity);
+		
+		// 0 = None
+		// 1 = $DetailBlendMode 5
+		// 2 = $DetailBlendMode 6
 		int nDetailMode = 0;
 		if(bHasDetail && nDetailBlendMode == DETAILBLENDMODE_SELFILLUM_ADDITIVE)
 			nDetailMode = 1;
 		else if (bHasDetail && nDetailBlendMode == DETAILBLENDMODE_SELFILLUM_THRESHOLDFADE)
 			nDetailMode = 2;
 
+		// 0 = None
+		// 1 = Need BaseTexture for Opacity
+		// 2 = MinimumLight
+		// 3 = Both
+		int nBaseTextureMode = bNeedsBaseForOpacity + 2 * bMinimumLight;
+
 		DECLARE_STATIC_PIXEL_SHADER(lux_emissive_ps30);
 		SET_STATIC_PIXEL_SHADER_COMBO(EMISSIVEBLEND, bEmissiveBlend + bEmissiveBlend * g_pHardwareConfig->NeedsShaderSRGBConversion());
 		SET_STATIC_PIXEL_SHADER_COMBO(NOFLOW, bHasNoFlow);
 		SET_STATIC_PIXEL_SHADER_COMBO(SELFILLUMTEXTURE, bHasSelfIllumTexture);
-		SET_STATIC_PIXEL_SHADER_COMBO(DETAILTEXTURE, nDetailMode);
-		SET_STATIC_PIXEL_SHADER_COMBO(MINIMUMLIGHT, bMinimumLight);
+		SET_STATIC_PIXEL_SHADER_COMBO(DETAILMODE, nDetailMode);
+		SET_STATIC_PIXEL_SHADER_COMBO(BASETEXTUREMODES, nBaseTextureMode);
 		SET_STATIC_PIXEL_SHADER(lux_emissive_ps30);
 	}
 
@@ -193,7 +226,7 @@ void EmissiveBlend_Shader_Draw(CBaseVSShader* pShader, IShaderShadow* pShaderSha
 			pShader->BindTexture(SHADER_SAMPLER4, info.Detail.m_nDetail, info.Detail.m_nDetailFrame);
 
 		// s5 - $BaseTexture
-		if (bMinimumLight)
+		if (bMinimumLight || bNeedsBaseForOpacity)
 			pShader->BindTexture(SHADER_SAMPLER5, info.Base.m_nBaseTexture, info.Base.m_nFrame);
 
 		//==========================================================================//
@@ -225,10 +258,10 @@ void EmissiveBlend_Shader_Draw(CBaseVSShader* pShader, IShaderShadow* pShaderSha
 			pShader->SetVertexShaderTextureTransform(LUX_VS_TEXTURETRANSFORM_04, info.Base.m_nBaseTextureTransform);
 
 		// VS c231, c232
-		if(bMinimumLight)
+		if(bMinimumLight || bNeedsBaseForOpacity)
 			pShader->SetVertexShaderTextureTransform(LUX_VS_TEXTURETRANSFORM_05, info.Base.m_nBaseTextureTransform);
 
-		// c19
+		// c25
 		if(bEmissiveBlend)
 			pShader->SetLuminanceGammaConstant(LUX_PS_FLOAT_LUMINANCE_GAMMA);
 

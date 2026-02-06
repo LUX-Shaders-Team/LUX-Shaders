@@ -1,7 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	07.02.2023 DMY
-//	Last Change :	01.02.2026 DMY
+//	Last Change :	06.02.2026 DMY
 //
 //==========================================================================//
 
@@ -211,3 +211,5 @@ ConVar lux_infected_forcerandomisation("lux_infected_forcerandomisation", "0", F
 //==========================================================================//
 // Others
 //==========================================================================//
+
+ConVar lux_emissiveblend_allowopacity("lux_emissiveblend_allowopacity", "0", FCVAR_NONE, "Enables $BaseTexture Opacity to affect Emissive Blend");
