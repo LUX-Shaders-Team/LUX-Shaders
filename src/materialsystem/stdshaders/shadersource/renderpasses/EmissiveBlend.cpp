@@ -97,6 +97,9 @@ void EmissiveBlend_Shader_Draw(CBaseVSShader* pShader, IShaderShadow* pShaderSha
 		pShader->EnableAlphaBlending(SHADER_BLEND_ONE, SHADER_BLEND_ONE);
 		pShaderShadow->EnableAlphaWrites(false);
 
+		// This Shader is additive, make Fog Black so Things disappear into the Fog
+		pShader->FogToBlack();
+
 		//==========================================================================//
 		// Vertex Shader - Vertex Format
 		//==========================================================================//
@@ -228,6 +231,9 @@ void EmissiveBlend_Shader_Draw(CBaseVSShader* pShader, IShaderShadow* pShaderSha
 		// c19
 		if(bEmissiveBlend)
 			pShader->SetLuminanceGammaConstant(LUX_PS_FLOAT_LUMINANCE_GAMMA);
+
+		// c27 - Fog Data
+		pShaderAPI->SetPixelShaderFogParams(LUX_PS_FLOAT_FOGPARAMETERS);
 
 		if(bMinimumLight)
 		{
