@@ -245,8 +245,9 @@ void EmissiveBlend_Shader_Draw(CBaseVSShader* pShader, IShaderShadow* pShaderSha
 		if (bHasDetail)
 		{
 			// $DetailTint and $DetailBlendFactor
+			// $DetailTint will be GammaToLinear'd depending on the Shader that's calling this
 			float4 f4DetailTint_BlendFactor;
-			f4DetailTint_BlendFactor.xyz = pShader->GetFloat3(info.Detail.m_nDetailTint);
+			f4DetailTint_BlendFactor.xyz = info.Detail.m_f3DetailTint;
 			f4DetailTint_BlendFactor.w = pShader->GetFloat(info.Detail.m_nDetailBlendFactor);
 			f4DetailTint_BlendFactor = pShader->PrecomputeDetail(f4DetailTint_BlendFactor, nDetailBlendMode);
 			pShaderAPI->SetPixelShaderConstant(LUX_PS_FLOAT_DETAIL_FACTORS, f4DetailTint_BlendFactor);

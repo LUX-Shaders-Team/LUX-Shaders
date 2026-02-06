@@ -196,22 +196,24 @@ struct Vars_Detail_t
 	int m_nDetailTextureTransform;
 	int m_nDetailScale;
 	int m_nDetailBlendmode;
-	int m_nDetailTint;
 	int m_nDetailBlendFactor;
+
+	// Some Shaders like VertexLitGeneric want a GammaToLinear Tint
+	// Init Function that calls InitVars should be used to set this
+	float3 m_f3DetailTint;
 
 // Instead of a Macro, just copy this.
 /*
-	InitVars(Detail, DetailFrame, DetailTextureTransform, DetailScale, DetailBlendMode, DetailTint, DetailBlendFactor);
+	InitVars(Detail, DetailFrame, DetailTextureTransform, DetailScale, DetailBlendMode, DetailBlendFactor);
 */
-	void InitVars(int Texture, int Frame, int Transform, int Scale, int Mode, int Tint, int Factor)
+	void InitVars(int Texture, int Frame, int Transform, int Scale, int Mode, int Factor)
 	{
 		m_nDetail = Texture;
 		m_nDetailFrame = Frame;
 		m_nDetailTextureTransform = Transform;
 		m_nDetailScale = Scale;
 		m_nDetailBlendmode = Mode;
-		m_nDetailTint = Tint;
-		m_nDetailBlendFactor = Factor;	
+		m_nDetailBlendFactor = Factor;
 	}
 };
 

@@ -108,7 +108,11 @@ void LMG_SetupEmissiveBlendVars(EmissiveBlend_Vars_t &EmissiveVars)
 	EmissiveVars.SelfIllum.InitVars(SelfIllumTexture, SelfIllumTextureFrame);
 
 	// DetailBlendMode 5 and 6 are handled here, since it simplifies our Shaders
-	EmissiveVars.Detail.InitVars(Detail, DetailFrame, DetailTextureTransform, DetailScale, DetailBlendMode, DetailTint, DetailBlendFactor);
+	EmissiveVars.Detail.InitVars(Detail, DetailFrame, DetailTextureTransform, DetailScale, DetailBlendMode, DetailBlendFactor);
+
+	// $DetailTint is linear on LightmappedGeneric
+	// It is GammaToLinear on VertexLitGeneric
+	EmissiveVars.Detail.m_f3DetailTint = GetFloat3(DetailTint);
 
 	// Minimum Light and Transform Fallbacks
 	EmissiveVars.Base.InitVars(BaseTexture, Frame, BaseTextureTransform);
