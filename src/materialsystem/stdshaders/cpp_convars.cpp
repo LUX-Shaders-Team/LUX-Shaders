@@ -72,7 +72,7 @@ ConVar mat_disable_lightwarp("mat_disable_lightwarp", "0");
 ConVar r_lightmap_bicubic("r_lightmap_bicubic", "0", FCVAR_NONE, "Enable bi-cubic (high quality) lightmap sampling.");
 
 // Used on Sky Shaders
-ConVar mat_use_compressed_hdr_textures("mat_use_compressed_hdr_textures", "0", NULL);
+ConVar mat_use_compressed_hdr_textures("mat_use_compressed_hdr_textures", "0", FCVAR_NONE);
 
 //==========================================================================//
 // General ConVars
@@ -154,7 +154,7 @@ ConVar lux_cable_forcespline("lux_cable_forcespline", "0", FCVAR_CHEAT, "Causes 
 // NOTE: Skybox Bicubic is experimental
 ConVar lux_sky_UseFilter("lux_sky_usefilter", "1", FCVAR_RELOAD_MATERIALS, "By Default(1) RGBs Compressed Textures ( $HDRCompressedTexture ) are filtered, setting this ConVar to 0 disables the Filter.");
 ConVar lux_sky_BicubicFilter("lux_sky_bicubic", "0", FCVAR_RELOAD_MATERIALS, "Use Bicubic instead of Bilinear. Please ClampS and ClampT your Textures when using this.");
-ConVar lux_sky_UseModelMatrix("lux_sky_usemodelmatrix", "0", NULL, "Allows rotation and translation of the Mesh thats used by the Skybox Shader.");
+ConVar lux_sky_UseModelMatrix("lux_sky_usemodelmatrix", "0", FCVAR_NONE, "Allows rotation and translation of the Mesh thats used by the Skybox Shader.");
 
 //==========================================================================//
 // Water Shader
@@ -162,8 +162,8 @@ ConVar lux_sky_UseModelMatrix("lux_sky_usemodelmatrix", "0", NULL, "Allows rotat
 
 // Used in Water.cpp
 ConVar lux_water_projectedtexturesupport("lux_waterflashlightsupport", "1", FCVAR_NONE, "0 = Water Fog can *not* be illuminated by projected Textures.\n"
-	"1 = Waterfog can be illuminated by projected Textures.\n"
-	"ConVar forces $ReceiveProjectedTextures Values.\n"); // FIXME PRE-RELEASE: No it doesn't
+	"1 = Water Fog *can* be illuminated by projected Textures.\n"
+	"ConVar forces $ReceiveProjectedTextures Values.\n");
 
 ConVar lux_water_debugflowmaps("lux_water_debugflowmaps", "0", FCVAR_CHEAT, "Force Draw the FlowMap Results ( Requires a Material Reload.");
 ConVar lux_water_forcefogtype("lux_water_forcefogtype", "0", FCVAR_CHEAT, "Forces Shaders to calculate the HeightFogFactor for Water using the (1) SDK or (2) Alien Swarm Method.");
