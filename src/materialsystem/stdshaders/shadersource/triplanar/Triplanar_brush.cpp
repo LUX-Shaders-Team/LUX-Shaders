@@ -2,7 +2,7 @@
 //
 //	Original D.	:	26.03.2025 DMY
 //	Initial D.	:	28.09.2025 DMY
-//	Last Change :	01.02.2026 DMY
+//	Last Change :	08.02.2026 DMY
 //
 //==========================================================================//
 
@@ -63,6 +63,9 @@ void HandleFallback()
 		// **Not on VLG**. It demands you use $Seamless_Base instead
 		if (!bModelShader && IsDefined(Seamless_Scale) && GetFloat(Seamless_Scale) != 0.0f)
 		{
+			// The Consistency from above
+			SetBool(Seamless_Base, true);
+
 			SetBool(TriPlanar_Base, true);
 			SetBool(TriPlanar_Bump, true);
 			SetBool(TriPlanar_EnvMapMask, true);
@@ -354,9 +357,8 @@ SHADER_DRAW
 		if (HasFlag(MATERIAL_VAR_VERTEXCOLOR))
 			nFlags |= VERTEX_COLOR;
 
-		// EnvMap wants Tangents, ProjTex always needs Normals
-		if(bProjTex || bHasEnvMap)
-			nFlags |= VERTEX_NORMAL;
+		// Always ask for this Flag, we need it for Seamless Weights
+		nFlags |= VERTEX_NORMAL;
 
 		// Normal Maps don't require the TBN Matrix actually.
 		// ( Due to how Radiosity Normal Mapping works )
@@ -571,9 +573,6 @@ SHADER_DRAW
 			float4 f4EnvMapTint_LightScale;
 			f4EnvMapTint_LightScale.rgb = GetFloat3(EnvMapTint);
 			f4EnvMapTint_LightScale.w = GetFloat(EnvMapLightScale);
-
-			// Stock Consistency - Convert from Gamma to Linear
-			f4EnvMapTint_LightScale.rgb = GammaToLinearTint(f4EnvMapTint_LightScale.rgb);
 			pShaderAPI->SetPixelShaderConstant(LUX_PS_FLOAT_ENVMAP_TINT, f4EnvMapTint_LightScale);
 
 			float4 f4EnvMapSaturation_Contrast;
@@ -659,10 +658,6 @@ SHADER_DRAW
 		// Prepare boolean array, yes we need to use BOOL
 		BOOL BBools[REGISTER_BOOL_MAX] = { false };
 		
-		// b0
-		if(HasFlag(MATERIAL_VAR_HALFLAMBERT))
-			BBools[LUX_PS_BOOL_HALFLAMBERT] = true;
-
 		if(HasFlag(MATERIAL_VAR_VERTEXCOLOR) || HasFlag(MATERIAL_VAR_VERTEXALPHA))
 			BBools[LUX_PS_BOOL_VERTEXCOLOR] = true;
 

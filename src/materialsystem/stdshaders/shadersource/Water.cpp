@@ -293,7 +293,7 @@ SHADER_INIT_PARAMS()
 	if (IsDefined(BaseTexture) || GetBool(LightmapWaterFog))
 		SetFlag2(MATERIAL_VAR2_LIGHTING_LIGHTMAP);
 
-	// We replicate Valve Behaviour here, in ASW it does this....:
+	// We replicate Valve Behavior here, in ASW it does this....:
 	if (IsDefined(BaseTexture) && g_pConfig->UseBumpmapping())
 		SetFlag2(MATERIAL_VAR2_LIGHTING_BUMPED_LIGHTMAP);
 

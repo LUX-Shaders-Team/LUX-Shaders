@@ -1,7 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	31.03.2025 DMY
-//	Last Change :	 30.01.2026 DMY
+//	Last Change :	08.02.2026 DMY
 //
 //==========================================================================//
 
@@ -394,9 +394,9 @@ float4 main(PS_INPUT i) : COLOR
 			// ShiroDkxtro2: This does not appear to be affected by the SSBumpMathIssue
 			#if SSBUMP
 				// Use the original f4 for the math, as the f3 is being overwritten
-				f3NormalTS  = mxBumpBasis[0] * f4NormalTS.xxx;
-				f3NormalTS += mxBumpBasis[1] * f4NormalTS.yyy;
-				f3NormalTS += mxBumpBasis[2] * f4NormalTS.zzz;
+				f3NormalTS  = mxBumpBasis[0] * f4BlendedNormal.xxx;
+				f3NormalTS += mxBumpBasis[1] * f4BlendedNormal.yyy;
+				f3NormalTS += mxBumpBasis[2] * f4BlendedNormal.zzz;
 				f3NormalTS  = normalize(f3NormalTS);
 			#endif
 
