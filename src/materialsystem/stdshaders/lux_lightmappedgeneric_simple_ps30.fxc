@@ -163,7 +163,7 @@ float4 main(PS_INPUT i) : COLOR
 	#if LIGHTWARPTEXTURE
 	if (g_bLightWarpTexture)
 	{
-		f3DiffuseLighting = 2.0f * tex1Dlod(Sampler_LightWarpTexture, float4(0.5f * length(f3DiffuseLighting), 0.0f, 0.0f, 0.0f)).rgb;
+		f3DiffuseLighting *= 2.0f * tex1Dlod(Sampler_LightWarpTexture, float4(0.5f * length(f3DiffuseLighting), 0.0f, 0.0f, 0.0f)).rgb;
 	}
 	#endif
 		

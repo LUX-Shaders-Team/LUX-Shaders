@@ -259,7 +259,7 @@ float4 main(PS_INPUT i) : COLOR
 	{
 		// These Textures shouldn't have Mips.
 		// I'm also making this a tex1D
-		f3Lightmap = 2.0f * tex1Dlod(Sampler_LightWarpTexture, float4(0.5f * length(f3Lightmap), 0.0f, 0.0f, 0.0f)).rgb;
+		f3Lightmap *= 2.0f * tex1Dlod(Sampler_LightWarpTexture, float4(0.5f * length(f3Lightmap), 0.0f, 0.0f, 0.0f)).rgb;
 	}
 	
 	// Results are straightforward
