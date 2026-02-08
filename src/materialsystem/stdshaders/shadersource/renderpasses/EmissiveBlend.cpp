@@ -112,6 +112,10 @@ void EmissiveBlend_Shader_Draw(CBaseVSShader* pShader, IShaderShadow* pShaderSha
 		pShader->EnableAlphaBlending(SHADER_BLEND_ONE, SHADER_BLEND_ONE);
 		pShaderShadow->EnableAlphaWrites(false);
 
+		// Important for the brightness of $DetailBlendMode 5
+		// Consistent with Stock EmissiveBlend too
+		pShaderShadow->EnableSRGBWrite(true);
+
 		// This Shader is additive, make Fog Black so Things disappear into the Fog
 		pShader->FogToBlack();
 

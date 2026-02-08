@@ -216,7 +216,7 @@ float4 main(PS_INPUT i) : COLOR
 	#endif
 
 	// DetailBlendMode 5 and 6
-	#if (DETAILTEXTURE > 0)
+	#if DETAILTEXTURE
 		float4 f4DetailTexture	= tex2D(Sampler_DetailTexture, i.AdditiveTexCoords.xy);
 		f4DetailTexture.rgb *= g_f3DetailTextureTint;
 
