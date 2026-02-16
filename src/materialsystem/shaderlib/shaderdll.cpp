@@ -15,7 +15,7 @@
 #include "shaderlib_cvar.h"
 #include "mathlib/mathlib.h"
 #include "tier1/tier1.h"
-#include "Color.h"
+#include "color.h"
 #include "filesystem.h"
 #include <tier2/tier2.h>
 #include <vector>
