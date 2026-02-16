@@ -13,7 +13,7 @@
 #include "shaderapi/commandbuffer.h"
 
 // Need this for ConColorMsg
-#include "Color.h"
+#include "color.h"
 
 // Need to set the fake shadow state for spew
 #include "ProxyShaderShadow.h"
