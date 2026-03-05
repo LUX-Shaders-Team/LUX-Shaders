@@ -39,6 +39,7 @@ REM PC SHADERS
 REM ****************
 
 %BUILD_SHADER% ShaderList_PostProcess -game %GAME_DIR% -source %SOURCE_DIR% -force30
+%BUILD_SHADER% ShaderList_PostProcess_vs20 -game %GAME_DIR% -source %SOURCE_DIR% -force20
 
 rem Ask for a .vcs Reload using +lux_vcshotreloads_pulse
 call "%~dp0ShadersCallProcess.bat"

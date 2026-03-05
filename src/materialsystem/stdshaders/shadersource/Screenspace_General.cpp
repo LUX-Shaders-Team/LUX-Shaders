@@ -1,7 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	20.01.2023 DMY
-//	Last Change :	 30.01.2026 DMY
+//	Last Change :	05.03.2026 DMY
 //
 //==========================================================================//
 
@@ -9,6 +9,7 @@
 #include "../cpp_lux_shared.h"
 
 // Includes for Shaderfiles...
+#include "lux_screenspace_vs20.inc"
 #include "lux_screenspace_vs30.inc"
 
 // LUX Shaders will replace existing Shaders.
@@ -35,7 +36,8 @@ SHADER_INFO_D3D			("VS should always be SM3.0, but the PS could be either SM2.0 
 
 BEGIN_SHADER_PARAMS
 	SHADER_PARAM(PixShader,				SHADER_PARAM_TYPE_STRING,	"",		"Set a specific Pixel Shader .vcs File, do not insert the Filetype.")
-	SHADER_PARAM(PixelShaderName,		SHADER_PARAM_TYPE_STRING,	"",		"(INTERNAL PARAMETER), dont use, carries the real Name used by the Shader.")
+	SHADER_PARAM(PixelShaderName,		SHADER_PARAM_TYPE_STRING,	"",		"(INTERNAL PARAMETER), don't use, carries the real Name used by the Shader.")
+	SHADER_PARAM(NeedsVS20,				SHADER_PARAM_TYPE_BOOL,		"",		"(INTERNAL PARAMETER), don't use, indicates a ps20/ps20b $PixShader. Those must be used with a vs20 on AMD.")
 	SHADER_PARAM(Disable_Color_Writes,	SHADER_PARAM_TYPE_BOOL,		"",		"Stops the Shader from writing Color Data.")
 	SHADER_PARAM(LinearRead_BaseTexture, SHADER_PARAM_TYPE_BOOL,	"",		"Disables sRGB Conversions for s0.")
 	SHADER_PARAM(LinearRead_Texture1,	SHADER_PARAM_TYPE_BOOL,		"",		"Disables sRGB Conversions for s1.")
@@ -105,6 +107,7 @@ SHADER_INIT
 
 	// HACKHACK: Stock ASW+ Mats use blurgaussian_3x3_ps20b but I'm not going to have this as a File, use the lux_ one instead
 	// NOTE: This is a Shader from Alien Swarm, Mapbase uses it for something so we have to account for the lack of this Shader
+	bool bIsSM20X = false;
 	if(V_stricmp(ccPixelShader, "blurgaussian_3x3_ps20b") == 0)
 	{
 		SetString(PixelShaderName, "lux_blurgaussian_ps30");
@@ -120,12 +123,21 @@ SHADER_INIT
 		szNewName[iLength + 1] = '\0';
 
 		SetString(PixelShaderName, szNewName);
+
+		// Dealing with a ps20b Shader
+		bIsSM20X = true;
 	}
 	else
 	{
 		// ps20b, ps30...
+		if((iLength > 6) && (Q_stricmp(&ccPixelShader[iLength - 6], "_ps20b") == 0))
+			bIsSM20X = true;
+
 		SetString(PixelShaderName, ccPixelShader);
 	}
+
+	// Indicate VS20
+	SetBool(NeedsVS20, bIsSM20X);
 
 	LoadTexture(BaseTexture);
 	LoadTexture(Texture1);
@@ -139,6 +151,7 @@ SHADER_DRAW
 	bool bHasTexture1 = IsTextureLoaded(Texture1);
 	bool bHasTexture2 = IsTextureLoaded(Texture2);
 	bool bHasTexture3 = IsTextureLoaded(Texture3);
+	bool bNeedsVS20 = GetBool(NeedsVS20);
 
 	//==========================================================================//
 	// Static Snapshot of the Shader Settings
@@ -249,9 +262,18 @@ SHADER_DRAW
 		//==========================================================================//
 		// Set Static Shaders
 		//==========================================================================//
-		DECLARE_STATIC_VERTEX_SHADER(lux_screenspace_vs30);
-		SET_STATIC_VERTEX_SHADER_COMBO(X360APPCHOOSER, bMovieBackwardsCompat);
-		SET_STATIC_VERTEX_SHADER(lux_screenspace_vs30);
+		if(bNeedsVS20)
+		{
+			DECLARE_STATIC_VERTEX_SHADER(lux_screenspace_vs20);
+			SET_STATIC_VERTEX_SHADER_COMBO(X360APPCHOOSER, bMovieBackwardsCompat);
+			SET_STATIC_VERTEX_SHADER(lux_screenspace_vs20);
+		}
+		else
+		{
+			DECLARE_STATIC_VERTEX_SHADER(lux_screenspace_vs30);
+			SET_STATIC_VERTEX_SHADER_COMBO(X360APPCHOOSER, bMovieBackwardsCompat);
+			SET_STATIC_VERTEX_SHADER(lux_screenspace_vs30);	
+		}
 
 		pShaderShadow->SetPixelShader(GetString(PixelShaderName), 0);
 	}
@@ -326,8 +348,16 @@ SHADER_DRAW
 		//==========================================================================//
 		// Set Dynamic Shaders
 		//==========================================================================//
-		DECLARE_DYNAMIC_VERTEX_SHADER(lux_screenspace_vs30);
-		SET_DYNAMIC_VERTEX_SHADER(lux_screenspace_vs30);
+		if(bNeedsVS20)
+		{
+			DECLARE_DYNAMIC_VERTEX_SHADER(lux_screenspace_vs20);
+			SET_DYNAMIC_VERTEX_SHADER(lux_screenspace_vs20);
+		}
+		else
+		{
+			DECLARE_DYNAMIC_VERTEX_SHADER(lux_screenspace_vs30);
+			SET_DYNAMIC_VERTEX_SHADER(lux_screenspace_vs30);
+		}
 
 		// No Combos
 		pShaderAPI->SetPixelShaderIndex(0);
