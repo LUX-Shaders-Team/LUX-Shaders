@@ -1,7 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	20.01.2023 DMY
-//	Last Change :	06.02.2025 DMY
+//	Last Change :	05.03.2026 DMY
 //
 //==========================================================================//
 
@@ -339,6 +339,15 @@ void EmissiveBlend_Shader_Draw(CBaseVSShader* pShader, IShaderShadow* pShaderSha
 
 			pShaderAPI->SetPixelShaderConstant(REGISTER_FLOAT_036, f4EmissiveTint);
 			pShaderAPI->SetPixelShaderConstant(REGISTER_FLOAT_037, f4EmissiveScroll);
+		}
+
+		if (bMinimumLight || bNeedsBaseForOpacity)
+		{
+			pShader->SetModulationConstant(false, false);
+			
+			// Don't need $Alpha here but Function wants it
+			float4 cBaseTextureControls = pShader->ComputeTint(!pShader->GetBool(NoTint) && pShader->GetBool(AllowDiffuseModulation), Alpha);
+			pShaderAPI->SetPixelShaderConstant(LUX_PS_FLOAT_DEFAULTCONTROLS, cBaseTextureControls);
 		}
 
 		//==================================================================================================

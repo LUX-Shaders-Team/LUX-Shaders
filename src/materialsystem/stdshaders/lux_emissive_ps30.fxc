@@ -1,7 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	27.12.2023 DMY
-//	Last Change :	06.02.2025 DMY
+//	Last Change :	05.03.2026 DMY
 //
 //==========================================================================//
 
@@ -172,7 +172,9 @@ float4 main(PS_INPUT i) : COLOR
 	// We may need BaseTexture for RGB ( MinimumLight ) or A for Opacity
 	#if NEEDSBASETEXTURE
 		float4 f4BaseTexture = tex2D(Sampler_RealBaseTexture, i.BaseTexCoord);
-		float f1Opacity = f4BaseTexture.a;
+		float f1Opacity = f4BaseTexture.a * g_f1AlphaModulation;
+	
+		f4BaseTexture.rgb *= g_f3DefaultTint;
 	#endif
 	
 	float3 f3Result = 0.0f;
