@@ -1,7 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	20.01.2023 DMY
-//	Last Change :	01.02.2026 DMY
+//	Last Change :	06.03.2026 DMY
 //
 //==========================================================================//
 
@@ -680,7 +680,7 @@ SHADER_DRAW
 			DECLARE_STATIC_PIXEL_SHADER(lux_worldvertextransition_flashlight_ps30);
 			SET_STATIC_PIXEL_SHADER_COMBO(BLENDMODULATETEXTURE, bHasBlendModulateTexture);
 			SET_STATIC_PIXEL_SHADER_COMBO(EXPONENTTEXTURE, nExponentTexture);
-			SET_STATIC_PIXEL_SHADER_COMBO(BUMPMAPPED, bAnyNormalTexture + bHasSSBump);
+			SET_STATIC_PIXEL_SHADER_COMBO(BUMPMAPPED, bAnyNormalTexture + bHasSSBump + 2 * bHasPhong);
 			SET_STATIC_PIXEL_SHADER_COMBO(DETAILTEXTURE, nDetailCombo);
 			SET_STATIC_PIXEL_SHADER_COMBO(XBYBASEALPHA, bBlendTintByBaseAlpha + 2 * bDesaturateWithBaseAlpha);
 			SET_STATIC_PIXEL_SHADER(lux_worldvertextransition_flashlight_ps30);
