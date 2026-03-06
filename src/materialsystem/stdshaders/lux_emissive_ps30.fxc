@@ -1,18 +1,18 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	27.12.2023 DMY
-//	Last Change :	 30.01.2026 DMY
+//	Last Change :	05.03.2026 DMY
 //
 //==========================================================================//
 
 //==========================================================================//
 //	Declare Static Combos
 //==========================================================================//
-// STATIC:	"EMISSIVEBLEND"				"0..2" // 1 == regular, 2 == linear->gamma
-// STATIC:	"NOFLOW"					"0..1" // 1 == Disable flow and use UV instead
-// STATIC:	"DETAILTEXTURE"				"0..2"
+// STATIC:	"EMISSIVEBLEND"				"0..4" // 1 == regular, 2 == linear->gamma, 2+ ApplyOpacity
+// STATIC:	"NOFLOW"					"0..1" // 1 == Disable EmissiveBlend flow and use UV instead
+// STATIC:	"DETAILMODE"				"0..2"
 // STATIC:	"SELFILLUMTEXTURE"			"0..1"
-// STATIC:	"MINIMUMLIGHT"				"0..1"
+// STATIC:	"BASETEXTUREMODES"			"0..3"
 
 //==========================================================================//
 //	Declare Dynamic Combos
@@ -25,6 +25,68 @@
 //==========================================================================//
 // Can't have No Flow when not using Emissive Blend
 // SKIP: ($EMISSIVEBLEND == 0 && $NOFLOW == 1)
+
+//==========================================================================//
+//	Unpack Combos
+//==========================================================================//
+#if (EMISSIVEBLEND > 0)
+	#define EMISSIVEBLENDENABLED 1
+	
+	#if (EMISSIVEBLEND == 2 || EMISSIVEBLEND == 4)
+		#define EMISSIVEBLEND_LINEARTOGAMMA 1
+	#else
+		#define EMISSIVEBLEND_LINEARTOGAMMA 0
+	#endif
+
+	#if (EMISSIVEBLEND > 2)
+		#define EMISSIVEBLEND_USEOPACITY 1
+	#else
+		#define EMISSIVEBLEND_USEOPACITY 0
+	#endif
+#else
+	#define EMISSIVEBLENDENABLED 0
+	#define EMISSIVEBLEND_LINEARTOGAMMA 0
+	#define EMISSIVEBLEND_USEOPACITY 0
+#endif
+
+#if (DETAILMODE > 0)
+	#define DETAILTEXTURE 1
+	
+	#if (DETAILMODE == 1)
+		#define DETAILBLENDMODE 5
+	#else
+		// In case of DETAILMODE 2
+		#define DETAILBLENDMODE 6
+	#endif
+#else	
+	#define DETAILTEXTURE 0
+	#define DETAILBLENDMODE 0
+#endif
+	
+#if (BASETEXTUREMODES > 0)
+	// 2 & 3 is MinimumLight
+	#if (BASETEXTUREMODES >= 2)
+		#define MINIMUMLIGHT 1
+	#else
+		#define MINIMUMLIGHT 0
+	#endif
+
+	// 0 & 3 is for BaseTexture Opacity
+	#if (BASETEXTUREMODES != 2)
+		#define MASKBYBASEOPACITY 1
+	#else
+		#define MASKBYBASEOPACITY 0
+	#endif
+#else
+	#define MINIMUMLIGHT 0
+	#define MASKBYBASEOPACITY 0
+#endif
+
+#if (MINIMUMLIGHT || MASKBYBASEOPACITY)
+	#define NEEDSBASETEXTURE 1
+#else
+	#define NEEDSBASETEXTURE 0
+#endif
 
 //==========================================================================//
 //	Common Definitions
@@ -83,7 +145,7 @@ const float4 cEmissiveBlendControls		: register(REGISTER_FLOAT_037);
 struct PS_INPUT
 {
 	float4 WorldPos_ProjPosZ		: TEXCOORD0;
-	#if (EMISSIVEBLEND != 0)
+	#if EMISSIVEBLENDENABLED
 		float4 EmissiveTexCoords		: TEXCOORD1;
 
 		#if (DETAILTEXTURE || SELFILLUMTEXTURE)
@@ -107,10 +169,18 @@ struct PS_INPUT
 //==========================================================================//
 float4 main(PS_INPUT i) : COLOR
 {
+	// We may need BaseTexture for RGB ( MinimumLight ) or A for Opacity
+	#if NEEDSBASETEXTURE
+		float4 f4BaseTexture = tex2D(Sampler_RealBaseTexture, i.BaseTexCoord);
+		float f1Opacity = f4BaseTexture.a * g_f1AlphaModulation;
+	
+		f4BaseTexture.rgb *= g_f3DefaultTint;
+	#endif
+	
 	float3 f3Result = 0.0f;
 
 	// EmissiveBlend
-	#if (EMISSIVEBLEND > 0)
+	#if EMISSIVEBLENDENABLED
 		float2 f2EmissiveBaseUV = i.EmissiveTexCoords.xy;
 		float2 f2EmissiveNoFlowUV = i.EmissiveTexCoords.zw;
 
@@ -135,36 +205,57 @@ float4 main(PS_INPUT i) : COLOR
 		f4EmissiveTexture.rgb *= f4EmissiveBase.rgb;
 
 		// Stock Shader uses a Linear->Gamma 1D LUT
-		#if (EMISSIVEBLEND == 2)
+		#if EMISSIVEBLEND_LINEARTOGAMMA
 			f4EmissiveTexture.rgb = LinearToGamma(f4EmissiveTexture.rgb);
 		#endif
-
+		
+		// Apply Opacity to Emissive Blend if it is allowed
+		#if (MASKBYBASEOPACITY && EMISSIVEBLEND_USEOPACITY)
+			f4EmissiveTexture.rgb *= f1Opacity;
+		#endif
+	
 		f3Result += f4EmissiveTexture.rgb;
 	#endif
 
 	// DetailBlendMode 5 and 6
-	#if (DETAILTEXTURE > 0)
-		// We only have one of two modes on this Shader
-		#if (DETAILTEXTURE == 1)
-			int nDetailBlendMode = 5;
-		#else
-			int nDetailBlendMode = 6;
-		#endif
-
+	#if DETAILTEXTURE
 		float4 f4DetailTexture	= tex2D(Sampler_DetailTexture, i.AdditiveTexCoords.xy);
 		f4DetailTexture.rgb *= g_f3DetailTextureTint;
-		f3Result = TextureCombinePostLighting(f3Result, f4DetailTexture.rgb, nDetailBlendMode);
+
+		// Apply Opacity if the original Model is translucent
+		#if MASKBYBASEOPACITY
+			f4DetailTexture.rgb *= f1Opacity;
+		#endif
+
+		f3Result = TextureCombinePostLighting(f3Result, f4DetailTexture.rgb, DETAILBLENDMODE);
 	#endif
 
 	#if SELFILLUMTEXTURE
-		f3Result += tex2D(Sampler_SelfIllum, i.AdditiveTexCoords.zw).rgb;
-	#endif
+		float4 f4SelfIllumTexture = tex2D(Sampler_SelfIllum, i.AdditiveTexCoords.zw);
 
+		// Apply Opacity if the original Model is translucent
+		#if MASKBYBASEOPACITY
+			f4SelfIllumTexture.rgb *= f1Opacity;
+		#endif
+
+		f3Result += f4SelfIllumTexture.rgb;
+	#endif
+	
 	// Could use the BaseTexture Alpha here to mask away AlphaBlended and AlphaTest
-	#if MINIMUMLIGHT
-		float4 f4BaseTexture = tex2D(Sampler_RealBaseTexture, i.BaseTexCoord);
-		f3Result += f4BaseTexture.rgb * g_f3MinimumLightTint;
+	#if MINIMUMLIGHT	
+		float3 f3MiniumLight = f4BaseTexture.rgb * g_f3MinimumLightTint;
+	
+		// Apply Opacity if the original Model is translucent
+		#if MASKBYBASEOPACITY
+			f3MiniumLight *= f1Opacity;
+		#endif
+	
+		f3Result += f3MiniumLight;
 	#endif
 
+	// NOTE: MASKBYBASEOPACITY is a bit cursed in that we apply the Opacity to everything individually
+	// This must be done to replicate EmissiveBlend not being Translucent with the Base
+	// Instead of +++ then * by Opacity, I will sum after *
+	// That Way the more Glow you have the more Opaque that glow will become UNLESS Opacity is 0
 	return LUX_Finalise(float4(f3Result, 0.0f), i.WorldPos_ProjPosZ.xyz, i.WorldPos_ProjPosZ.w);
 }

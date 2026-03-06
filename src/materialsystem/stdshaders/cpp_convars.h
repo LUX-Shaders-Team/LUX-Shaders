@@ -1,10 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	30.05.2024 DMY
-//	Last Change :	04.02.2026 DMY
-//
-//	Purpose of this File :	Include Header for ConVars
-//							Previously just used extern
+//	Last Change :	06.02.2026 DMY
 //
 //==========================================================================//
 
@@ -160,19 +157,6 @@ extern ConVar lux_infected_forcerandomisation;
 // Others
 //==========================================================================//
 
-// LUX FIXME: Kill these before release, rn they are only used for tf2c's engine post fallback
-// Default ConVars from Engine Post
-// NOTE: Made these Cheats.
-#ifdef NOLUX
-extern ConVar mat_screen_blur_override;
-extern ConVar mat_depth_blur_focal_distance_override;
-extern ConVar mat_depth_blur_strength_override;
-extern ConVar mat_grain_scale_override;
-extern ConVar mat_local_contrast_scale_override;
-extern ConVar mat_local_contrast_midtone_mask_override;
-extern ConVar mat_local_contrast_vignette_start_override;
-extern ConVar mat_local_contrast_vignette_end_override;
-extern ConVar mat_local_contrast_edge_scale_override;
-#endif
+extern ConVar lux_emissiveblend_allowopacity;
 
 #endif // CPP_CONVARS_H

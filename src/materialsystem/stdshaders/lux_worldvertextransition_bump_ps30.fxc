@@ -1,7 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	04.03.2023 DMY
-//	Last Change :	 30.01.2026 DMY
+//	Last Change :	06.03.2026 DMY
 //
 //==========================================================================//
 
@@ -13,6 +13,7 @@
 // STATIC:	"SELFILLUMMODE"				"0..2"
 // STATIC:	"XBYBASEALPHA"				"0..2"
 // STATIC:	"DETAILTEXTURE"				"0..2"
+// STATIC:	"BUMPMASK"					"0..1"
 // STATIC:	"SSBUMP"					"0..1"
 
 //==========================================================================//
@@ -26,6 +27,8 @@
 //==========================================================================//
 // SKIP: ( ($ENVMAPMODE != 2 && $ENVMAPMODE != 4) && $SELFILLUMMODE == 2 )
 // SKIP: ( $SELFILLUMMODE == 1 && $XBYBASEALPHA != 0)
+// SKIP: ( $DETAILTEXTURE != 0 && $BUMPMASK != 0 )
+// SKIP: ( $BUMPMASK != 0 && $SSBUMP != 0 )
 
 //==========================================================================//
 //	Unpack Combos
@@ -99,6 +102,11 @@
 #include "lux_common_lightmapped.h"
 #include "lux_common_selfillum.h"
 #include "lux_common_envmap.h"
+
+// Only for $BumpMask
+#if BUMPMASK
+	sampler Sampler_BumpMask : register(s6);
+#endif
 
 //==========================================================================//
 //	PS Input
@@ -228,14 +236,16 @@ float4 main(PS_INPUT i) : COLOR
 	// Blended Versions of these Textures
 	float4 f4BlendedBase = lerp(f4BaseTexture, f4BaseTexture2, f1BlendFactor);
 
-	// Stock-Consistency: 
-	// Stock Shader allows a singular BumpMap on a Blended-Material
-	// ( See also Cave Walls in Half Life 2 : Episode 2 )
-	// We bind $BumpMap to $BumpMap2 if there wasn't a $BumpMap2.
-	// This wastes a Texture Sample and a LRP, but replicates Stock Behaviour ( Me:Happy )
-	float4 f4BlendedBump = lerp(f4NormalTexture, f4NormalTexture2, f1BlendFactor);
-	float3 f3NormalTS	 = f4BlendedBump.xyz;
-	float  f1NormalAlpha = f4BlendedBump.a;
+	#if !BUMPMASK
+		// Stock-Consistency: 
+		// Stock Shader allows a singular BumpMap on a Blended-Material
+		// ( See also Cave Walls in Half Life 2 : Episode 2 )
+		// We bind $BumpMap to $BumpMap2 if there wasn't a $BumpMap2.
+		// This wastes a Texture Sample and a LRP, but replicates Stock Behaviour ( Me:Happy )
+		float4 f4BlendedBump = lerp(f4NormalTexture, f4NormalTexture2, f1BlendFactor);
+		float3 f3NormalTS	 = f4BlendedBump.xyz;
+		float  f1NormalAlpha = f4BlendedBump.a;
+	#endif
 
 	#if ANYDETAILTEXTURE
 		float4 f4BlendedDetail = lerp(f4DetailTexture, f4DetailTexture2, f1BlendFactor);
@@ -270,7 +280,24 @@ float4 main(PS_INPUT i) : COLOR
 	// Lighting
 	//==========================================================================//
 
-	#if !SSBUMP
+	#if BUMPMASK
+		// This MUST use BaseTexture UV to look the same.
+		float4 f4BumpMask = tex2D(Sampler_BumpMask, f2Base1UV);
+	
+		// Decompress first, then sum, then normalize
+		f4NormalTexture.xyz = f4NormalTexture.xyz * 2.0f - 1.0f;
+		f4NormalTexture2.xyz = f4NormalTexture2.xyz * 2.0f - 1.0f;
+		float3 f3CombinedNormals = normalize(f4NormalTexture.xyz + f4NormalTexture2.xyz);
+
+		// Need to Decompress this too
+		f4BumpMask.xyz = f4BumpMask.xyz * 2.0f - 1.0f;
+	
+		// Stock-Consistency: Very carefully replicate this:
+		float3 f3NormalTS = lerp(f4BumpMask.xyz, f3CombinedNormals, f4BumpMask.a);
+	
+		// This 1:1 reproduces Stock SpecularFactor for BumpMask
+		float f1NormalAlpha = lerp(f4BumpMask.a, f4NormalTexture.a, g_f1LerpNormalAlpha); 
+	#elif !SSBUMP
 		// Decompress regular BumpMaps
 		f3NormalTS = f3NormalTS * 2.0f - 1.0f;
 	#endif
@@ -286,7 +313,7 @@ float4 main(PS_INPUT i) : COLOR
 	#if LIGHTWARPTEXTURE
     if (g_bLightWarpTexture)
 	{
-		f3DiffuseLighting = 2.0f * tex1Dlod(Sampler_LightWarpTexture, float4(0.5f * length(f3DiffuseLighting), 0.0f, 0.0f, 0.0f)).rgb;
+		f3DiffuseLighting *= 2.0f * tex1Dlod(Sampler_LightWarpTexture, float4(0.5f * length(f3DiffuseLighting), 0.0f, 0.0f, 0.0f)).rgb;
 	}
 	#endif
 		

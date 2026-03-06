@@ -43,6 +43,9 @@ REM ****************
 REM Should have non-LUX Shaders
 %BUILD_SHADER% ShaderList_Custom -game %GAME_DIR% -source %SOURCE_DIR% -force30
 
+REM The only VS20 Shader at the Moment needed for Screenspace_General
+%BUILD_SHADER% ShaderList_PostProcess_vs20 -game %GAME_DIR% -source %SOURCE_DIR% -force20
+
 rem Ask for a .vcs Reload using +lux_vcshotreloads_pulse
 call "%~dp0ShadersCallProcess.bat"
 

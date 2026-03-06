@@ -1,9 +1,11 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	29.09.2025 DMY
-//	Last Change :	 30.01.2026 DMY
+//	Last Change :	08.02.2026 DMY
 //
 //==========================================================================//
+
+// FIXME: Actually use this File and make a proper Sampler and Register Map
 
 #include "lux_registermap_hlsl.h"
 #include "lux_registermap_ps.h"

@@ -836,8 +836,8 @@ SHADER_DRAW
 
 		if (!bProjectedTexture)
 		{
-			pShaderAPI->SetPixelShaderStateAmbientLightCube(REGISTER_FLOAT_013);
-			pShaderAPI->CommitPixelShaderLighting(REGISTER_FLOAT_020);
+			pShaderAPI->SetPixelShaderStateAmbientLightCube(INFECTED_AMBIENTCUBE);
+			pShaderAPI->CommitPixelShaderLighting(INFECTED_LIGHTINFO);
 		}
 
 		// Prepare boolean array, yes we need to use BOOL

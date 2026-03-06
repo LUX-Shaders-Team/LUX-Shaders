@@ -578,7 +578,10 @@ SHADER_DRAW
 			if (bProjectedTexture)
 			{
 				// Always Additive
-				EnableAlphaBlending(SHADER_BLEND_ONE, SHADER_BLEND_ONE); // BT_ADD
+				if (bTranslucent)
+					EnableAlphaBlending(SHADER_BLEND_SRC_ALPHA, SHADER_BLEND_ONE_MINUS_SRC_ALPHA); // BT_BLEND
+				else
+					EnableAlphaBlending(SHADER_BLEND_ONE, SHADER_BLEND_ONE); // BT_ADD
 
 				bAlphaWrites = false;
 				bDepthWrites = false;

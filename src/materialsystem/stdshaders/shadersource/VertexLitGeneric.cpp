@@ -1,7 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	20.01.2023 DMY
-//	Last Change :	04.02.2026 DMY
+//	Last Change :	06.02.2026 DMY
 //
 //==========================================================================//
 
@@ -199,7 +199,11 @@ void VLG_SetupEmissiveBlendVars(EmissiveBlend_Vars_t& EmissiveVars)
 	EmissiveVars.SelfIllum.InitVars(SelfIllumTexture, SelfIllumTextureFrame);
 
 	// DetailBlendMode 5 and 6 are handled here, since it simplifies our Shaders
-	EmissiveVars.Detail.InitVars(Detail, DetailFrame, DetailTextureTransform, DetailScale, DetailBlendMode, DetailTint, DetailBlendFactor);
+	EmissiveVars.Detail.InitVars(Detail, DetailFrame, DetailTextureTransform, DetailScale, DetailBlendMode, DetailBlendFactor);
+	
+	// $DetailTint is linear on LightmappedGeneric
+	// It is GammaToLinear on VertexLitGeneric
+	EmissiveVars.Detail.m_f3DetailTint = GammaToLinearTint(GetFloat3(DetailTint));
 
 	// Minimum Light and Transform Fallbacks
 	EmissiveVars.Base.InitVars(BaseTexture, Frame, BaseTextureTransform);
@@ -252,7 +256,7 @@ void LuxVertexLitGeneric_ParamsDebugger()
 
 	// All Textures
 	bool bHasBaseTexture = IsDefined(BaseTexture);
-	bool bHasNormalTexture = IsDefined(NormalTexture);
+	bool bHasNormalTexture = IsDefined(BumpMap) || IsDefined(NormalTexture);
 	bool bHasDetailTexture = IsDefined(Detail);
 	bool bHasLightWarpTexture = IsDefined(LightWarpTexture);
 	bool bHasLightWarpNoBump = GetBool(LightWarpNoBump);

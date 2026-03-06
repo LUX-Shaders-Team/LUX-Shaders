@@ -182,10 +182,10 @@ float4 main(PS_INPUT i) : COLOR
 	#endif
 
 	#if LIGHTWARPTEXTURE
-		if (g_bLightWarpTexture)
-		{
-			f3DiffuseLighting = 2.0f * tex2D(Sampler_LightWarpTexture, float2( 0.5f * length(f3DiffuseLighting), 0.0f)).rgb;
-		}
+	if (g_bLightWarpTexture)
+	{
+		f3DiffuseLighting *= 2.0f * tex2D(Sampler_LightWarpTexture, float2(0.5f * length(f3DiffuseLighting), 0.0f)).rgb;
+	}
 	#endif
 	
 	// Data for SelfIllumFresnel and EnvMaps

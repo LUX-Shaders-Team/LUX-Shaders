@@ -170,6 +170,10 @@ SHADER_INIT_PARAMS()
 	DefaultFloat(TreeSwaySpeedLerpStart, 3.0f);
 	DefaultFloat(TreeSwaySpeedLerpEnd, 6.0f);
 	DefaultFloat2(TreeSwayStaticValues, 0.5f, 0.5f);
+
+	// There are some Materials that set $SelfIllum on UnlitGeneric
+	// We need to clear this Flag at all Times, to ensure ComputeBlendType works correctly.
+	ClearFlag(MATERIAL_VAR_SELFILLUM);
 }
 
 SHADER_FALLBACK

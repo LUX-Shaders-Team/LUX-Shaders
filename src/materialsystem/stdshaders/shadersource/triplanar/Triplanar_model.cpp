@@ -2,7 +2,7 @@
 //
 //	Original D.	:	26.03.2025 DMY
 //	Initial D.	:	28.09.2025 DMY
-//	Last Change :	01.02.2026 DMY
+//	Last Change :	08.02.2026 DMY
 //
 //==========================================================================//
 
@@ -312,12 +312,11 @@ SHADER_DRAW
 		// Vertex Shader - Vertex Format
 		//==========================================================================//
 
-		unsigned int nFlags = VERTEX_POSITION | VERTEX_NORMAL | VERTEX_FORMAT_COMPRESSED;
+		unsigned int nFlags = VERTEX_POSITION | VERTEX_FORMAT_COMPRESSED;
 		int nTexCoords = 1;
-		// This doesn't actually support VertexColors
-		// Should it? The only usecase I can imagine is Detail Props
-//		if (HasFlag(MATERIAL_VAR_VERTEXCOLOR) || HasFlag(MATERIAL_VAR_VERTEXALPHA))
-//			nFlags |= VERTEX_COLOR;
+
+		// Always ask for this Flag, we need it for Seamless Weights
+		nFlags |= VERTEX_NORMAL;
 
 		// This enables Tangent Data apparently
 		int nUserDataSize = (bProjTex || bHasNormalMap) ? 4 : 0;

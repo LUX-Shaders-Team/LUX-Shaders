@@ -1,7 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	20.01.2023 DMY
-//	Last Change :	01.02.2026 DMY
+//	Last Change :	06.03.2026 DMY
 //
 //==========================================================================//
 
@@ -88,6 +88,7 @@ BEGIN_SHADER_PARAMS
 	Declare_NormalTextureParameters()
 	Declare_DisplacementBump()
 	Declare_NoDiffuseBumpLighting()
+	SHADER_PARAM(BumpMask, SHADER_PARAM_TYPE_TEXTURE, "", "[RGB] Third Normal Map that is blended from using the Alpha Channel of this Texture.\n[A] Blendfactor for $BumpMap and $BumpMap2 & default SpecularMask without other EnvMapMask Parameters.\n")
 
 	// Detail
 	Declare_DetailTextureParameters()
@@ -289,6 +290,7 @@ SHADER_INIT
 	LoadTexture(BaseTexture2, TEXTUREFLAGS_SRGB);
 	LoadBumpMap(BumpMap);
 	LoadBumpMap(BumpMap2);
+	LoadBumpMap(BumpMask);
 
 	// ~Stock-Consistency~
 	// This is no longer done?
@@ -495,6 +497,9 @@ SHADER_DRAW
 	bool bHasEnvMapMask2 = bHasEnvMap && IsTextureLoaded(EnvMapMask2);
 	bool bAnyEnvMapMask = bHasEnvMapMask || bHasEnvMapMask2;
 
+	// Basic Compatibility with $BumpMask so HL2 Canals and Portal aren't as broken
+	bool bHasBumpMask = !bHasPhong && bHasNormalTexture && bHasNormalTexture2 && IsTextureLoaded(BumpMask);
+
 	// The first real Feature of this Shader..
 	bool bHasBlendModulateTexture = IsTextureLoaded(BlendModulateTexture);
 
@@ -622,6 +627,9 @@ SHADER_DRAW
 			EnableSampler(SHADER_SAMPLER6, false);
 			EnableSampler(SHADER_SAMPLER7, false);
 		}
+		else if(bHasBumpMask)
+			EnableSampler(SHADER_SAMPLER6, false);
+
 
 		EnableSampler(bHasBlendModulateTexture, SHADER_SAMPLER8, false);
 
@@ -680,7 +688,8 @@ SHADER_DRAW
 			DECLARE_STATIC_PIXEL_SHADER(lux_worldvertextransition_flashlight_ps30);
 			SET_STATIC_PIXEL_SHADER_COMBO(BLENDMODULATETEXTURE, bHasBlendModulateTexture);
 			SET_STATIC_PIXEL_SHADER_COMBO(EXPONENTTEXTURE, nExponentTexture);
-			SET_STATIC_PIXEL_SHADER_COMBO(BUMPMAPPED, bAnyNormalTexture + bHasSSBump);
+			SET_STATIC_PIXEL_SHADER_COMBO(BUMPMAPPED, bAnyNormalTexture + bHasSSBump + 2 * bHasPhong);
+			SET_STATIC_PIXEL_SHADER_COMBO(BUMPMASK, bHasBumpMask);
 			SET_STATIC_PIXEL_SHADER_COMBO(DETAILTEXTURE, nDetailCombo);
 			SET_STATIC_PIXEL_SHADER_COMBO(XBYBASEALPHA, bBlendTintByBaseAlpha + 2 * bDesaturateWithBaseAlpha);
 			SET_STATIC_PIXEL_SHADER(lux_worldvertextransition_flashlight_ps30);
@@ -708,6 +717,7 @@ SHADER_DRAW
 				SET_STATIC_PIXEL_SHADER_COMBO(XBYBASEALPHA, bBlendTintByBaseAlpha + 2 * bDesaturateWithBaseAlpha);
 				SET_STATIC_PIXEL_SHADER_COMBO(DETAILTEXTURE, nDetailCombo);
 				SET_STATIC_PIXEL_SHADER_COMBO(SSBUMP, bHasSSBump);
+				SET_STATIC_PIXEL_SHADER_COMBO(BUMPMASK, bHasBumpMask);
 				SET_STATIC_PIXEL_SHADER(lux_worldvertextransition_bump_ps30);
 			}
 			else
@@ -844,6 +854,8 @@ SHADER_DRAW
 				SemiStaticCmds.BindTexture(SHADER_SAMPLER1, BaseTexture2, Frame);
 			else if (bHasBaseTexture2)
 				SemiStaticCmds.BindTexture(SHADER_SAMPLER1, BaseTexture2, Frame2);
+			else
+				SemiStaticCmds.BindTexture(SHADER_SAMPLER1, BaseTexture, Frame2); // Fallback for Materials with $BumpMap2 but no $BaseTexture2
 		}
 
 		if (bAnyNormalTexture)
@@ -884,6 +896,8 @@ SHADER_DRAW
 			else
 				SemiStaticCmds.BindTexture(SHADER_SAMPLER7, PhongExponentTexture, PhongExponentTextureFrame);
 		}
+		else if(bHasBumpMask)
+			SemiStaticCmds.BindTexture(SHADER_SAMPLER6, BumpMask, -1); // No Frame-Parameter to keep it simple
 
 		if(bHasBlendModulateTexture)
 			SemiStaticCmds.BindTexture(SHADER_SAMPLER8, BlendModulateTexture, BlendMaskFrame);
