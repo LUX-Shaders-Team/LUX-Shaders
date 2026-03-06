@@ -844,6 +844,8 @@ SHADER_DRAW
 				SemiStaticCmds.BindTexture(SHADER_SAMPLER1, BaseTexture2, Frame);
 			else if (bHasBaseTexture2)
 				SemiStaticCmds.BindTexture(SHADER_SAMPLER1, BaseTexture2, Frame2);
+			else
+				SemiStaticCmds.BindTexture(SHADER_SAMPLER1, BaseTexture, Frame2); // Fallback for Materials with $BumpMap2 but no $BaseTexture2
 		}
 
 		if (bAnyNormalTexture)
