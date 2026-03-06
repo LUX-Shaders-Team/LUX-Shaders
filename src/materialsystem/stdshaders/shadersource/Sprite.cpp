@@ -1,9 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	20.01.2023 DMY
-//	Last Change :	 30.01.2026 DMY
-//
-//	Purpose of this File :	Shader for Sprite objects, this doesn't include some particles.
+//	Last Change :	06.03.2026 DMY
 //
 //==========================================================================//
 
@@ -416,7 +414,7 @@ SHADER_DRAW
 
 			// s0
 			// Magic
-			int nFrame = (int)f1FrameBlendAlpha;
+			int nFrame = (int)f1FrameVar;
 
 			// ShiroDkxtro2: IMPORTANT, this is NOT BaseVSShader's BindTexture
 			// This has to give *the actual* Frame Number not a Parameter Index
