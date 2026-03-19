@@ -1,7 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	21.09.2025 DMY
-//	Last Change :	01.02.2026 DMY
+//	Last Change :	19.03.2026 DMY
 //
 //==========================================================================//
 
@@ -181,6 +181,16 @@ void CShaderReload::UpdateFileTime(VCSReferences_t* pShader)
 	// Get the current Timestamp
 	pShader->m_LastFileTime = g_pFullFileSystem->GetFileTime(pShader->m_strFullPath.c_str(), "GAME");
 }
+
+// Part of strtools in TF2SDK, doesn't exist on SP so just defining it here
+#ifndef TF2SDK
+inline bool V_strEndsWith(const char* str, const char* suffix)
+{
+	size_t len = strlen(str);
+	size_t suflen = strlen(suffix);
+	return (len >= suflen) && !strcmp(str + len - suflen, suffix);
+}
+#endif
 
 void CShaderReload::CleanIndexedShaderFiles()
 {

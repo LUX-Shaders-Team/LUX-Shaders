@@ -1,7 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	16.12.2023 DMY
-//	Last Change :	 30.01.2026 DMY
+//	Last Change :	19.03.2026 DMY
 //
 //	Purpose of this File :	Allows Users to write custom Shaders and use them. ( with limited Functionality )
 // 							'Recently' it was discovered that Screenspace_General can be used to write custom Shaders.
@@ -1650,10 +1650,10 @@ SHADER_DRAW
 		//==========================================================================//
 		// Set Dynamic Shaders
 		//==========================================================================//
+#ifdef TF2SDK
 		int nDecalMode = HasFlag(MATERIAL_VAR_DECAL);
 
 		// Overlays require some extra logic on the TF2SDK due to Lightmap Padding
-#ifdef TF2SDK
 		nDecalMode = nDecalMode * 2;
 #endif
 

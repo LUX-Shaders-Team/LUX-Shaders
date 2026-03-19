@@ -1,7 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	19.09.2025 DMY
-//	Last Change :	 30.01.2026 DMY
+//	Last Change :	19.03.2026 DMY
 //
 //	Purpose of this File :	Helper Function for logging and spewing Shader Data
 //
@@ -321,7 +321,7 @@ void CShaderSpew::Spew()
 	// Go through all Dynamic States, print constants and warnings
 	// IMPORTANT: All commands are sorted!! So if the previous Register/Sampler is the same as the current
 	// It means thing's are set TWICE
-	for (int nState = 0; nState < m_DynamicStates.size(); ++nState)
+	for (size_t nState = 0; nState < m_DynamicStates.size(); ++nState)
 	{
 		ConColorMsg(PASS_COLOR, "Shader Pass (%d):\n", nState);
 		LoggedShadowState_t* pCurShadow = &m_ShadowStates[nState];
@@ -526,7 +526,6 @@ void CShaderSpew::Spew()
 		// Pixel Shader Texture Binds
 		// ====================================== //
 		std::bitset<16> bPSTextureBinds;
-		bPSTextureBinds.none();
 
 		nLastSampler = -1;
 		for(size_t n = 0; n < pCurDynamic->m_PSTextureBinds.size(); ++n)
@@ -832,9 +831,11 @@ void EvaluateStandardTextureType(TextureBinds_t* pBack, StandardTextureId_t nTex
 	case TEXTURE_IDENTITY_LIGHTWARP:
 		pBack->m_ccBindName = "TEXTURE_IDENTITY_LIGHTWARP";
 		break;
+	#ifdef TF2SDK
 	case TEXTURE_DEBUG_LUXELS:
 		pBack->m_ccBindName = "TEXTURE_DEBUG_LUXELS";
 		break;
+	#endif
 	default:
 		pBack->m_ccBindName = "INVALID";
 		break;
