@@ -1,7 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	31.07.2025 DMY
-//	Last Change :	 30.01.2026 DMY
+//	Last Change :	19.03.2026 DMY
 //
 //==========================================================================//
 
@@ -403,9 +403,9 @@ float4 main(PS_INPUT i) : COLOR
     if (!g_bHasPhongWarpTexture)
 		PhongData.f3PhongModulation *= PhongData.f1PhongFresnel;
 
-	// f3PhongModulation is basically the Product of Luminance + Masks + $PhongTint + $PhongAlbedoTint + ..
-	// Don't add it to the Results just yet!
+	// f3PhongModulation is basically the Product of Luminance + $PhongTint + $PhongAlbedoTint + ..
 	f3DirectSpecular *= PhongData.f3PhongModulation;
+	f3DirectSpecular *= PhongData.f1AlphaMask;
     f3DirectSpecular *= g_f1PhongBoost; // Separate Term
 
 	//==========================================================================//
