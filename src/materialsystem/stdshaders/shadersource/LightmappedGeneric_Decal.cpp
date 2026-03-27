@@ -1,7 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	20.01.2023 DMY
-//	Last Change :	01.02.2026 DMY
+//	Last Change :	27.03.2026 DMY
 //
 //==========================================================================//
 
@@ -379,7 +379,7 @@ SHADER_DRAW
 			bool bEnvMapMaskTransform = HasTransform(bHasEnvMapMask, EnvMapMaskTransform);
 			if (bEnvMapMaskTransform)
 				SetVertexShaderTextureTransform(LUX_VS_TEXTURETRANSFORM_02 + nRegisterShift, EnvMapMaskTransform);
-			else if (bHasNormalTexture)
+			else
 				SetVertexShaderTextureTransform(LUX_VS_TEXTURETRANSFORM_02 + nRegisterShift, BaseTextureTransform);
 
 			nRegisterShift += 2;
