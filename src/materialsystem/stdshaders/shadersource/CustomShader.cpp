@@ -298,6 +298,8 @@ BEGIN_SHADER_PARAMS
 	SHADER_PARAM(Shader_Particle_ExtractGreenAlpha, SHADER_PARAM_TYPE_BOOL, "", "Use Factors to blend Green/Alpha Channels.")
 	SHADER_PARAM(Shader_Particle_AddBaseTexture2,	SHADER_PARAM_TYPE_BOOL, "", "Enables second Texture blend Path. Float must be set manually to a Register.")
 
+	SHADER_PARAM(Shader_ShatteredGlass,				SHADER_PARAM_TYPE_BOOL, "", "Enables second & third TexCoord for ShatteredGlass Materials.")
+	
 	// Not adapting a new Name since I don't know where this usually gets set. ( I don't make Particles. )
 	// I was told it happens 'in the renderer', I'm not taking any chances that it'll be impossible set the Orientation Mode in the Particle Editor..
 	// There is technically a third mode of Orientation that aligns a Particle with a Control Point
@@ -426,6 +428,23 @@ SHADER_INIT_PARAMS()
 	{
 		SetFlag2((MaterialVarFlags2_t)GetInt(Shader_Flags2));
 	}
+	
+	// Can't check IsDefined() during Shadowstate, need to set this here
+	// Defaulted to this since that's what other Shaders usually do
+	if(IsDefined(Shader_AlphaTestFunc))
+	{
+		ShaderAlphaFunc_t nAlphaFunc = (ShaderAlphaFunc_t)GetInt(Shader_AlphaTestFunc);
+
+		// Clamp this just in case someone does something they really shouldn't
+		if (nAlphaFunc <= SHADER_ALPHAFUNC_NEVER || nAlphaFunc >= SHADER_ALPHAFUNC_ALWAYS)
+		{
+			nAlphaFunc = SHADER_ALPHAFUNC_GEQUAL;
+			ShaderDebugMessage("has Invalid AlphaFunc, defaulting to Greater or Equal.");
+			SetInt(Shader_AlphaTestFunc, SHADER_ALPHAFUNC_GEQUAL);
+		}
+	}
+	else
+		SetInt(Shader_AlphaTestFunc, SHADER_ALPHAFUNC_GEQUAL);
 }
 
 SHADER_FALLBACK
@@ -540,6 +559,101 @@ SHADER_DRAW
 	bool bPCC = !bIsModel && !bParticle && bHasEnvMap && GetBool(EnvMapParallax);
 
 	//==========================================================================//
+	// Compute Alphawrites ( needed in both States )
+	//==========================================================================//
+
+	// Defaults
+	bool bAlphaWrites = !GetBool(Shader_Disable_AlphaWrites);
+	bool bDepthWrites = !GetBool(Shader_Disable_DepthWrites);
+
+	bool bEnableBlending = false;
+	ShaderBlendFactor_t SrcFactor = SHADER_BLEND_ONE;
+	ShaderBlendFactor_t DstFactor = SHADER_BLEND_ONE;
+
+	if (GetBool(Shader_AlphaBlending_Enable))
+	{
+		bEnableBlending = true;
+		SrcFactor = (ShaderBlendFactor_t)GetInt(Shader_AlphaBlending_Src);
+		DstFactor = (ShaderBlendFactor_t)GetInt(Shader_AlphaBlending_Dst);
+
+		bAlphaWrites = false;
+		bDepthWrites = false;
+	}
+	else
+	{
+		// Projected Textures override the Behavior..
+		// This should really be exposed just in case..
+		if (bProjectedTexture)
+		{
+			bEnableBlending = true;
+
+			// Always Additive, with $Translucent we need to multiply by BaseAlpha first
+			if (bTranslucent)
+			{
+				// BT_BLENDADD
+				SrcFactor = SHADER_BLEND_SRC_ALPHA;
+				DstFactor = SHADER_BLEND_ONE;
+			}
+			else
+			{
+				// BT_ADD
+				SrcFactor = SHADER_BLEND_ONE;
+				DstFactor = SHADER_BLEND_ONE;
+			}
+
+			bAlphaWrites = false;
+			bDepthWrites = false;
+		}
+		else if (bTranslucent)
+		{
+			bEnableBlending = true;
+
+			if (bAdditive)
+			{
+				// BT_BLENDADD
+				SrcFactor = SHADER_BLEND_SRC_ALPHA;
+				DstFactor = SHADER_BLEND_ONE;
+			}
+			else
+			{
+				// BT_BLEND
+				SrcFactor = SHADER_BLEND_SRC_ALPHA;
+				DstFactor = SHADER_BLEND_ONE_MINUS_SRC_ALPHA;
+			}
+
+			bAlphaWrites = false;
+			bDepthWrites = false;
+		}
+		else if (bAdditive)
+		{
+			bEnableBlending = true;
+
+			// BT_ADD
+			SrcFactor = SHADER_BLEND_ONE;
+			DstFactor = SHADER_BLEND_ONE;
+
+			bAlphaWrites = false;
+			bDepthWrites = false;
+		}
+		else if (bAlphaTest)
+		{
+			// We do allow Depth Writes with AlphaTest since there is no sorting Issues!
+			bAlphaWrites = false;
+		}
+	}
+
+	// Clamp Blendmodes in case someone does something they really shouldn't.
+	if(bEnableBlending)
+	{
+		// Clamp this just in case someone does something they really shouldn't
+		if (SrcFactor < SHADER_BLEND_ZERO || SrcFactor > SHADER_BLEND_ONE_MINUS_SRC_COLOR)
+			SrcFactor = SHADER_BLEND_ZERO;
+
+		if (DstFactor < 0 || DstFactor > 10)
+			DstFactor = SHADER_BLEND_ONE;
+	}
+
+	//==========================================================================//
 	// Static Snapshot of Shader Setup
 	//==========================================================================//
 	if (IsSnapshotting())
@@ -550,77 +664,19 @@ SHADER_DRAW
 
 		// This handles : $IgnoreZ, $Decal, $Nocull, $Znearer, $Wireframe, $AllowAlphaToCoverage
 		SetInitialShadowState();
-
-		bool bAlphaWrites = !GetBool(Shader_Disable_AlphaWrites);
-		bool bDepthWrites = !GetBool(Shader_Disable_DepthWrites);
 	
-		// This overrides over Blending Modes ( read: Flags like $Additive )
-		if (GetBool(Shader_AlphaBlending_Enable))
+		// Enable Opacity Behaviors
+		if (bEnableBlending)
 		{
-			ShaderBlendFactor_t SrcFactor = (ShaderBlendFactor_t)GetInt(Shader_AlphaBlending_Src);
-			ShaderBlendFactor_t DstFactor = (ShaderBlendFactor_t)GetInt(Shader_AlphaBlending_Dst);
-
-			// Clamp this just in case someone does something they really shouldn't
-			if (SrcFactor < SHADER_BLEND_ZERO || SrcFactor > SHADER_BLEND_ONE_MINUS_SRC_COLOR)
-				SrcFactor = SHADER_BLEND_ZERO;
-
-			if (DstFactor < 0 || DstFactor > 10)
-				DstFactor = SHADER_BLEND_ONE;
-
 			EnableAlphaBlending(SrcFactor, DstFactor);
-
-			bAlphaWrites = false;
-			bDepthWrites = false;
 		}
-		else
+		else if (bAlphaTest)
 		{
-			// Replicating Behaviour of Stock Shaders
-			if (bProjectedTexture)
-			{
-				// Always Additive
-				if (bTranslucent)
-					EnableAlphaBlending(SHADER_BLEND_SRC_ALPHA, SHADER_BLEND_ONE_MINUS_SRC_ALPHA); // BT_BLEND
-				else
-					EnableAlphaBlending(SHADER_BLEND_ONE, SHADER_BLEND_ONE); // BT_ADD
+			pShaderShadow->EnableAlphaTest(true);
 
-				bAlphaWrites = false;
-				bDepthWrites = false;
-			}
-			else if (bTranslucent)
-			{
-				if (bAdditive)
-					EnableAlphaBlending(SHADER_BLEND_SRC_ALPHA, SHADER_BLEND_ONE); // BT_BLENDADD
-				else
-					EnableAlphaBlending(SHADER_BLEND_SRC_ALPHA, SHADER_BLEND_ONE_MINUS_SRC_ALPHA); // BT_BLEND
-
-				bAlphaWrites = false;
-				bDepthWrites = false;
-			}
-			else if (bAdditive)
-			{
-				EnableAlphaBlending(SHADER_BLEND_ONE, SHADER_BLEND_ONE); // BT_ADD
-
-				bAlphaWrites = false;
-				bDepthWrites = false;
-			}
-			else if (bAlphaTest)
-			{
-				pShaderShadow->EnableAlphaTest(true);
-
-				float f1AlphaTestRef = GetFloat(Shader_AlphaTestReference);
-				if (f1AlphaTestRef > 0.0f) // 0 is the default
-				{
-					ShaderAlphaFunc_t nAlphaFunc = SHADER_ALPHAFUNC_GEQUAL;
-
-					// User Picked AlphaFunc
-					if (IsDefined(Shader_AlphaTestFunc))
-						nAlphaFunc = (ShaderAlphaFunc_t)GetInt(Shader_AlphaTestFunc);
-
-					// Clamp this just in case someone does something they really shouldn't
-					if (nAlphaFunc >= SHADER_ALPHAFUNC_NEVER && nAlphaFunc <= SHADER_ALPHAFUNC_ALWAYS)
-						pShaderShadow->AlphaFunc(nAlphaFunc, f1AlphaTestRef);
-				}
-			}
+			ShaderAlphaFunc_t nAlphaFunc = (ShaderAlphaFunc_t)GetInt(Shader_AlphaTestFunc);
+			float f1AlphaTestRef = GetFloat(Shader_AlphaTestReference);
+			pShaderShadow->AlphaFunc(nAlphaFunc, f1AlphaTestRef);
 		}
 
 		// Projected Texture gets it's own FogMode
@@ -631,9 +687,6 @@ SHADER_DRAW
 		// Never do Alpha or DepthWrites for Projected Textures
 		if (bProjectedTexture)
 		{
-			bAlphaWrites = false;
-			bDepthWrites = false;
-
 			nFogMode = GetInt(Shader_FogMode_ProjTex);
 		}
 		else
@@ -795,6 +848,8 @@ SHADER_DRAW
 			int nTexCoords = 1;
 			if (GetBool(Shader_Model_SecondTexCoord))
 				nTexCoords = 2;
+			else if(GetBool(Shader_ShatteredGlass))
+				nTexCoords = 3;
 
 			pShaderShadow->VertexShaderVertexFormat(nFlags, nTexCoords, NULL, nUserDataSize);
 		}
@@ -820,6 +875,13 @@ SHADER_DRAW
 			// TEXCOORD1 = Lightmap UV
 			// TEXCOORD2 = Lightmap UV .x Offset for Directional Lightmaps
 			int nTexCoords = 2 + (bBumpMapped);
+
+			// Shader always asks for 3 TexCoords
+			// TEXCOORD0 = Fractured Glass BaseTexture UV ( Per Panel )
+			// TEXCOORD1 = Lightmap UV
+			// TEXCOORD2 = Actual UV ( Across the Surface )
+			if (GetBool(Shader_ShatteredGlass))
+				nTexCoords = 3;
 
 			pShaderShadow->VertexShaderVertexFormat(nFlags, nTexCoords, NULL, nUserDataSize);
 		}
@@ -1551,17 +1613,6 @@ SHADER_DRAW
 		if (bHasEnvMap)
 			BindTexture(SHADER_SAMPLER14, EnvMap, EnvMapFrame);
 
-		// Need to recompute AlphaWrites here.
-		// All of these Things disable AlphaWrites
-		int nAlphaDisable = 0;
-		nAlphaDisable += GetBool(Shader_AlphaBlending_Enable);
-		nAlphaDisable += bProjectedTexture;
-		nAlphaDisable += bTranslucent;
-		nAlphaDisable += bAdditive;
-		nAlphaDisable += bAlphaTest;
-		nAlphaDisable += GetBool(Shader_Disable_AlphaWrites);
-
-		bool bAlphaWrites = (nAlphaDisable == 0) ? true : false;
 		bool bWriteDepthToAlpha = false;
 		bool bWriteWaterFogToAlpha = false;
 
