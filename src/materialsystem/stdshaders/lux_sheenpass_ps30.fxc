@@ -72,8 +72,8 @@ struct PS_INPUT
 {
 	// lux_model_simplified_vs30
 	float3 WorldPos		: TEXCOORD0;
-	float3 ModelPos		: TEXCOORD1;
-	float2 TexCoord		: TEXCOORD2;
+	float2 TexCoord		: TEXCOORD1;
+	float3 ModelPos		: TEXCOORD3;
 
 #if BUMPMAPPED
 	float3 Tangent		: TANGENT;

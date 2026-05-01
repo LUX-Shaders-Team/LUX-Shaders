@@ -28,6 +28,7 @@ lux_emissive_vs30.fxc
 // Used for other Renderpasses
 lux_cloak_vs30.fxc
 lux_cloak_ps30.fxc
+lux_sheenpass_vs30.fxc
 lux_sheenpass_ps30.fxc
 lux_meshoutline_vs30.fxc
 lux_meshoutline_ps30.fxc

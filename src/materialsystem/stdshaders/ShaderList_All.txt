@@ -76,6 +76,7 @@ lux_screenspace_ps30.fxc
 lux_screenspace_vs30.fxc
 lux_shatteredglass_ps30.fxc
 lux_shatteredglass_vs30.fxc
+lux_sheenpass_vs30.fxc
 lux_sheenpass_ps30.fxc
 lux_sky_compressed_ps30.fxc
 lux_sky_hdri_ps30.fxc

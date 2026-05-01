@@ -165,6 +165,7 @@ $Project
 				$File "$STDSHADERS/lux_shatteredglass_ps30.fxc"
 				$File "$STDSHADERS/lux_shatteredglass_vs30.fxc"
 				$File "$STDSHADERS/lux_sheenpass_ps30.fxc"
+				$File "$STDSHADERS/lux_sheenpass_vs30.fxc"
 				$File "$STDSHADERS/lux_sky_compressed_ps30.fxc"
 				$File "$STDSHADERS/lux_sky_hdri_ps30.fxc"
 				$File "$STDSHADERS/lux_sky_rgbs_ps30.fxc"
