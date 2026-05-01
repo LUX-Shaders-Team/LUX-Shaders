@@ -185,9 +185,62 @@ void ComputeBumpedLightmapCoordinates(float4 f4LightmapTexCoord1, float4 f4Light
 }
 
 //==========================================================================//
+// Apply dot-product Code
+// Made this a separate Function since it happens in a bunch of Locations..
+//==========================================================================//
+float3 ComputeBumpedLightmapDotProduct(float3 f3LightmapColor1, float3 f3LightmapColor2, float3 f3LightmapColor3, float3 f3NormalTS, float3 f3DetailTexture = 1.0f, int nDetailBlendMode = 0)
+{
+	float3 f3DotProduct;
+#if SSBUMP
+	f3DotProduct = f3NormalTS;
+#else
+	// Regular bumped Lightmap :
+	// Check Contribution on each Axis
+	// This only works because we assume Both to be Unit Vectors
+	f3DotProduct.x = saturate(dot(f3NormalTS, mxBumpBasis[0]));
+	f3DotProduct.y = saturate(dot(f3NormalTS, mxBumpBasis[1]));
+	f3DotProduct.z = saturate(dot(f3NormalTS, mxBumpBasis[2]));
+
+	// Square! Note that this makes all values in the dp positive
+	f3DotProduct *= f3DotProduct;
+#endif
+
+	// I have no idea what exactly p2-onward does here 
+	// Referencing the original bumped lighting code ( and how it uses the ssbump ), this should make sense
+	// In case of the Bumped Lightmap sample, it will multiply the sum of dp's with the detail Texture
+	// And this would be the same place just that we multiply the SSBump... by the SSBump...
+	// If this comment is still here then it probably looked the same as the reference ( Portal 2 Panel Material )
+	// ShiroDkxtro2:	This works for both SSBumps and Regular Bumps the way I arranged the code
+	//					Precompute the 2.0f* into $DetailTint
+#if DETAILTEXTURE
+	if(nDetailBlendMode == 10)
+		f3DotProduct *= f3DetailTexture; // 2.0f *
+#endif
+
+#if SSBUMP
+	float3 f3DiffuseLighting =	f3DotProduct.xxx * f3LightmapColor1 +
+								f3DotProduct.yyy * f3LightmapColor2 +
+								f3DotProduct.zzz * f3LightmapColor3;
+
+	// Note: The LightmapScaleFactor includes the SSBumpMathFix for SSBumps
+	f3DiffuseLighting *= g_f1LightmapScaleFactor;
+
+#else
+	float3 f3DiffuseLighting =	f3DotProduct.xxx * f3LightmapColor1 +
+								f3DotProduct.yyy * f3LightmapColor2 +
+								f3DotProduct.zzz * f3LightmapColor3;
+
+	float f1Sum = dot(f3DotProduct, float3(1.0f, 1.0f, 1.0f));
+	f3DiffuseLighting *= g_f1LightmapScaleFactor / f1Sum;
+#endif
+
+	return f3DiffuseLighting;
+}
+
+//==========================================================================//
 // Somewhat modified stock bumped lightmap sampling function
 //==========================================================================//
-float3 ComputeBumpedLightmap(float3 f3TextureNormal, float4 f4LightmapTexCoord1, float4 f4LightmapTexCoord2And3, int nDetailBlendMode = 0, float3 f3DetailTexture = float3(0.5f, 0.5f, 0.5f))
+float3 ComputeBumpedLightmap(float3 f3NormalTS, float4 f4LightmapTexCoord1, float4 f4LightmapTexCoord2And3, int nDetailBlendMode = 0, float3 f3DetailTexture = float3(0.5f, 0.5f, 0.5f))
 {
 	float2 f2BumpCoord1;
 	float2 f2BumpCoord2;
@@ -214,48 +267,7 @@ float3 ComputeBumpedLightmap(float3 f3TextureNormal, float4 f4LightmapTexCoord1,
 	//==================================//
 	// Compute Bumped Lightmap
 	//==================================//
-	// Prepare this, will be replaced by respective normal basis
-	float3 dp;
-	float3 f3DiffuseLighting;
-#if SSBUMP
-	dp = f3TextureNormal;
-#else
-	// Regular bumped lightmap :
-	// Check contribution on each axis
-	// This only works because we assume both to be unit vectors
-	dp.x = saturate(dot(f3TextureNormal, mxBumpBasis[0]));
-	dp.y = saturate(dot(f3TextureNormal, mxBumpBasis[1]));
-	dp.z = saturate(dot(f3TextureNormal, mxBumpBasis[2]));
-	dp *= dp;
-#endif
-
-	// I have no idea what exactly p2-onward does here 
-	// Referencing the original bumped lighting code ( and how it uses the ssbump ), this should make sense
-	// In case of the Bumped Lightmap sample, it will multiply the sum of dp's with the detail Texture
-	// And this would be the same place just that we multiply the SSBump... by the SSBump...
-	// If this comment is still here then it probably looked the same as the reference ( Portal 2 Panel Material )
-	// ShiroDkxtro2:	This works for both SSBumps and Regular Bumps the way I arranged the code
-	//					Precompute the 2.0f* into $DetailTint
-#if DETAILTEXTURE
-	if(nDetailBlendMode == 10)
-		dp *= f3DetailTexture; // 2.0f *
-#endif
-
-#if SSBUMP
-	f3DiffuseLighting =	dp.xxx * f3LightmapColor1 +
-		dp.yyy * f3LightmapColor2 +
-		dp.zzz * f3LightmapColor3;
-	f3DiffuseLighting *= g_f1LightmapScaleFactor;
-
-#else
-	f3DiffuseLighting =	dp.xxx * f3LightmapColor1 +
-		dp.yyy * f3LightmapColor2 +
-		dp.zzz * f3LightmapColor3;
-
-	float sum = dot(dp, float3(1, 1, 1));
-	f3DiffuseLighting *= g_f1LightmapScaleFactor / sum;
-#endif
-	return f3DiffuseLighting;
+	return ComputeBumpedLightmapDotProduct(f3LightmapColor1, f3LightmapColor2, f3LightmapColor3, f3NormalTS, f3DetailTexture, nDetailBlendMode);
 }
 
 #if defined(BRUSH_SPECULAR)
@@ -264,7 +276,43 @@ float3 ComputeBumpedLightmap(float3 f3TextureNormal, float4 f4LightmapTexCoord1,
 // Semi-based on this Thread, semi because the Code in this Thread does not work
 // https://www.gamedev.net/forums/topic/673113-directional-lightmapped-specular/
 //==========================================================================//
-float3 ComputeBumpedLightmap_Directional(float3 f3TextureNormal, float4 f4LightmapTexCoord1, float4 f4LightmapTexCoord2And3, float3x3 TBN,
+float3 ComputeDomDir(float3 f3LightmapColor1, float3 f3LightmapColor2, float3 f3LightmapColor3, float3x3 TBN)
+{
+	// Average Luminance Value ( how strong, this direction )
+	float3 f3Lightmap1Luminance = (float3)dot(f3LightmapColor1, (float3)1.0f / 3.0f);
+	float3 f3Lightmap2Luminance = (float3)dot(f3LightmapColor2, (float3)1.0f / 3.0f);
+	float3 f3Lightmap3Luminance = (float3)dot(f3LightmapColor3, (float3)1.0f / 3.0f);
+
+	// ShiroDkxtro2
+	// The contribution to the BumpBasis
+	// The Compiler will probably optimise this by precomputing the Values:
+	// We are running into the SSBumpMathFix Issue here again
+	// the .z Contribution is too large! So we fix this up later.
+	// We invert here so we get the Direction in which the Lights shine not from which they are coming.
+	f3Lightmap1Luminance *= -mxBumpBasis[0]; // +x, __, z |
+	f3Lightmap2Luminance *= -mxBumpBasis[1]; // -x, +y, z |
+	f3Lightmap3Luminance *= -mxBumpBasis[2]; // -x, -y, z |
+
+	float3 DomSum = f3Lightmap1Luminance + f3Lightmap2Luminance + f3Lightmap3Luminance;
+
+	// ShiroDkxtro2:
+	// Custom calculated Value that fixes Light glitching
+	// Happens because .z Contributions are too large. ( SSBumpMathIssue 2.0 )
+	// Note that this Value is negative, it must be! The Light Direction is calculated in Tangent Space,
+	// Light can only ever come into the Surface, it can never come out of it. ( ignoring bounced Lighting )
+	DomSum.z = -0.23f;
+
+	// Like mentioned it's in Tangent Space, but Lighting happens in WorldSpace.
+	// Need TBN to make it WS LightDir
+	// We also abuse the Normalize here to Normalize the Direction ( so don't do it twice )
+	return normalize(mul(DomSum, TBN));
+}
+
+//==========================================================================//
+// Somewhat modified stock bumped lightmap sampling function
+// + Extracts DomDir for you
+//==========================================================================//
+float3 ComputeBumpedLightmap_Directional(float3 f3NormalTS, float4 f4LightmapTexCoord1, float4 f4LightmapTexCoord2And3, float3x3 TBN,
 	out float3 f3DomDir, int nDetailBlendMode = 0, float3 f3DetailTexture = float3(0.5f, 0.5f, 0.5f))
 {
 	float2 f2BumpCoord1;
@@ -288,88 +336,12 @@ float3 ComputeBumpedLightmap_Directional(float3 f3TextureNormal, float4 f4Lightm
 	float3 f3LightmapColor3 = ComputeLightmap(f2BumpCoord3);
 #endif
 
-	//==================================//
-	// Compute Dominant Direction
-	//==================================//
-	// Average Luminance Value ( how strong, this direction )
-	float3 f3Lightmap1Luminance = (float3)dot(f3LightmapColor1.rgb, (float3)1.0f / 3.0f);
-	float3 f3Lightmap2Luminance = (float3)dot(f3LightmapColor2.rgb, (float3)1.0f / 3.0f);
-	float3 f3Lightmap3Luminance = (float3)dot(f3LightmapColor3.rgb, (float3)1.0f / 3.0f);
-
-	// ShiroDkxtro2
-	// The contribution to the BumpBasis
-	// The Compiler will probably optimise this by precomputing the Values:
-	// We are running into the SSBumpMathFix Issue here again
-	// the .z Contribution is too large! So we fix this up later.
-	// We invert here so we get the Direction in which the Lights shine not from which they are coming.
-	f3Lightmap1Luminance *= -mxBumpBasis[0]; // +x, __, z |
-	f3Lightmap2Luminance *= -mxBumpBasis[1]; // -x, +y, z |
-	f3Lightmap3Luminance *= -mxBumpBasis[2]; // -x, -y, z |
-	
-	float3 DomSum = f3Lightmap1Luminance + f3Lightmap2Luminance + f3Lightmap3Luminance;
-
-	// ShiroDkxtro2:
-	// Custom calculated Value that fixes Light glitching
-	// Happens because .z Contributions are too large. ( SSBumpMathIssue 2.0 )
-	// Note that this Value is negative, it must be! The Light Direction is calculated in Tangent Space,
-	// Light can only ever come into the Surface, it can never come out of it. ( ignoring bounced Lighting )
-	DomSum.z = -0.23f;
-
-	// Like mentioned it's in Tangent Space, but Lighting happens in WorldSpace.
-	// Need TBN to make it WS LightDir
-	// We also abuse the Normalize here to Normalize the Direction ( so don't do it twice )
-	f3DomDir = normalize(mul(DomSum, TBN));
-	
-	// Now compute the Rest of the original Function
+	f3DomDir = ComputeDomDir(f3LightmapColor1, f3LightmapColor2, f3LightmapColor3, TBN);
 
 	//==================================//
 	// Compute Bumped Lightmap
 	//==================================//
-	// Prepare this, will be replaced by respective normal basis
-	float3 dp;
-	float3 f3DiffuseLighting;
-#if SSBUMP
-	dp = f3TextureNormal;
-#else
-	// Regular bumped lightmap :
-	// Check contribution on each axis
-	// This only works because we assume both to be unit vectors
-	dp.x = saturate(dot(f3TextureNormal, mxBumpBasis[0]));
-	dp.y = saturate(dot(f3TextureNormal, mxBumpBasis[1]));
-	dp.z = saturate(dot(f3TextureNormal, mxBumpBasis[2]));
-	dp *= dp;
-#endif
-	
-	// I have no idea what exactly p2-onward does here 
-	// Referencing the original bumped lighting code ( and how it uses the ssbump ), this should make sense
-	// In case of the Bumped Lightmap sample, it will multiply the sum of dp's with the detail Texture
-	// And this would be the same place just that we multiply the SSBump... by the SSBump...
-	// If this comment is still here then it probably looked the same as the reference ( Portal 2 Panel Material )
-	// ShiroDkxtro2: This works for both SSBumps and Regular Bumps the way I arranged the code
-#if DETAILTEXTURE
-		if(nDetailBlendMode == 10)
-			dp *= 2.0f * f3DetailTexture;
-#endif
-
-#if SSBUMP
-		f3DiffuseLighting =	dp.xxx * f3LightmapColor1 +
-							dp.yyy * f3LightmapColor2 +
-							dp.zzz * f3LightmapColor3;
-
-		f3DiffuseLighting *= g_f1LightmapScaleFactor;
-#else
-		f3DiffuseLighting =	dp.xxx * f3LightmapColor1 +
-							dp.yyy * f3LightmapColor2 +
-							dp.zzz * f3LightmapColor3;
-
-		float f1sumthing = f3LightmapColor1.z + f3LightmapColor2.z + f3LightmapColor3.z;
-
-
-		float sum = dot(dp, float3(1, 1, 1));
-		f3DiffuseLighting *= g_f1LightmapScaleFactor / sum;
-#endif
-
-		return f3DiffuseLighting;
+	return ComputeBumpedLightmapDotProduct(f3LightmapColor1, f3LightmapColor2, f3LightmapColor3, f3NormalTS, f3DetailTexture, nDetailBlendMode);
 }
 #endif // BRUSH_SPECULAR
 
