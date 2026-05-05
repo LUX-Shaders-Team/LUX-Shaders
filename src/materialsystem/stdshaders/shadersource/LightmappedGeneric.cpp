@@ -46,9 +46,9 @@ public:
 
 	// Everything related to constants
 
-	LightmappedGenericContext(CBaseShader* pShader)
-		: m_SemiStaticCmds(pShader),
-		m_StaticCmds(pShader)
+	LightmappedGenericContext(IMaterialVar** ppParams)
+		: m_SemiStaticCmds(ppParams),
+		m_StaticCmds(ppParams)
 	{
 	}
 };
@@ -443,7 +443,7 @@ SHADER_INIT
 // Virtual Void Override for Context Data
 LightmappedGenericContext* CreateMaterialContextData() override
 {
-	return new LightmappedGenericContext(this);
+	return new LightmappedGenericContext(NULL);
 }
 
 SHADER_DRAW
@@ -698,7 +698,7 @@ SHADER_DRAW
 //		StaticCmds.End();
 
 		// Set the Buffer back to its original ( Empty ) State
-		SemiStaticCmds.Reset(this);
+		SemiStaticCmds.Reset(params);
 
 		// Instruct the Buffer to set an End Point
 		SemiStaticCmds.End();
@@ -710,7 +710,7 @@ SHADER_DRAW
 	SEMI_STATIC_COMMANDS
 	{
 		// Set the Buffer back to its original ( Empty ) State
-		SemiStaticCmds.Reset(this);
+		SemiStaticCmds.Reset(params);
 		
 		//==========================================================================//
 		// Bind StandardTextures

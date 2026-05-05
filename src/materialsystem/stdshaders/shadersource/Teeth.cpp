@@ -59,9 +59,9 @@ public:
 	bool m_bPhong_InvertPhongMask = false;
 	bool m_bPhong_PhongExponentTextureMask = false;
 
-	TeethContext(CBaseShader* pShader)
-		: m_SemiStaticCmds(pShader),
-		m_StaticCmds(pShader)
+	TeethContext(IMaterialVar** ppParams)
+		: m_SemiStaticCmds(ppParams),
+		m_StaticCmds(ppParams)
 	{
 	}
 };
@@ -362,7 +362,7 @@ SHADER_INIT
 // Virtual Void Override for Context Data
 TeethContext* CreateMaterialContextData() override
 {
-	return new TeethContext(this);
+	return new TeethContext(NULL);
 }
 
 SHADER_DRAW

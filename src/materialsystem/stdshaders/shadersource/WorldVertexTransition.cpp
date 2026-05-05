@@ -45,9 +45,9 @@ public:
 
 	// Everything related to constants
 
-	WorldVertexTransitionContext(CBaseShader* pShader)
-		: m_SemiStaticCmds(pShader),
-		m_StaticCmds(pShader)
+	WorldVertexTransitionContext(IMaterialVar** ppParams)
+		: m_SemiStaticCmds(ppParams),
+		m_StaticCmds(ppParams)
 	{
 	}
 };
@@ -418,7 +418,7 @@ SHADER_INIT
 // Virtual Void Override for Context Data
 WorldVertexTransitionContext* CreateMaterialContextData() override
 {
-	return new WorldVertexTransitionContext(this);
+	return new WorldVertexTransitionContext(NULL);
 }
 
 SHADER_DRAW
@@ -743,12 +743,6 @@ SHADER_DRAW
 
 		// Instruct the Buffer to set an End Point
 //		StaticCmds.End();
-
-		// Set the Buffer back to its original ( Empty ) State
-		SemiStaticCmds.Reset(this);
-
-		// Instruct the Buffer to set an End Point
-		SemiStaticCmds.End();
 	}
 
 	//==========================================================================//
@@ -757,7 +751,7 @@ SHADER_DRAW
 	if(MaterialVarsChanged())
 	{
 		// Set the Buffer back to its original ( Empty ) State
-		SemiStaticCmds.Reset(this);
+		SemiStaticCmds.Reset(params);
 
 		//==========================================================================//
 		// Bind StandardTextures

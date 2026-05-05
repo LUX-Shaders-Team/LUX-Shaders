@@ -28,8 +28,9 @@
 #include "shaderapi/commandbuffer.h"
 #endif
 
-#include "BaseVSShader.h"
 #include "shaderapi/ishaderapi.h"
+#include "materialsystem/imaterialvar.h"
+#include "shaderlib/shaderdll_global.h"
 
 template<int N>
 class CCommandStorageBuffer
@@ -206,14 +207,18 @@ public:
 template<class S> class CCommandBufferBuilder
 {
 	IMaterialVar** m_ppParams = nullptr;
-	CBaseShader* BaseShader;
 public:
 	S m_Storage;
 
-	CCommandBufferBuilder(CBaseShader* pShader)
-		: m_ppParams(pShader->m_ppParams)
+	// Default Constructor that does nothing
+	CCommandBufferBuilder()
 	{
-		BaseShader = pShader;
+	
+	}
+
+	CCommandBufferBuilder(IMaterialVar** params)
+		: m_ppParams(params)
+	{
 	}
 
 	FORCEINLINE void End(void)
@@ -256,24 +261,24 @@ public:
 	{
 		// NOTE: This ignores negative values.
 		// Material Creators shouldn't set negative values anyways
-		return (CBaseShader::m_ppParams[var]->GetIntValue() != 0);
+		return (m_ppParams[var]->GetIntValue() != 0);
 	}
 
 	FORCEINLINE int GetInt(const int var)
 	{
-		return CBaseShader::m_ppParams[var]->GetIntValue();
+		return m_ppParams[var]->GetIntValue();
 	}
 
 	FORCEINLINE float GetFloat(const int var)
 	{
-		return CBaseShader::m_ppParams[var]->GetFloatValue();
+		return m_ppParams[var]->GetFloatValue();
 	}
 
 	// floatx interface
 	FORCEINLINE float2 GetFloat2(const int var)
 	{
 		float2 f2Result;
-		CBaseShader::m_ppParams[var]->GetVecValue(f2Result, 2);
+		m_ppParams[var]->GetVecValue(f2Result, 2);
 		return f2Result;
 	}
 
@@ -281,7 +286,7 @@ public:
 	FORCEINLINE float3 GetFloat3(const int var)
 	{
 		float3 f3Result;
-		CBaseShader::m_ppParams[var]->GetVecValue(f3Result, 3);
+		m_ppParams[var]->GetVecValue(f3Result, 3);
 		return f3Result;
 	}
 
@@ -289,8 +294,17 @@ public:
 	FORCEINLINE float4 GetFloat4(const int var)
 	{
 		float4 f4Result;
-		CBaseShader::m_ppParams[var]->GetVecValue(f4Result, 4);
+		m_ppParams[var]->GetVecValue(f4Result, 4);
 		return f4Result;
+	}
+
+	// Lifted from CBaseShader to remove the Dependency for CBaseShader
+	ShaderAPITextureHandle_t GetShaderAPITextureBindHandle(int nTextureVar, int nFrameVar)
+	{
+		IMaterialVar* pTextureVar = m_ppParams[nTextureVar];
+		IMaterialVar* pFrameVar = (nFrameVar != -1) ? m_ppParams[nFrameVar] : NULL;
+		int nFrame = pFrameVar ? pFrameVar->GetIntValue() : 0;
+		return GetShaderSystem()->GetShaderAPITextureBindHandle(pTextureVar->GetTextureValue(), nFrame);
 	}
 
 	//==================================//
@@ -590,7 +604,7 @@ public:
 
 	FORCEINLINE void cmdBindTexture(Sampler_t nSampler, int nTextureVar, int nFrameVar)
 	{
-		ShaderAPITextureHandle_t hTexture = BaseShader->GetShaderAPITextureBindHandle(nTextureVar, nFrameVar);
+		ShaderAPITextureHandle_t hTexture = GetShaderAPITextureBindHandle(nTextureVar, nFrameVar);
 		cmdBufferBindTexture(nSampler, hTexture);
 	}
 
@@ -614,7 +628,7 @@ public:
 		// Stock Function here requires CBaseVSShader*
 		// Previously I saw an instance where it uses CBaseShader::m_ppParams
 		// Well, GetShaderAPITextureBindHandle turns out to be a CBaseShader Function. So we don't need the BaseVSShader Reference!
-		ShaderAPITextureHandle_t hTexture = BaseShader->GetShaderAPITextureBindHandle(nTextureVar, nFrameVar);
+		ShaderAPITextureHandle_t hTexture = GetShaderAPITextureBindHandle(nTextureVar, nFrameVar);
 		cmdBufferBindTexture(nSampler, hTexture);
 
 		// ShiroDkxtro2: This is kinda odd?
@@ -692,9 +706,9 @@ public:
 		m_Storage.PutPtr( pCmdBuf );
 	}
 
-	FORCEINLINE void Reset( CBaseShader* pShader )
+	FORCEINLINE void Reset( IMaterialVar** params )
 	{
-		BaseShader = pShader;
+		m_ppParams = params;
 		m_Storage.Reset();
 	}
 

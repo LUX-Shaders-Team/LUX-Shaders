@@ -97,9 +97,9 @@ public:
 	CTextureReference m_RefCubemapB;
 	float m_f1LerpStart = 0.0f;
 
-	VertexLitGenericContext(CBaseShader* pShader)
-		: m_SemiStaticCmds(pShader),
-		m_StaticCmds(pShader)
+	VertexLitGenericContext(IMaterialVar** ppParams)
+		: m_SemiStaticCmds(ppParams),
+		m_StaticCmds(ppParams)
 	{
 	}
 };
@@ -881,11 +881,11 @@ SHADER_INIT
 // Virtual Void Override for Context Data
 VertexLitGenericContext* CreateMaterialContextData() override
 {
-	return new VertexLitGenericContext(this);
+	return new VertexLitGenericContext(NULL);
 }
 
 // Exposed Function for Multipass Rendering
-void LuxVertexLitGeneric_Shader_Draw(IShaderShadow* pShaderShadow, IShaderDynamicAPI* pShaderAPI, CBasePerMaterialContextData** pContextDataPtr)
+void LuxVertexLitGeneric_Shader_Draw(IMaterialVar** ppParams, IShaderShadow* pShaderShadow, IShaderDynamicAPI* pShaderAPI, CBasePerMaterialContextData** pContextDataPtr)
 {
 	// Get Context Data. BaseShader handles creation for us, using the CreateMaterialContextData() virtual
 	auto* pContextData = GetMaterialContextData<VertexLitGenericContext>(pContextDataPtr);
@@ -1274,10 +1274,10 @@ void LuxVertexLitGeneric_Shader_Draw(IShaderShadow* pShaderShadow, IShaderDynami
 //		StaticCmds.End();
 
 		// Set the Buffer back to its original ( Empty ) State
-		SemiStaticCmds.Reset(this);
+//		SemiStaticCmds.Reset(ppParams);
 
 		// Instruct the Buffer to set an End Point
-		SemiStaticCmds.End();
+//		SemiStaticCmds.End();
 	}
 
 	//==========================================================================//
@@ -1286,7 +1286,7 @@ void LuxVertexLitGeneric_Shader_Draw(IShaderShadow* pShaderShadow, IShaderDynami
 	if(MaterialVarsChanged())
 	{
 		// Set the Buffer back to its original ( Empty ) State
-		SemiStaticCmds.Reset(this);
+		SemiStaticCmds.Reset(ppParams);
 
 		//==========================================================================//
 		// Bind StandardTextures
@@ -2002,7 +2002,7 @@ SHADER_DRAW
 	// Don't bother to even render it
 	if (pShaderShadow || bDrawBasePass)
 	{
-		LuxVertexLitGeneric_Shader_Draw(pShaderShadow, pShaderAPI, pContextDataPtr);
+		LuxVertexLitGeneric_Shader_Draw(params, pShaderShadow, pShaderAPI, pContextDataPtr);
 	}
 	else
 	{

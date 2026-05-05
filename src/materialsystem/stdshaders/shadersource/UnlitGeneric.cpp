@@ -42,9 +42,9 @@ public:
 	BlendType_t m_nBlendType = BT_NONE;
 	bool m_bIsFullyOpaque = false;
 
-	UnlitGenericContext(CBaseShader* pShader)
-		: m_SemiStaticCmds(pShader),
-		m_StaticCmds(pShader)
+	UnlitGenericContext(IMaterialVar** ppParams)
+		: m_SemiStaticCmds(ppParams),
+		m_StaticCmds(ppParams)
 	{
 	}
 };
@@ -452,7 +452,7 @@ SHADER_DRAW
 //		StaticCmds.End();
 
 		// Set the Buffer back to its original ( Empty ) State
-		SemiStaticCmds.Reset(this);
+		SemiStaticCmds.Reset(params);
 
 		// Instruct the Buffer to set an End Point
 		SemiStaticCmds.End();
@@ -466,7 +466,7 @@ SHADER_DRAW
 	if(MaterialVarsChanged())
 	{
 		// Set the Buffer back to its original ( Empty ) State
-		SemiStaticCmds.Reset(this);
+		SemiStaticCmds.Reset(params);
 
 		//==========================================================================//
 		// Bind Textures
