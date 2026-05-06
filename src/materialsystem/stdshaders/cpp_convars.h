@@ -90,6 +90,8 @@ extern ConVar lux_envmap_forcelerp;
 extern ConVar lux_envmap_lerptime;
 extern ConVar lux_envmap_flipbasealpha;
 
+extern ConVar lux_phong_forcelambert_value;
+
 //==========================================================================//
 // Cable Shader
 //==========================================================================//
