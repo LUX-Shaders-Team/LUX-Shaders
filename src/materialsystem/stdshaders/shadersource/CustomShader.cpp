@@ -709,7 +709,7 @@ SHADER_DRAW
 		if (bParticle)
 		{
 			// Default Flags for a Particle
-			unsigned int nFlags = VERTEX_POSITION | VERTEX_COLOR;
+			unsigned int nFlags = VERTEX_POSITION | VERTEX_COLOR | VERTEX_SPECULAR;
 			int nUserDataSize = 0;
 
 			// I don't think this is actually possible.
@@ -787,7 +787,7 @@ SHADER_DRAW
 
 			// Vertex Colors are sometimes used by Hammer and this could be used on DetailSprites so support it
 			if (bVertexRGBA)
-				nFlags |= VERTEX_COLOR;
+				nFlags |= VERTEX_COLOR | VERTEX_SPECULAR;
 
 			int nTexCoords = 1;
 			if (GetBool(Shader_Model_SecondTexCoord))
@@ -811,7 +811,7 @@ SHADER_DRAW
 
 			// Vertex Colors are used in Hammer for Texture Shaded Polygons. And Displacements use the Alpha for Blending.
 			if (bVertexRGBA)
-				nFlags |= VERTEX_COLOR;
+				nFlags |= VERTEX_COLOR | VERTEX_SPECULAR;
 
 			// TEXCOORD0 = BaseTexture UV
 			// TEXCOORD1 = Lightmap UV
