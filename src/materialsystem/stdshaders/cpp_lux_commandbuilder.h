@@ -526,8 +526,15 @@ public:
 	{
 		m_Storage.PutInt( CBCMD_STORE_EYE_POS_IN_PSCONST );
 		m_Storage.PutInt( nConst );
+
+		// In ASW it sets a Value for the .w
+		// I really don't care about this Value though so set it to null
+#ifdef ASWSDK
+		m_Storage.PutFloat(1.0f);
+#endif
 	}
 
+#ifndef ASWSDK
 	FORCEINLINE void CommitPixelShaderLighting( int nConst )
 	{
 		m_Storage.PutInt( CBCMD_COMMITPIXELSHADERLIGHTING );
@@ -544,6 +551,7 @@ public:
 	{
 		m_Storage.PutInt( CBCMD_SETAMBIENTCUBEDYNAMICSTATEVERTEXSHADER );
 	}
+#endif
 
 	FORCEINLINE void SetPixelShaderFogParams( int nReg )
 	{
@@ -560,6 +568,7 @@ public:
 		StoreEyePosInPixelShaderConstant(nReg);
 	}
 
+#ifndef ASWSDK
 	FORCEINLINE void SetPixelShaderConstant_Lighting(int nReg)
 	{
 		CommitPixelShaderLighting(nReg);
@@ -574,6 +583,7 @@ public:
 	{
 		SetAmbientCubeDynamicStateVertexShader();
 	}
+#endif
 
 	FORCEINLINE void SetPixelShaderConstant_FogParams(int nReg)
 	{
@@ -598,7 +608,11 @@ public:
 		{
 			m_Storage.PutInt(CBCMD_BIND_SHADERAPI_TEXTURE_HANDLE);
 			m_Storage.PutInt(nSampler);
+#ifdef ASWSDK
+			m_Storage.PutInt(hTexture);
+#else
 			m_Storage.Put(hTexture);
+#endif
 		}
 	}
 
@@ -670,6 +684,110 @@ public:
 	{
 		cmdBufferBindStandardTexture(nSampler, StandardTexture);
 	}
+
+	//==================================//
+	// Functions for ASW Per-Instance (PI) CommandBuffer
+	//==================================//
+
+#ifdef ASWSDK
+	FORCEINLINE void CBICMD_SetPixelShaderLocalLighting(int nConst)
+	{
+		m_Storage.PutInt(CBICMD_SETPIXELSHADERLOCALLIGHTING);
+		m_Storage.PutInt(nConst);
+	}
+
+	FORCEINLINE void CBICMD_SetPixelShaderAmbientLightCube(int nConst)
+	{
+		m_Storage.PutInt(CBICMD_SETPIXELSHADERAMBIENTLIGHTCUBE);
+		m_Storage.PutInt(nConst);
+	}
+
+	FORCEINLINE void CBICMD_SetVertexShaderLocalLighting()
+	{
+		m_Storage.PutInt(CBICMD_SETVERTEXSHADERLOCALLIGHTING);
+	}
+
+	FORCEINLINE void CBICMD_SetVertexShaderAmbientLightCube(void)
+	{
+		m_Storage.PutInt(CBICMD_SETVERTEXSHADERAMBIENTLIGHTCUBE);
+	}
+
+	FORCEINLINE void CBICMD_SetSkinningMatrices(void)
+	{
+		m_Storage.PutInt(CBICMD_SETSKINNINGMATRICES);
+	}
+
+	FORCEINLINE void CBICMD_SetPixelShaderAmbientLightCubeLuminance(int nConst)
+	{
+		m_Storage.PutInt(CBICMD_SETPIXELSHADERAMBIENTLIGHTCUBELUMINANCE);
+		m_Storage.PutInt(nConst);
+	}
+
+	FORCEINLINE void CBICMD_SetPixelShaderGlintDamping(int nConst)
+	{
+		m_Storage.PutInt(CBICMD_SETPIXELSHADERGLINTDAMPING);
+		m_Storage.PutInt(nConst);
+	}
+
+	FORCEINLINE void CBICMD_SetModulationPixelShaderDynamicState_LinearColorSpace_LinearScale(int nConst, const Vector& vecGammaSpaceColor2Factor, float scale)
+	{
+		m_Storage.PutInt(CBICMD_SETMODULATIONPIXELSHADERDYNAMICSTATE_LINEARCOLORSPACE_LINEARSCALE);
+		m_Storage.PutInt(nConst);
+		m_Storage.Put(vecGammaSpaceColor2Factor);
+		m_Storage.PutFloat(scale);
+	}
+
+	FORCEINLINE void CBICMD_SetModulationPixelShaderDynamicState_LinearScale(int nConst, const Vector& vecGammaSpaceColor2Factor, float scale)
+	{
+		m_Storage.PutInt(CBICMD_SETMODULATIONPIXELSHADERDYNAMICSTATE_LINEARSCALE);
+		m_Storage.PutInt(nConst);
+		m_Storage.Put(vecGammaSpaceColor2Factor);
+		m_Storage.PutFloat(scale);
+	}
+
+	FORCEINLINE void CBICMD_SetModulationPixelShaderDynamicState_LinearScale_ScaleInW(int nConst, const Vector& vecGammaSpaceColor2Factor, float scale)
+	{
+		m_Storage.PutInt(CBICMD_SETMODULATIONPIXELSHADERDYNAMICSTATE_LINEARSCALE_SCALEINW);
+		m_Storage.PutInt(nConst);
+		m_Storage.Put(vecGammaSpaceColor2Factor);
+		m_Storage.PutFloat(scale);
+	}
+
+	FORCEINLINE void CBICMD_SetModulationPixelShaderDynamicState_LinearColorSpace(int nConst, const Vector& vecGammaSpaceColor2Factor)
+	{
+		m_Storage.PutInt(CBICMD_SETMODULATIONPIXELSHADERDYNAMICSTATE_LINEARCOLORSPACE);
+		m_Storage.PutInt(nConst);
+		m_Storage.Put(vecGammaSpaceColor2Factor);
+	}
+
+	FORCEINLINE void CBICMD_SetModulationPixelShaderDynamicState(int nConst, const Vector& vecGammaSpaceColor2Factor)
+	{
+		m_Storage.PutInt(CBICMD_SETMODULATIONPIXELSHADERDYNAMICSTATE);
+		m_Storage.PutInt(nConst);
+		m_Storage.Put(vecGammaSpaceColor2Factor);
+	}
+
+	FORCEINLINE void CBICMD_SetModulationPixelShaderDynamicState_Identity(int nConst)
+	{
+		m_Storage.PutInt(CBICMD_SETMODULATIONPIXELSHADERDYNAMICSTATE_IDENTITY);
+		m_Storage.PutInt(nConst);
+	}
+
+	FORCEINLINE void CBICMD_SetModulationVertexShaderDynamicState(int nConst, const Vector& vecGammaSpaceColor2Factor)
+	{
+		m_Storage.PutInt(CBICMD_SETMODULATIONVERTEXSHADERDYNAMICSTATE);
+		m_Storage.PutInt(nConst);
+		m_Storage.Put(vecGammaSpaceColor2Factor);
+	}
+
+	FORCEINLINE void CBICMD_SetModulationVertexShaderDynamicState_LinearScale(int nConst, const Vector& vecGammaSpaceColor2Factor, float flScale)
+	{
+		m_Storage.PutInt(CBICMD_SETMODULATIONVERTEXSHADERDYNAMICSTATE_LINEARSCALE);
+		m_Storage.PutInt(nConst);
+		m_Storage.Put(vecGammaSpaceColor2Factor);
+		m_Storage.PutFloat(flScale);
+	}
+#endif
 
 	//==================================//
 	// Remaining Stock Functions
