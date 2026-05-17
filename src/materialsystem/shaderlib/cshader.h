@@ -109,6 +109,10 @@ static const bool g_shaderConfigDumpEnable = false;
 			{\
 				return m_Info.m_pHelp;\
 			}\
+			const ShaderParamInfo_t &GetInfo() const\
+			{\
+				return m_Info;\
+			}\
 		private:\
 			ShaderParamInfo_t m_Info; \
 			int m_Index;\
@@ -202,6 +206,9 @@ static const bool g_shaderConfigDumpEnable = false;
 	/* Can't set m_ppParams without detouring the Function. */\
 	virtual char const* GetFallbackShader( IMaterialVar** params ) const\
 	{\
+		/*Fallback Section sometimes gets a NULL. Avoid crashing, although this probably causes some undefined Behavior..*/\
+		if(!params)\
+			return NULL;\
 		/* m_ppParams is not set since this isn't a CBaseShader Function. So set it now. */\
 		m_ppParams = params;\
 		char const* pResult = GetRealFallbackShader();\
@@ -310,6 +317,19 @@ static const bool g_shaderConfigDumpEnable = false;
 	char const* GetD3DInfo()\
 	{\
 		return ShaderInfo.m_D3DInfo;\
+	}\
+	/* GetParamCount and GetParamInfo are from Alien Swarm Code */\
+	int GetParamCount() const\
+	{\
+		return CBaseClass::GetNumParams() + s_ShaderParams.Count();\
+	}\
+	const ShaderParamInfo_t& GetParamInfo( int paramIndex ) const\
+	{\
+		int nBaseClassParamCount = CBaseClass::GetNumParams();\
+		if (paramIndex < nBaseClassParamCount)\
+			return CBaseClass::GetParamInfo(paramIndex);\
+		else\
+			return s_ShaderParams[paramIndex - nBaseClassParamCount]->GetInfo();\
 	}\
 	/* Original Virtual void */\
 	void OnInitShaderInstance( IMaterialVar **params, IShaderInit *pShaderInit, const char *pMaterialName )

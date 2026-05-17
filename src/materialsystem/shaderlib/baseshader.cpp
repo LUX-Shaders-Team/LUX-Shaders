@@ -392,6 +392,17 @@ static ShaderParamInfo_t s_StandardParams[NUM_SHADER_MATERIAL_VARS] =
 	},
 };
 
+int CBaseShader::GetParamCount() const
+{
+	return NUM_SHADER_MATERIAL_VARS;
+}
+
+const ShaderParamInfo_t& CBaseShader::GetParamInfo(int nParamIndex) const
+{
+	Assert(nParamIndex < NUM_SHADER_MATERIAL_VARS);
+	return s_StandardParams[nParamIndex];
+}
+
 //-----------------------------------------------------------------------------
 // Default Shader Parameter Interface
 //-----------------------------------------------------------------------------

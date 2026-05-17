@@ -179,6 +179,11 @@ public:
 
 	// Methods inherited from IShader
 	virtual char const* GetFallbackShader( IMaterialVar** params ) const { return 0; }
+
+	// Two Alien Swarm Functions
+	virtual int GetParamCount() const;
+	virtual const ShaderParamInfo_t& GetParamInfo(int paramIndex) const;
+
 	virtual int GetNumParams( ) const;
 	virtual char const* GetParamName( int paramIndex ) const;
 	virtual char const* GetParamHelp( int paramIndex ) const;
