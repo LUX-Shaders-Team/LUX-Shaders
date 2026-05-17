@@ -703,7 +703,7 @@ SHADER_INIT_PARAMS()
 		SetBool(EnvMapMaskFlip, 1);
 	}
 
-	if (IsDefined(BumpMap))
+	if (IsDefined(BumpMap) || (IsDefined(LightWarpTexture) && !GetBool(LightWarpNoBump)) || (GetBool(Phong) && GetBool(BaseMapAlphaPhongMask)))
 	{
 		// Required for dynamic Lighting
 		SetFlag2(MATERIAL_VAR2_NEEDS_TANGENT_SPACES);
