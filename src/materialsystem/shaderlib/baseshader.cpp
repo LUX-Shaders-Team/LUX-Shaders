@@ -1295,7 +1295,7 @@ bool CBaseShader::NeedsPowerOfTwoFrameBufferTexture( IMaterialVar **params, bool
 { 
 	// This is a Virtual Function called by Client Code ( Particle System to name an Example ) 
 	// So use the manual Method or we get a crash since m_ppParams is nullptr
-	return HasFlag2(params, MATERIAL_VAR2_NEEDS_POWER_OF_TWO_FRAME_BUFFER_TEXTURE);
+	return (params[Flags2]->GetIntValue() & MATERIAL_VAR2_NEEDS_POWER_OF_TWO_FRAME_BUFFER_TEXTURE) != 0;
 }
 
 //-----------------------------------------------------------------------------
@@ -1588,7 +1588,7 @@ void CBaseShader::SetBlendingShadowState( BlendType_t nMode )
 			break;
 
 		case BT_ADD:
-			EnableAlphaBlending( SHADER_BLEND_ONE, SHADER_BLEND_ONE );
+			EnableAlphaBlending(SHADER_BLEND_ONE, SHADER_BLEND_ONE);
 			break;
 
 		case BT_BLENDADD:
