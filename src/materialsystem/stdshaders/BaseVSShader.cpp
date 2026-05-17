@@ -212,6 +212,7 @@ void CBaseVSShader::SetVertexShaderConstant( int vertexReg, int constantVar )
 //-----------------------------------------------------------------------------
 // Sets normalized light color for pixel shaders.
 //-----------------------------------------------------------------------------
+#ifndef ASWSDK
 void CBaseVSShader::SetPixelShaderLightColors( int pixelReg )
 {
 	int i;
@@ -233,6 +234,7 @@ void CBaseVSShader::SetPixelShaderLightColors( int pixelReg )
 		}
 	}
 }
+#endif
 
 //-----------------------------------------------------------------------------
 // Sets vertex shader texture transforms
@@ -501,10 +503,24 @@ void CBaseVSShader::LoadModelViewMatrixIntoVertexShaderConstant( int vertexReg )
 //-----------------------------------------------------------------------------
 void CBaseVSShader::LoadViewportTransformScaledIntoVertexShaderConstant( int vertexReg )
 {
-	ShaderViewport_t viewport;
 
-	m_pShaderAPI->GetViewports( &viewport, 1 );
+	int nViewPortWidth;
+	int nViewPortHeight;
+	int nViewPortTopLeftX;
+	int nViewPortTopLeftY;
 
+#ifndef ASWSDK
+	ShaderViewport_t Viewport;
+	m_pShaderAPI->GetViewports( &Viewport, 1 );
+
+	nViewPortWidth = Viewport.m_nWidth;
+	nViewPortHeight = Viewport.m_nHeight;
+	nViewPortTopLeftX = Viewport.m_nTopLeftX;
+	nViewPortTopLeftY = Viewport.m_nTopLeftY;
+#else
+	// FIXME: Is this correct?
+	m_pShaderAPI->GetCurrentViewport(nViewPortTopLeftX, nViewPortTopLeftY, nViewPortWidth, nViewPortHeight);
+#endif
 	int bbWidth = 0, 
 		bbHeight = 0;
 
@@ -512,10 +528,10 @@ void CBaseVSShader::LoadViewportTransformScaledIntoVertexShaderConstant( int ver
 
 	// (x, y, z, w) = (Width / bbWidth, Height / bbHeight, MinX / bbWidth, MinY / bbHeight)
 	Vector4D viewportTransform( 
-		1.0f * viewport.m_nWidth / bbWidth,
-		1.0f * viewport.m_nHeight / bbHeight,
-		1.0f * viewport.m_nTopLeftX / bbWidth, 
-		1.0f * viewport.m_nTopLeftY / bbHeight
+		1.0f * nViewPortWidth / bbWidth,
+		1.0f * nViewPortHeight / bbHeight,
+		1.0f * nViewPortTopLeftX / bbWidth,
+		1.0f * nViewPortTopLeftY / bbHeight
 	);
 
 	m_pShaderAPI->SetVertexShaderConstant( vertexReg, viewportTransform.Base() );
@@ -657,6 +673,7 @@ void CBaseVSShader::SetEnvMapTintPixelShaderDynamicState( int pixelReg, int tint
 	m_pShaderAPI->SetPixelShaderConstant(pixelReg, color);
 }
 
+#ifndef ASWSDK
 void CBaseVSShader::SetAmbientCubeDynamicStateVertexShader( )
 {
 	m_pShaderAPI->SetVertexShaderStateAmbientLightCube();
@@ -666,6 +683,7 @@ float CBaseVSShader::GetAmbientLightCubeLuminance( )
 {
 	return m_pShaderAPI->GetAmbientLightCubeLuminance();
 }
+#endif
 
 //-----------------------------------------------------------------------------
 // GR - translucency query
@@ -703,6 +721,19 @@ BlendType_t CBaseVSShader::EvaluateBlendRequirements( int textureVar, bool isBas
 // Take 0..1 seed and map to (u, v) coordinate to be used in shadow filter jittering...
 void CBaseVSShader::HashShadow2DJitter( const float fJitterSeed, float *fU, float* fV )
 {
+#ifdef ASWSDK
+	int nTexWidth, nTexHeight;
+	m_pShaderAPI->GetStandardTextureDimensions(&nTexWidth, &nTexHeight, TEXTURE_SHADOW_NOISE_2D);
+
+	int nSeed = fmod(fJitterSeed, 1.0f) * nTexWidth * nTexHeight;
+
+	int nRow = nSeed / nTexHeight;
+	int nCol = nSeed % nTexWidth;
+
+	// Div and mod to get an individual texel in the fTexRes x fTexRes grid
+	*fU = nRow / (float)nTexHeight;
+	*fV = nCol / (float)nTexWidth;
+#else
 	const int nTexRes = 32;
 	int nSeed = fmod (fJitterSeed, 1.0f) * nTexRes * nTexRes;
 
@@ -712,6 +743,7 @@ void CBaseVSShader::HashShadow2DJitter( const float fJitterSeed, float *fU, floa
 	// Div and mod to get an individual texel in the fTexRes x fTexRes grid
 	*fU = nRow / (float) nTexRes;	// Row
 	*fV = nCol / (float) nTexRes;	// Column
+#endif
 }
 
 void CBaseVSShader::DrawEqualDepthToDestAlpha( void )
@@ -905,6 +937,7 @@ void CBaseVSShader::SetupFlashlightSamplers()
 	{
 		m_pShaderShadow->EnableAlphaWrites(false);
 		m_pShaderShadow->EnableDepthWrites(false);
+
 		m_pShaderShadow->EnableTexture(SAMPLER_SHADOWDEPTH, true);
 		m_pShaderShadow->SetShadowDepthFiltering(SAMPLER_SHADOWDEPTH);
 		m_pShaderShadow->EnableSRGBRead(SAMPLER_SHADOWDEPTH, false);
@@ -1181,15 +1214,17 @@ inline static const float SSBumpCoefficient()
 	return 1.0f / (f1BasisOne + f1BasisTwo + f1BasisThree);
 }
 
-float4 CBaseVSShader::GetModulationConstant(const bool bBrush, const bool bSSBumpMathFix)
+float4 CBaseVSShader::GetModulationConstant(const bool bBrush, const bool bSSBumpMathFix, const float f1LightmapScaleFactor)
 {
 	float4 Result = 0.0f;
 
+#ifndef ASWSDK
 	if (HasFlag(MATERIAL_VAR_NOALPHAMOD))
 	{
 		Result.x = 1.0f;
 	}
 	else
+#endif
 	{
 		float f1Alpha1 = GetFloat(Alpha);
 		float f1Alpha2 = GetFloat(Alpha2);
@@ -1198,6 +1233,7 @@ float4 CBaseVSShader::GetModulationConstant(const bool bBrush, const bool bSSBum
 
 	// LightmapScale Factor is only used on brushes
 	// Models won't need it even if they will support Bumped Lightmaps
+#ifndef ASWSDK
 	if (bBrush)
 	{
 		Result.y = m_pShaderAPI->GetLightMapScaleFactor();
@@ -1207,6 +1243,11 @@ float4 CBaseVSShader::GetModulationConstant(const bool bBrush, const bool bSSBum
 	}	
 	else
 		Result.y = 1.0f;
+#else
+	// In ASW the LightmapScaleFactor is provided by IShaderShadow, not IShaderDynamicAPI
+	// So the Value has to be stored somewhere and then passed on here
+	Result.y = f1LightmapScaleFactor;
+#endif
 
 	// Force Alien Swarm Fog Factor if desired.
 	// g_bWaterAlienSwarmFogFactor will be indicated by  the Water Material itself when it renders in the Scene
@@ -1221,9 +1262,9 @@ float4 CBaseVSShader::GetModulationConstant(const bool bBrush, const bool bSSBum
 	return Result;
 }
 
-void CBaseVSShader::SetModulationConstant(const bool bSSBumpMathFix, const bool bBrush)
+void CBaseVSShader::SetModulationConstant(const bool bSSBumpMathFix, const bool bBrush, const float f1LightmapScaleFactor)
 {
-	float4 f4Modulation = GetModulationConstant(bBrush, bSSBumpMathFix);
+	float4 f4Modulation = GetModulationConstant(bBrush, bSSBumpMathFix, f1LightmapScaleFactor);
 
 	// Our LightmapScaleFactor doesn't include Color like the Stock one does
 	// Doing so would interfer with Features like BlendTintbyBaseAlpha
@@ -1249,8 +1290,10 @@ void CBaseVSShader::SetupDefaultRegisters(const bool bFog,
 	float4 f4Tint = ComputeTint(!GetBool(NoTint) && GetBool(AllowDiffuseModulation), var_Alpha);
 	m_pShaderAPI->SetPixelShaderConstant(LUX_PS_FLOAT_DEFAULTCONTROLS, f4Tint);
 
+#ifndef ASWSDK
 	// Function above, handles LightmapScaleFactor and Alpha Modulation
 	SetModulationConstant(bSSBumpMathFix);
+#endif
 }
 
 bool CBaseVSShader::WriteDepthToDestAlpha(const bool bIsOpaque)

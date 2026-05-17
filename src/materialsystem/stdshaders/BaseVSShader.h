@@ -59,7 +59,9 @@ public:
 	void SetPixelShaderConstantFudge( int pixelReg, int constantVar );
 
 	// Sets light direction for pixel shaders.
+#ifndef ASWSDK
 	void SetPixelShaderLightColors( int pixelReg );
+#endif
 
 	// Sets vertex shader texture transforms
 	void SetVertexShaderTextureTranslation( int vertexReg, int translationVar );
@@ -92,8 +94,10 @@ public:
 	void LoadViewportTransformScaledIntoVertexShaderConstant( int vertexReg );
 
 	// Sets up ambient light cube...
+#ifndef ASWSDK
 	void SetAmbientCubeDynamicStateVertexShader( );
 	float GetAmbientLightCubeLuminance( );
+#endif
 
 	// Helpers for dealing with envmaptint
 	void SetEnvMapTintPixelShaderDynamicState( int pixelReg, int tintVar, int alphaVar, bool bConvertFromGammaToLinear = false );
@@ -172,12 +176,12 @@ public:
 	float4 ComputeTint(const bool bAllowDiffuseModulation, const int var_Alpha);
 
 	// Computes LightmapScaleFactor * SSBumpMathFix and $Alpha * $Alpha2
-	float4 GetModulationConstant(const bool bBrush, const bool bSSBumpMathFix);
+	float4 GetModulationConstant(const bool bBrush, const bool bSSBumpMathFix, const float f1LightmapScaleFactor = 1.0f);
 
 	// Sets float4(LightmapScaleFactor, AlphaModulation) to c1
 	// This is used in SetupDefaultRegisters()
 	// Exposed as separate function as some shaders may want to set their own tint variables
-	void SetModulationConstant(const bool bSSBumpMathFix = false, const bool bBrush = true);
+	void SetModulationConstant(const bool bSSBumpMathFix = false, const bool bBrush = true, const float f1LightmapScaleFactor = 1.0f);
 
 	// Setup all the default things ( tint, lightmap factor, fog, eyepos )
 	void SetupDefaultRegisters(const bool bFog, const bool bEyePos, const int var_Alpha = Alpha, const bool bSSBumpMathFix = false);
