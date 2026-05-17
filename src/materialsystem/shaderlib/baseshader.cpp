@@ -22,6 +22,10 @@
 #include "../stdshaders/lux_registermap_cpp.h"
 #include "../stdshaders/lux_registermap_vs.h"
 
+#ifdef ASWSDK
+#include "renderparm.h"
+#endif
+
 // NOTE: This must be the last include File in a .cpp File!
 #include "tier0/memdbgon.h"
 
@@ -536,7 +540,9 @@ void CBaseShader::DrawElements( IMaterialVar **ppParams, int nModulationFlags,
 	}
 
 	m_nModulationFlags = nModulationFlags;
+#ifndef ASWSDK
 	m_pMeshBuilder = pShaderAPI ? pShaderAPI->GetVertexModifyBuilder() : NULL;
+#endif
 	m_nVertexCompression = vertexCompression;
 
 #ifdef ASWSDK
@@ -591,7 +597,10 @@ void CBaseShader::DrawElements( IMaterialVar **ppParams, int nModulationFlags,
 	m_ppParams = NULL;
 	m_pShaderAPI = NULL;
 	m_pShaderShadow = NULL;
+#ifndef ASWSDK
 	m_pMeshBuilder = NULL;
+#endif
+
 #ifdef ASWSDK
 	m_ppInstanceDataPtr = NULL;
 	m_pCurrentInstanceCommandBuffer = NULL;
@@ -943,6 +952,7 @@ bool CBaseShader::CanUseEditorMaterials()
 	return GetShaderSystem()->CanUseEditorMaterials();
 }
 
+#ifndef ASWSDK
 //-----------------------------------------------------------------------------
 // "Gets the builder..."
 //-----------------------------------------------------------------------------
@@ -950,6 +960,7 @@ CMeshBuilder* CBaseShader::MeshBuilder()
 {
 	return m_pMeshBuilder;
 }
+#endif
 
 //-----------------------------------------------------------------------------
 // Loads a Texture
@@ -1013,6 +1024,24 @@ ShaderAPITextureHandle_t CBaseShader::GetShaderAPITextureBindHandle( int nTextur
 	int nFrame = pFrameVar ? pFrameVar->GetIntValue() : 0;
 	return GetShaderSystem()->GetShaderAPITextureBindHandle( pTextureVar->GetTextureValue(), nFrame, nTextureChannel );
 }
+
+#ifdef ASWSDK
+void CBaseShader::BindVertexTexture(VertexTextureSampler_t vtSampler, int nTextureVar, int nFrame /* = 0  */)
+{
+	Assert(!IsSnapshotting());
+
+	IMaterialVar* pTextureVar = m_ppParams[nTextureVar];
+	if (!pTextureVar)
+		return;
+
+	GetShaderSystem()->BindVertexTexture(vtSampler, pTextureVar->GetTextureValue());
+}
+
+ShaderAPITextureHandle_t CBaseShader::GetShaderAPITextureBindHandle(ITexture* pTexture, int nFrame, int nTextureChannel)
+{
+	return GetShaderSystem()->GetShaderAPITextureBindHandle(pTexture, nFrame, nTextureChannel);
+}
+#endif
 
 //-----------------------------------------------------------------------------
 // "Four different flavors of BindTexture(), handling the two-sampler
@@ -1127,9 +1156,18 @@ bool CBaseShader::TextureIsTranslucent( int textureVar, bool isBaseTexture )
 			if (HasFlag(MATERIAL_VAR_OPAQUETEXTURE))
 				return false;
 
+			bool bSelfIllum = HasFlag(MATERIAL_VAR_SELFILLUM);
+			bool bBaseAlphaEnvMapMask = HasFlag(MATERIAL_VAR_BASEALPHAENVMAPMASK);
+
+			// ASW accounts for $SelfIllum not using the $BaseTexture's Alpha Channel when $SelfIllumMask is used
+			#ifdef ASWSDK
+				bool bHasSelfIllumMask = HasFlag2(MATERIAL_VAR2_SELFILLUMMASK);
+				bSelfIllum = bSelfIllum && !bHasSelfIllumMask;
+			#endif
+
 			// Check if we are using BaseTexture Alpha for something other than translucency.
 			// ShiroDkxtro2: This does not consider other Parameters like BaseMapAlphaPhongMask, or BlendTintByBaseAlpha..
-			if (!HasFlag(MATERIAL_VAR_SELFILLUM) && !HasFlag(MATERIAL_VAR_BASEALPHAENVMAPMASK))
+			if (!bSelfIllum && !bBaseAlphaEnvMapMask)
 			{
 				// Check if the Material has $Translucent or $AlphaTest.
 				if (HasFlag(MATERIAL_VAR_TRANSLUCENT) || HasFlag(MATERIAL_VAR_ALPHATEST))
@@ -1160,10 +1198,12 @@ bool CBaseShader::IsAlphaModulating()
 	return (m_nModulationFlags & SHADER_USING_ALPHA_MODULATION) != 0;
 }
 
+#ifndef ASWSDK
 bool CBaseShader::IsColorModulating()
 {
 	return (m_nModulationFlags & SHADER_USING_COLOR_MODULATION) != 0;
 }
+#endif
 
 void CBaseShader::GetColorParameter( IMaterialVar **params, float *pColorOut ) const
 {
@@ -1192,6 +1232,7 @@ void CBaseShader::GetColorParameter( IMaterialVar **params, float *pColorOut ) c
 int CBaseShader::ComputeModulationFlags( IMaterialVar** params, IShaderDynamicAPI* pShaderAPI )
 {
 	int mod = 0;
+#ifndef ASWSDK
 	if ( GetAlpha(params) < 1.0f )
 	{
 		mod |= SHADER_USING_ALPHA_MODULATION;
@@ -1204,6 +1245,7 @@ int CBaseShader::ComputeModulationFlags( IMaterialVar** params, IShaderDynamicAP
 	{
 		mod |= SHADER_USING_COLOR_MODULATION;
 	}
+#endif
 
 	// ShiroDkxtro2: Made this compliant with multithreaded calls to this Function
 	if(IsSnapshotting() && IS_FLAG2_SET(MATERIAL_VAR2_USE_FLASHLIGHT) || pShaderAPI->InFlashlightMode())
@@ -1224,6 +1266,24 @@ int CBaseShader::ComputeModulationFlags( IMaterialVar** params, IShaderDynamicAP
 			mod |= SHADER_USING_FIXED_FUNCTION_BAKED_LIGHTING;
 		}
 	}
+
+#ifdef ASWSDK
+	if (IsSnapshotting())
+	{
+		if (IS_FLAG2_SET(MATERIAL_VAR2_USE_GBUFFER0))
+			mod |= SHADER_USING_GBUFFER0;
+		if (IS_FLAG2_SET(MATERIAL_VAR2_USE_GBUFFER1))
+			mod |= SHADER_USING_GBUFFER1;
+	}
+	else
+	{
+		int nFixedLightingMode = pShaderAPI->GetIntRenderingParameter(INT_RENDERPARM_ENABLE_FIXED_LIGHTING);
+		if (nFixedLightingMode & 1)
+			mod |= SHADER_USING_GBUFFER0;
+		if (nFixedLightingMode & 2)
+			mod |= SHADER_USING_GBUFFER1;
+	}
+#endif
 
 	return mod;
 }
@@ -1263,6 +1323,10 @@ bool CBaseShader::IsTranslucent( IMaterialVar **params ) const
 //-----------------------------------------------------------------------------
 float CBaseShader::GetAlpha( IMaterialVar** ppParams )
 {
+	// ASW Doesn't even have this Function at all, implying it doesn't have or use$Alpha?
+#ifdef ASWSDK
+	return 1.0f;
+#else
 	if ( !ppParams )
 	{
 		ppParams = m_ppParams;
@@ -1281,8 +1345,10 @@ float CBaseShader::GetAlpha( IMaterialVar** ppParams )
 	// Support for second Alpha Parameter! Yay!
 	float f1Alpha2 = ppParams[Alpha2]->GetFloatValue();
 	return clamp( f1Alpha1 * f1Alpha2, 0.0f, 1.0f );
+#endif
 }
 
+#ifndef ASWSDK
 //-----------------------------------------------------------------------------
 // "Sets the color + transparency"
 // ShiroDkxtro2: Is this old Fixed Function Pipeline Stuff?
@@ -1352,6 +1418,7 @@ void CBaseShader::SetModulationDynamicState( int tintVar )
 		SetColorState( Color1, true );
 	}
 }
+#endif
 
 // Used by ComputeModulationColor below
 void CBaseShader::ApplyColor2Factor( float *pColorOut ) const // (*pColorOut) *= Color2
@@ -1533,6 +1600,7 @@ void CBaseShader::SetBlendingShadowState( BlendType_t nMode )
 //-----------------------------------------------------------------------------
 // Loads the identity transform into a matrix
 //-----------------------------------------------------------------------------
+#ifndef ASWSDK
 void CBaseShader::LoadIdentity( MaterialMatrixMode_t matrixMode )
 {
 	if(!(m_pShaderAPI && m_pShaderShadow))
@@ -1541,34 +1609,13 @@ void CBaseShader::LoadIdentity( MaterialMatrixMode_t matrixMode )
 	m_pShaderAPI->MatrixMode( matrixMode );
 	m_pShaderAPI->LoadIdentity( );
 }
-
-//-----------------------------------------------------------------------------
-// Loads the camera to world transform into a matrix
-//-----------------------------------------------------------------------------
-void CBaseShader::LoadCameraToWorldTransform( MaterialMatrixMode_t matrixMode )
-{
-	m_pShaderAPI->MatrixMode( matrixMode );
-	m_pShaderAPI->LoadCameraToWorld();
-}
-
-void CBaseShader::LoadCameraSpaceSphereMapTransform( MaterialMatrixMode_t matrixMode )
-{
-	static float mat[4][4] = 
-	{
-		{ 0.5f,  0.0f, 0.0f, 0.0f },
-		{ 0.0f, -0.5f, 0.0f, 0.0f },
-		{ 0.0f,  0.0f, 0.0f, 0.0f },
-		{ 0.5f, -0.5f, 0.0f, 1.0f },
-	};
-
-	m_pShaderAPI->MatrixMode( matrixMode );
-	m_pShaderAPI->LoadMatrix( (float*)mat );
-}
+#endif
 
 //-----------------------------------------------------------------------------
 // Helper methods for fog
 //-----------------------------------------------------------------------------
-void CBaseShader::FogToOOOverbright( void )
+#ifndef ASWSDK
+void CBaseShader::FogToOOOverbright()
 {
 	Assert( IsSnapshotting() );
 	if (( CurrentMaterialVarFlags() & MATERIAL_VAR_NOFOG ) == 0)
@@ -1581,7 +1628,7 @@ void CBaseShader::FogToOOOverbright( void )
 	}
 }
 
-void CBaseShader::FogToWhite( void )
+void CBaseShader::FogToWhite()
 {
 	Assert( IsSnapshotting() );
 	if (( CurrentMaterialVarFlags() & MATERIAL_VAR_NOFOG ) == 0)
@@ -1593,7 +1640,7 @@ void CBaseShader::FogToWhite( void )
 		m_pShaderShadow->FogMode( SHADER_FOGMODE_DISABLED );
 	}
 }
-void CBaseShader::FogToBlack( void )
+void CBaseShader::FogToBlack()
 {
 	Assert( IsSnapshotting() );
 	if (( CurrentMaterialVarFlags() & MATERIAL_VAR_NOFOG ) == 0)
@@ -1606,7 +1653,7 @@ void CBaseShader::FogToBlack( void )
 	}
 }
 
-void CBaseShader::FogToGrey( void )
+void CBaseShader::FogToGrey()
 {
 	Assert( IsSnapshotting() );
 	if (( CurrentMaterialVarFlags() & MATERIAL_VAR_NOFOG ) == 0)
@@ -1619,7 +1666,7 @@ void CBaseShader::FogToGrey( void )
 	}
 }
 
-void CBaseShader::FogToFogColor( void )
+void CBaseShader::FogToFogColor()
 {
 	Assert( IsSnapshotting() );
 	if (( CurrentMaterialVarFlags() & MATERIAL_VAR_NOFOG ) == 0)
@@ -1632,13 +1679,13 @@ void CBaseShader::FogToFogColor( void )
 	}
 }
 
-void CBaseShader::DisableFog( void )
+void CBaseShader::DisableFog()
 {
 	Assert( IsSnapshotting() );
 	m_pShaderShadow->FogMode( SHADER_FOGMODE_DISABLED );
 }
 
-void CBaseShader::DefaultFog( void )
+void CBaseShader::DefaultFog()
 {
 	if ( CurrentMaterialVarFlags() & MATERIAL_VAR_ADDITIVE )
 	{
@@ -1649,6 +1696,89 @@ void CBaseShader::DefaultFog( void )
 		FogToFogColor();
 	}
 }
+#else
+void CBaseShader::FogToOOOverbright()
+{
+	Assert(IsSnapshotting());
+	if ((CurrentMaterialVarFlags() & MATERIAL_VAR_NOFOG) == 0)
+	{
+		m_pShaderShadow->FogMode(SHADER_FOGMODE_OO_OVERBRIGHT, false);
+	}
+	else
+	{
+		m_pShaderShadow->FogMode(SHADER_FOGMODE_DISABLED, false);
+	}
+}
+
+void CBaseShader::FogToWhite()
+{
+	Assert(IsSnapshotting());
+	if ((CurrentMaterialVarFlags() & MATERIAL_VAR_NOFOG) == 0)
+	{
+		m_pShaderShadow->FogMode(SHADER_FOGMODE_WHITE, false);
+	}
+	else
+	{
+		m_pShaderShadow->FogMode(SHADER_FOGMODE_DISABLED, false);
+	}
+}
+void CBaseShader::FogToBlack()
+{
+	Assert(IsSnapshotting());
+	if ((CurrentMaterialVarFlags() & MATERIAL_VAR_NOFOG) == 0)
+	{
+		m_pShaderShadow->FogMode(SHADER_FOGMODE_BLACK, false);
+	}
+	else
+	{
+		m_pShaderShadow->FogMode(SHADER_FOGMODE_DISABLED, false);
+	}
+}
+
+void CBaseShader::FogToGrey()
+{
+	Assert(IsSnapshotting());
+	if ((CurrentMaterialVarFlags() & MATERIAL_VAR_NOFOG) == 0)
+	{
+		m_pShaderShadow->FogMode(SHADER_FOGMODE_GREY, false);
+	}
+	else
+	{
+		m_pShaderShadow->FogMode(SHADER_FOGMODE_DISABLED, false);
+	}
+}
+
+void CBaseShader::FogToFogColor()
+{
+	Assert(IsSnapshotting());
+	if ((CurrentMaterialVarFlags() & MATERIAL_VAR_NOFOG) == 0)
+	{
+		m_pShaderShadow->FogMode(SHADER_FOGMODE_FOGCOLOR, false);
+	}
+	else
+	{
+		m_pShaderShadow->FogMode(SHADER_FOGMODE_DISABLED, false);
+	}
+}
+
+void CBaseShader::DisableFog()
+{
+	Assert(IsSnapshotting());
+	m_pShaderShadow->FogMode(SHADER_FOGMODE_DISABLED, false);
+}
+
+void CBaseShader::DefaultFog()
+{
+	if (CurrentMaterialVarFlags() & MATERIAL_VAR_ADDITIVE, false)
+	{
+		FogToBlack();
+	}
+	else
+	{
+		FogToFogColor();
+	}
+}
+#endif
 
 bool CBaseShader::UsingFlashlight() const
 {

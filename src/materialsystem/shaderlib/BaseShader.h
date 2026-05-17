@@ -276,6 +276,11 @@ public:
 	// ( Returns the int of Flags )
 	int CurrentMaterialVarFlags() const;
 
+#ifdef ASWSDK
+	// Gets at the current materialvar2 flags
+	int CurrentMaterialVarFlags2() const;
+#endif
+
 	// Finds a particular Parameter	(works because the lowest Parameters match the Shader)
 	int FindParamIndex( const char *pName ) const;
 
@@ -289,7 +294,9 @@ public:
 
 	// "Gets the builder..."
 	// ShiroDkxtro2: This appears to be non-functional, likely a DX8 Leftover.
+#ifndef ASWSDK
 	CMeshBuilder* MeshBuilder();
+#endif
 
 	// Loads a Texture
 	void LoadTexture( int nTextureVar, int nAdditionalCreationFlags = 0 );
@@ -307,6 +314,12 @@ public:
 	// ShiroDkxtro2: This is used internally and for the CommandBuffer/CommandBuilder
 	// There don't appear to be sources for ShaderAPITextureHandle_t, so this is useless for us.
 	ShaderAPITextureHandle_t GetShaderAPITextureBindHandle( int nTextureVar, int nFrameVar, int nTextureChannel = 0 );
+
+	// From Alien Swarm
+#ifdef ASWSDK
+	ShaderAPITextureHandle_t GetShaderAPITextureBindHandle(ITexture* pTexture, int nFrame, int nTextureChannel = 0);
+	void BindVertexTexture(VertexTextureSampler_t vtSampler, int nTextureVar, int nFrame = 0);
+#endif
 
 	// Binds a Texture
 	// Second Samplers here are dead, I was told this was once used by some procedually generated Textures
@@ -332,13 +345,13 @@ public:
 	bool IsWhite( int colorVar );
 
 	// Helper methods for fog
-	void FogToOOOverbright( void );
-	void FogToWhite( void );
-	void FogToBlack( void );
-	void FogToGrey( void );
-	void FogToFogColor( void );
-	void DisableFog( void );
-	void DefaultFog( void );
+	void FogToOOOverbright();
+	void FogToWhite();
+	void FogToBlack();
+	void FogToGrey();
+	void FogToFogColor();
+	void DisableFog();
+	void DefaultFog();
 	
 	// Helpers for alpha blending
 	void EnableAlphaBlending( ShaderBlendFactor_t src, ShaderBlendFactor_t dst );
@@ -351,19 +364,20 @@ public:
 	void SetDefaultBlendingShadowState( int textureVar = -1, bool isBaseTexture = true );
 
 	// Helpers for color modulation
+#ifndef ASWSDK
 	void SetColorState( int colorVar, bool setAlpha = false );
-	bool IsAlphaModulating();
-	bool IsColorModulating();
-	void ComputeModulationColor( float* color );
 	void SetModulationShadowState( int tintVar = -1 );
 	void SetModulationDynamicState( int tintVar = -1 );
 
 	// Loads the identity matrix into the texture
 	void LoadIdentity( MaterialMatrixMode_t matrixMode );
+#endif
+	bool IsAlphaModulating();
 
-	// Loads the camera to world transform
-	void LoadCameraToWorldTransform( MaterialMatrixMode_t matrixMode );
-	void LoadCameraSpaceSphereMapTransform( MaterialMatrixMode_t matrixMode );
+#ifndef ASWSDK
+	bool IsColorModulating();
+#endif
+	void ComputeModulationColor( float* color );
 
 	// Both UsingFlashlight and UsingEdictor only work in the Draw Stage of the Shader
 	bool UsingFlashlight() const;
@@ -381,7 +395,9 @@ public:
 	IShaderDynamicAPI* m_pShaderAPI = NULL;
 
 	int m_nModulationFlags = 0;
+#ifndef ASWSDK
 	CMeshBuilder* m_pMeshBuilder = NULL;
+#endif
 	VertexCompressionType_t m_nVertexCompression = VERTEX_COMPRESSION_NONE;
 	
 	// This requires modification of CShader.h
@@ -643,9 +659,10 @@ public:
 		return m_pShaderAPI && m_pMaterialContextData && m_pMaterialContextData->m_bMaterialVarsChanged;
 	}
 
+#ifndef ASWSDK
 protected:
 	SoftwareVertexShader_t m_SoftwareVertexShader;
-
+#endif
 
 private:
 #ifdef ASWSDK
@@ -673,6 +690,16 @@ inline int CBaseShader::CurrentMaterialVarFlags() const
 {
 	return m_ppParams[Flags]->GetIntValue();
 }
+
+//-----------------------------------------------------------------------------
+// Gets at the current materialvar2 flags
+//-----------------------------------------------------------------------------
+#ifdef ASWSDK
+inline int CBaseShader::CurrentMaterialVarFlags2() const
+{
+	return m_ppParams[Flags2]->GetIntValue();
+}
+#endif
 
 //-----------------------------------------------------------------------------
 // Are we currently taking a Snapshot?
