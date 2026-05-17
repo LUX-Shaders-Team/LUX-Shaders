@@ -651,6 +651,7 @@ SHADER_INIT_PARAMS()
 
 			// PhongFresnelRanges need this or Fresnel will be 0.0f
 			DefaultFloat3(PhongFresnelRanges, 0.0f, 0.5f, 1.0f);
+			DefaultFloat(PhongAlbedoBoost, 1.0f);
 
 			// ShiroDkxtro2 Instruction Reduction :
 			// On the Shader we'd do < $PhongExponentTexture.x * 149 + 1 >
