@@ -1536,7 +1536,7 @@ void LuxVertexLitGeneric_Shader_Draw(IMaterialVar** ppParams, IShaderShadow* pSh
 				// Stock-Consistency: They wanted to replicate the 1-BaseAlpha Behaviour
 				f4BaseAlphaParams.y -= f4BaseAlphaParams.x;
 
-				SemiStaticCmds.SetPixelShaderConstant(LUX_PS_FLOAT_ENVMAP_POSITION, f4EnvMapFresnelRanges);
+				SemiStaticCmds.SetPixelShaderConstant(LUX_PS_FLOAT_ENVMAP_POSITION, f4BaseAlphaParams);
 			}
 		}
 
