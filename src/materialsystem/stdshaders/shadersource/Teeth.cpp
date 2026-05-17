@@ -620,6 +620,27 @@ SHADER_DRAW
 		SET_STATIC_PIXEL_SHADER_COMBO(LIGHTING_MODE, bHasFlashlight ? 0 : nLightingMode);
 		SET_STATIC_PIXEL_SHADER_COMBO(DETAILTEXTURE, bHasDetailTexture);
 		SET_STATIC_PIXEL_SHADER(lux_teeth_ps30);
+
+#ifdef ASWSDK
+		//==========================================================================//
+		// Per-Instance Command Buffer
+		//==========================================================================//
+		PI_BeginCommandBuffer();
+
+		if (!bHasFlashlight)
+			PI_SetVertexShaderAmbientLightCube();
+
+		if (!bHasFlashlight && bHasNormalTexture)
+		{
+			// c13, c14, c15, c16, c17, c18
+			PI_SetPixelShaderAmbientLightCube(LUX_PS_FLOAT_AMBIENTCUBE);
+
+			// c20, c21, c22, c23, c24, c25
+			PI_SetPixelShaderLocalLighting(LUX_PS_FLOAT_LIGHTDATA);
+		}
+
+		PI_EndCommandBuffer();
+#endif
 	}
 
 	//==========================================================================//
@@ -800,11 +821,13 @@ SHADER_DRAW
 
 		if (!bHasFlashlight && bHasNormalTexture)
 		{
+#ifndef ASWSDK
 			// c13, c14, c15, c16, c17, c18
 			pShaderAPI->SetPixelShaderStateAmbientLightCube(LUX_PS_FLOAT_AMBIENTCUBE, !LightState.m_bAmbientLight);
 
 			// c20, c21, c22, c23, c24, c25
 			pShaderAPI->CommitPixelShaderLighting(LUX_PS_FLOAT_LIGHTDATA);
+#endif
 		}
 		else
 		{
@@ -834,9 +857,11 @@ SHADER_DRAW
 			bHasStaticPropLighting = StaticLightVertex(LightState); // LightState varies between SP and MP so we use a function to reinterpret
 			bHasDynamicPropLighting = LightState.m_bAmbientLight || (LightState.m_nNumLights > 0) ? 1 : 0;
 
+#ifndef ASWSDK
 			// Need to send this to the Vertex Shader manually in this scenario
 			if (bHasDynamicPropLighting)
 				SetAmbientCubeDynamicStateVertexShader();
+#endif
 		}
 
 		DECLARE_DYNAMIC_VERTEX_SHADER(lux_teeth_vs30);

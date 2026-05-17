@@ -433,6 +433,24 @@ SHADER_DRAW
 			SET_STATIC_PIXEL_SHADER_COMBO(ENVMAPMODE, nEnvMapMode);
 			SET_STATIC_PIXEL_SHADER(lux_triplanar_model_ps30);
 		}
+
+#ifdef ASWSDK
+		//==========================================================================//
+		// Per-Instance Command Buffer
+		//==========================================================================//
+		PI_BeginCommandBuffer();
+
+		if (!bProjTex && bHasNormalMap)
+			PI_SetPixelShaderLocalLighting(LUX_PS_FLOAT_LIGHTDATA);
+
+		if (!bProjTex && bHasNormalMap)
+			PI_SetPixelShaderAmbientLightCube(LUX_PS_FLOAT_AMBIENTCUBE);
+
+		if (!bProjTex && !bHasNormalMap)
+			PI_SetVertexShaderAmbientLightCube();
+
+		PI_EndCommandBuffer();
+#endif
 	}
 	
 	//==========================================================================//
@@ -511,6 +529,7 @@ SHADER_DRAW
 		// c12 - Fog Params
 		pShaderAPI->SetPixelShaderFogParams(LUX_PS_FLOAT_FOGPARAMETERS);
 
+#ifndef ASWSDK
 		// c13, c14, c15, c16, c17, c18
 		if (!bProjTex && bHasNormalMap)
 			pShaderAPI->SetPixelShaderStateAmbientLightCube(LUX_PS_FLOAT_AMBIENTCUBE, !LightState.m_bAmbientLight);
@@ -518,6 +537,7 @@ SHADER_DRAW
 		// c20, c21, c22, c23, c24, c25
 		if (!bProjTex && bHasNormalMap)
 			pShaderAPI->CommitPixelShaderLighting(LUX_PS_FLOAT_LIGHTDATA);
+#endif
 
 		// c32 - $Color, $Color2, $sRGBTint
 		float4 f4Tint = ComputeTint(!GetBool(NoTint) && GetBool(AllowDiffuseModulation), Alpha);
@@ -655,9 +675,11 @@ SHADER_DRAW
 			bHasStaticPropLighting = StaticLightVertex(LightState);
 			bHasDynamicPropLighting = LightState.m_bAmbientLight || (LightState.m_nNumLights > 0) ? 1 : 0;
 
+#ifndef ASWSDK
 			// Need to send this to the Vertex Shader manually in this scenario
 			if (bHasDynamicPropLighting)
 				pShaderAPI->SetVertexShaderStateAmbientLightCube();
+#endif
 		}
 
 		if(bProjTex)

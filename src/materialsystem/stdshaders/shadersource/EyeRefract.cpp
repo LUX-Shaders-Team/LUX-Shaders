@@ -469,6 +469,20 @@ void DrawEyes(IShaderShadow* pShaderShadow, IShaderDynamicAPI* pShaderAPI, CBase
 		DECLARE_STATIC_PIXEL_SHADER(lux_eyes_ps30);
 		SET_STATIC_PIXEL_SHADER_COMBO(PROJTEX, bProjTex);
 		SET_STATIC_PIXEL_SHADER(lux_eyes_ps30);
+
+#ifdef ASWSDK
+		//==========================================================================//
+		// Per-Instance Command Buffer
+		//==========================================================================//
+		PI_BeginCommandBuffer();
+
+		if (!bProjTex)
+			PI_SetVertexShaderAmbientLightCube();
+
+		PI_SetPixelShaderGlintDamping(REGISTER_FLOAT_000);
+
+		PI_EndCommandBuffer();
+#endif
 	}
 
 	//==========================================================================//
@@ -509,9 +523,11 @@ void DrawEyes(IShaderShadow* pShaderShadow, IShaderDynamicAPI* pShaderAPI, CBase
 			SetVertexShaderConstant(LUX_VS_FLOAT_SET1_5, GlintV);		
 		}
 
+#ifndef ASWSDK
 		// c0
 		// Stock-Consistency: Replicating this 1:1 to avoid visual Disparities
-		float f1GlintDamping = max(0.0f, min(pShaderAPI->GetAmbientLightCubeLuminance(), 1.0f));
+		float f1AmbientCubeLuminance = pShaderAPI->GetAmbientLightCubeLuminance();
+		float f1GlintDamping = max(0.0f, min(f1AmbientCubeLuminance, 1.0f));
 		const float f1DimGlint = 0.01f;
 
 		// "Remap so that glint damping smooth steps to zero for low luminances"
@@ -521,6 +537,7 @@ void DrawEyes(IShaderShadow* pShaderShadow, IShaderDynamicAPI* pShaderAPI, CBase
 		else
 			cEyeGlint = f1GlintDamping * SimpleSplineRemapVal(f1GlintDamping, 0.0f, f1DimGlint, 0.0f, 1.0f);
 		pShaderAPI->SetPixelShaderConstant(REGISTER_FLOAT_000, cEyeGlint);
+#endif
 
 		// c26 - Camera Position
 		SetPixelShaderCameraPosition(LUX_PS_FLOAT_CAMERAPOSITION);
@@ -578,8 +595,10 @@ void DrawEyes(IShaderShadow* pShaderShadow, IShaderDynamicAPI* pShaderAPI, CBase
 			bHasDynamicPropLighting = (LightState.m_bAmbientLight || (LightState.m_nNumLights > 0)) ? 1 : 0;
 
 			// Need to send this to the Vertex Shader manually in this scenario
+#ifndef ASWSDK
 			if (bHasDynamicPropLighting)
 				pShaderAPI->SetVertexShaderStateAmbientLightCube();
+#endif
 		}
 
 		DECLARE_DYNAMIC_VERTEX_SHADER(lux_eyes_vs30);

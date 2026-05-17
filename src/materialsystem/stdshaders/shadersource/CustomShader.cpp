@@ -1252,6 +1252,22 @@ SHADER_DRAW
 		}
 
 #ifdef ASWSDK
+		//==========================================================================//
+		// Per-Instance Command Buffer
+		//==========================================================================//
+		PI_BeginCommandBuffer();
+
+		if (bIsModel && !bBumpMapped)
+			PI_SetVertexShaderAmbientLightCube();
+
+		if (bIsModel && GetBool(Shader_WorldLightData))
+			PI_SetPixelShaderLocalLighting(REGISTER_FLOAT_014);
+
+		if (GetBool(Shader_AmbientData))
+			PI_SetPixelShaderAmbientLightCube(REGISTER_FLOAT_020);
+
+		PI_EndCommandBuffer();
+
 		// LightmapScaleFactor is passed on via IShaderShadow instead of IShaderDynamicAPI
 		// The way LUX was designed, this is passed on with some other Control Data
 		// Store it so we can pack it together later
@@ -1381,7 +1397,9 @@ SHADER_DRAW
 			// Models get LightData, Brushes get 2-6 more Constants or PCC
 			if (bIsModel && GetBool(Shader_WorldLightData))
 			{
+#ifndef ASWSDK
 				pShaderAPI->CommitPixelShaderLighting(REGISTER_FLOAT_014);
+#endif
 			}
 			else
 			{
@@ -1409,8 +1427,10 @@ SHADER_DRAW
 			}
 
 			// c20 - c25
+#ifndef ASWSDK
 			if(GetBool(Shader_AmbientData))
 				pShaderAPI->SetPixelShaderStateAmbientLightCube(REGISTER_FLOAT_020);
+#endif
 		}
 
 		// c26
@@ -1435,7 +1455,7 @@ SHADER_DRAW
 		// c29 is (apparently) set automatically ( FogColor and OO_DESTALPHA_DEPTH_RANGE )
 
 		// c30 is (apparently) set automatically ( cLightScale )
-
+		
 		// c31
 		if (bParticleDepthBlend)
 		{
@@ -1488,7 +1508,9 @@ SHADER_DRAW
 		// If this isn't supported and you try to set >c31,
 		// the game *will* crash *if* the registers aren't enabled in the ShaderAPI
 		// It doesn't matter for setting .vcs, they will just be invisible apparently
+#ifndef ASWSDK
 		if (g_pHardwareConfig->SupportsShaderModel_3_0())
+#endif
 		{
 			// 32 Parameters, Size of 4
 			float4 cPixelConstants[32] = { 0.0f };
@@ -1753,9 +1775,11 @@ SHADER_DRAW
 				bHasStaticPropLighting = StaticLightVertex(LightState); // Name of the Constant different between SDK's
 				bHasDynamicPropLighting = LightState.HasDynamicLight();
 
+#ifndef ASWSDK
 				// Need to send this to the Vertex Shader manually in this Scenario
 				if (bHasDynamicPropLighting)
 					pShaderAPI->SetVertexShaderStateAmbientLightCube();
+#endif
 			}
 		}
 

@@ -253,6 +253,18 @@ SHADER_DRAW
 			SET_STATIC_PIXEL_SHADER_COMBO(DETAILTEXTURE, bHasDetailTexture);
 			SET_STATIC_PIXEL_SHADER_COMBO(VERTEXCOLORS, bHasVertexColors);
 			SET_STATIC_PIXEL_SHADER(lux_modulate_ps30);
+
+#ifdef ASWSDK
+			//==========================================================================//
+			// Per-Instance Command Buffer
+			//==========================================================================//
+			PI_BeginCommandBuffer();
+
+			if (GetBool(EnableVertexLighting))
+				PI_SetVertexShaderAmbientLightCube();
+
+			PI_EndCommandBuffer();
+#endif
 		}
 
 		//==========================================================================//
@@ -352,8 +364,10 @@ SHADER_DRAW
 				bHasDynamicPropLighting = (LightState.m_bAmbientLight || (LightState.m_nNumLights > 0)) ? 1 : 0;
 
 				// Need to send this to the Vertex Shader manually in this scenario
+#ifndef ASWSDK
 				if (bHasDynamicPropLighting)
 					pShaderAPI->SetVertexShaderStateAmbientLightCube();
+#endif
 			}
 
 			DECLARE_DYNAMIC_VERTEX_SHADER(lux_model_vs30);

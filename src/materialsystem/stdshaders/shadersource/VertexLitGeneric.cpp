@@ -1305,6 +1305,24 @@ void LuxVertexLitGeneric_Shader_Draw(IMaterialVar** ppParams, IShaderShadow* pSh
 			SET_STATIC_PIXEL_SHADER_COMBO(XBYBASEALPHA, bBlendTintByBaseAlpha + 2 * bDesaturateWithBaseAlpha);
 			SET_STATIC_PIXEL_SHADER(lux_vertexlitgeneric_simple_ps30);
 		}
+
+#ifdef ASWSDK
+		//==========================================================================//
+		// Per-Instance Command Buffer
+		//==========================================================================//
+		PI_BeginCommandBuffer();
+
+		if(!bProjTex && bBumpedShader)
+			PI_SetPixelShaderLocalLighting(LUX_PS_FLOAT_LIGHTDATA);
+
+		if (!bProjTex && bBumpedShader)
+			PI_SetPixelShaderAmbientLightCube(LUX_PS_FLOAT_AMBIENTCUBE);
+
+		if (!bProjTex && !bHasPhong && !bHasNormalTexture)
+			PI_SetVertexShaderAmbientLightCube();
+
+		PI_EndCommandBuffer();
+#endif
 	}
 
 	//==========================================================================//
@@ -1443,6 +1461,7 @@ void LuxVertexLitGeneric_Shader_Draw(IMaterialVar** ppParams, IShaderShadow* pSh
 		// c12
 		SemiStaticCmds.SetPixelShaderFogParams(LUX_PS_FLOAT_FOGPARAMETERS);
 
+#ifndef ASWSDK
 		// c13, c14, c15, c16, c17, c18
 		if (!bProjTex && bBumpedShader)
 			SemiStaticCmds.SetPixelShaderStateAmbientLightCube(LUX_PS_FLOAT_AMBIENTCUBE);
@@ -1450,6 +1469,7 @@ void LuxVertexLitGeneric_Shader_Draw(IMaterialVar** ppParams, IShaderShadow* pSh
 		// c20, c21, c22, c23, c24, c25
 		if (!bProjTex && bBumpedShader)
 			SemiStaticCmds.CommitPixelShaderLighting(LUX_PS_FLOAT_LIGHTDATA);
+#endif
 
 		// c32
 		// XByBaseAlpha makes use of the same Constant, give it the right Parameter
@@ -1897,9 +1917,11 @@ void LuxVertexLitGeneric_Shader_Draw(IMaterialVar** ppParams, IShaderShadow* pSh
 			bHasStaticPropLighting = StaticLightVertex(LightState);
 			bHasDynamicPropLighting = (LightState.m_bAmbientLight || (LightState.m_nNumLights > 0)) ? 1 : 0;
 
+#ifndef ASWSDK
 			// Need to send this to the Vertex Shader manually in this scenario
 			if (bHasDynamicPropLighting)
 				pShaderAPI->SetVertexShaderStateAmbientLightCube();
+#endif
 		}
 
 		if (bProjTex)
