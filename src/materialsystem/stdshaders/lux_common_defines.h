@@ -19,7 +19,7 @@
 
 // #define SDK2013SP
 #define TF2SDK
-// #define ASW - Not supported
+// #define ASWSDK
 
 // This is only required for Parabellum
 // #define PARABELLUM
@@ -135,10 +135,12 @@
 // -- Changing this does NOT require a Shader recompile
 #define DEBUG_FULLBRIGHT2
 
+#if defined(TF2SDK)
 // Only on SDK2013MP, if you define this and use SP it will automatically be undefined later.
 // Displays Debug Luxel Texture for models and brushes.
 // -- Changing this does NOT require a Shader recompile
 #define DEBUG_LUXELS
+#endif
 
 //==========================================================================//
 // Everything here must use #if defined() !!
