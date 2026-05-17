@@ -155,7 +155,10 @@ BEGIN_SHADER_PARAMS
 	Declare_EnvMapMaskParameters()
 	SHADER_PARAM(EnvMapLerp, SHADER_PARAM_TYPE_BOOL, "", "When the local Cubemap changes it traditionally snaps, enabling this causes them to interpolate based on Time instead.")
 	SHADER_PARAM(BaseAlphaEnvMapMaskMinMaxExp, SHADER_PARAM_TYPE_VEC3, "", "ASW+ Feature, only allowed on Materials without BumpMaps and Phong. Applies Scale, Bias, Exponent to BaseAlphaEnvMapMask.")
+
+#ifndef ASWSDK
 	Declare_LightmappingParameters()
+#endif
 	Declare_PhongParameters()
 	Declare_RimLightParameters()
 	Declare_SeamlessParameters()
@@ -824,9 +827,11 @@ SHADER_INIT
 
 	LoadTexture(LightWarpTexture, 0);
 
+#ifndef ASWSDK
 	// ShiroDkxtro2: $Lightmap appears to be totally dynamic.
 	// This probably doesn't do anything, and won't allow for custom Lightmaps either.
 	LoadTexture(Lightmap, 0);
+#endif
 
 	// SphereMap Support
 	// Orange Box Code does this.
@@ -962,7 +967,11 @@ void LuxVertexLitGeneric_Shader_Draw(IMaterialVar** ppParams, IShaderShadow* pSh
 	bool bBumpedShader = bHasPhong || bHasNormalTexture || bHasLightWarpTexture && !bHasLightWarpNoBump;
 	bool bHasVertexColors = HasFlag(MATERIAL_VAR_VERTEXCOLOR) || HasFlag(MATERIAL_VAR_VERTEXALPHA);
 
+#ifndef ASWSDK
 	bool bHasLightmapTexture = !bProjTex && IsTextureLoaded(Lightmap);
+#else
+	const bool bHasLightmapTexture = false;
+#endif
 
 	//==========================================================================//
 	// Pre-Snapshot Context Data Variables
@@ -1171,9 +1180,12 @@ void LuxVertexLitGeneric_Shader_Draw(IMaterialVar** ppParams, IShaderShadow* pSh
 		// s10 - $BumpStretch, only allowed with Base Wrinkle, not sRGB
 		EnableSampler(bAnyWrinkleMapping, SHADER_SAMPLER10, false);
 
+#ifndef ASWSDK
 		// s11 - $Lightmap
 		if(!bHasPhong && !bHasNormalTexture)
 			EnableSampler(SAMPLER_LIGHTMAP, false); // bHasLightmapTexture, 
+#endif
+
 
 		// s12 - Previous Envmap for $EnvMapLerp
 		EnableSampler(bHasEnvMap && GetBool(EnvMapLerp), SHADER_SAMPLER12, !IsHDREnabled());
@@ -1617,6 +1629,7 @@ void LuxVertexLitGeneric_Shader_Draw(IMaterialVar** ppParams, IShaderShadow* pSh
 		// s11 - $Lightmap
 		// This is entirely Dynamic, so the Sampler is always enabled without bump and phong.
 		// We MUST bind SOMETHING to it.
+#ifndef ASWSDK
 		if (!bHasPhong && !bHasNormalTexture)
 		{
 			if (bHasLightmapTexture)
@@ -1624,6 +1637,7 @@ void LuxVertexLitGeneric_Shader_Draw(IMaterialVar** ppParams, IShaderShadow* pSh
 			else
 				BindTexture(SAMPLER_LIGHTMAP, TEXTURE_BLACK);
 		}
+#endif
 
 		// s14 - $EnvMap
 		// EnvMapControls always dynamic because of EnvMapLerp
