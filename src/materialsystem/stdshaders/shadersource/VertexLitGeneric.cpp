@@ -1511,7 +1511,13 @@ void LuxVertexLitGeneric_Shader_Draw(IMaterialVar** ppParams, IShaderShadow* pSh
 			if (pContextData->m_bEnvMapFresnel || bHasPhong)
 			{
 				if (pContextData->m_bEnvMapFresnel && !bHasPhong)
+				{
 					f4EnvMapFresnelRanges.xyz = GetFloat3(EnvMapFresnelMinMaxExp);
+
+					// "convert max fresnel into scale factor" - ASW Code
+					// *sigh* well if the Artists like it..
+					f4EnvMapFresnelRanges.y -= f4EnvMapFresnelRanges.x;
+				}
 				else
 					f4EnvMapFresnelRanges.x = GetFloat(EnvMapFresnel);
 			}
