@@ -262,7 +262,7 @@ void LuxVertexLitGeneric_ParamsDebugger()
 	bool bHasLightWarpNoBump = GetBool(LightWarpNoBump);
 	
 	bool bSelfIllum = HasFlag(MATERIAL_VAR_SELFILLUM);
-//	bool bhasSelfIllumMask = bSelfIllum && IsDefined(SelfIllumMask);
+	bool bhasSelfIllumMask = bSelfIllum && IsDefined(SelfIllumMask);
 
 	bool bHasPhong = GetBool(Phong);
 	bool bHasPhongExponentTexture = bHasPhong && IsDefined(PhongExponentTexture);
@@ -328,7 +328,7 @@ void LuxVertexLitGeneric_ParamsDebugger()
 		nAlphaUsed += bDesaturateWithBaseAlpha;
 		nAlphaUsed += bBaseAlphaEnvMapMask;
 		nAlphaUsed += bBaseMapAlphaPhongMask;
-		nAlphaUsed += bSelfIllum;
+		nAlphaUsed += bSelfIllum && !(bhasSelfIllumMask || bSelfIllum_EnvMapMask_Alpha);
 
 		// This one doesn't count, we replicate L4D Behaviour with it..
 		if (bBlendTintByBaseAlpha && bBaseAlphaEnvMapMask)
