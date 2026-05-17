@@ -19,17 +19,17 @@
 // This is in FleshInterior.h
 // #define LuxFleshInterior_Params() void LuxDistanceAlpha_Link_Params(FleshInterior_Vars_t &info)
 
-void LuxDistanceAlpha_Init_Params(CBaseVSShader* pShader, FleshInterior_Vars_t& info)
+void LuxFleshInterior_Init_Params(CBaseVSShader* pShader, FleshInterior_Vars_t& info)
 {
 
 }
 
-void LuxDistanceAlpha_Shader_Init(CBaseVSShader* pShader, FleshInterior_Vars_t& info)
+void LuxFleshInterior_Shader_Init(CBaseVSShader* pShader, FleshInterior_Vars_t& info)
 {
 
 }
 
-void LuxDistanceAlpha_Shader_Draw(CBaseVSShader* pShader, CProxyShaderShadow* pShaderShadow, CProxyShaderDynamicAPI* pShaderAPI, FleshInterior_Vars_t& info)
+void LuxFleshInterior_Shader_Draw(CBaseVSShader* pShader, IShaderShadow* pShaderShadow, CProxyShaderDynamicAPI* pShaderAPI, FleshInterior_Vars_t& info)
 {
 
 }
