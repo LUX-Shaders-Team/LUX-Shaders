@@ -1,7 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	20.01.2023 DMY
-//	Last Change :	06.02.2026 DMY
+//	Last Change :	16.05.2026 DMY
 //
 //==========================================================================//
 
@@ -606,8 +606,8 @@ SHADER_INIT_PARAMS()
 	DefaultFloat(DetailScale, 4.0f);
 
 	// Scale, Bias, Exponent.
-	// This is a non-Stock Default Value. 1.0f for full Scale, 5.0f for Exponent
-	DefaultFloat3(SelfIllumFresnelMinMaxExp, 1.0f, 0.0f, 5.0f);
+	// Consistent with SDK and ASW, previously had a default here of 1.0f, 0.0f, 5.0f which causes.. Issues..
+	DefaultFloat3(SelfIllumFresnelMinMaxExp, 0.0f, 1.0f, 1.0f);
 
 	// Funny issue we had: The Combine Elite's VMT uses $SelfIllumTint "[2 1 1]".
 	// Caused the model to be rendered as pink...
