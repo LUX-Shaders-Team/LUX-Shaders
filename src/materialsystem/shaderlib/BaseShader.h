@@ -24,6 +24,11 @@
 // So we need this include
 #include "../stdshaders/cpp_floatx.h"
 
+// Need this for ASW
+#ifdef ASWSDK
+#include "../stdshaders/cpp_lux_commandbuilder.h"
+#endif
+
 //-----------------------------------------------------------------------------
 // Macros
 //-----------------------------------------------------------------------------
@@ -138,6 +143,8 @@ enum BlendType_t
 // Allows Shaders to store Data specific to their Materials in the Context Data
 // ( Draw Function Only )
 // Useful for cutting down on the performance Impact of a Shader!
+// NOTE: CBasePerInstanceContextData Definition is provided by IShader.h in ASW
+#ifndef ASWSDK
 class CBasePerMaterialContextData								// shaders can keep per material data in classes descended from this
 {
  public:
@@ -156,17 +163,39 @@ class CBasePerMaterialContextData								// shaders can keep per material data i
 	{
 	}
 };
+#endif
 
 class LUXPerMaterialContextData : public CBasePerMaterialContextData
 {
 public:
-	bool m_bSnapshottingCommands;;
+	bool m_bSnapshottingCommands;
 	
 	FORCEINLINE LUXPerMaterialContextData()
 	{
 		m_bSnapshottingCommands = true;
 	}
 };
+
+#ifdef ASWSDK
+// CBasePerInstanceContextData Definition is provided by IShader.h in ASW
+// However, the actual CommandBuffer used for this ( commandbuilder.h ) has been replaced in LUX by cpp_lux_commandbuilder.h
+// I will use the LUX Commandbuilder for making the Commands and then memcpy the Results into this Thing
+// ASW does something very similar!
+class CPerInstanceContextData : public CBasePerInstanceContextData
+{
+public:
+	CPerInstanceContextData() : m_pCommandBuffer(NULL), m_nSize(0) {}
+	virtual ~CPerInstanceContextData()
+	{
+		if (m_pCommandBuffer)
+		{
+			delete m_pCommandBuffer;
+		}
+	}
+	unsigned char* m_pCommandBuffer;
+	int m_nSize;
+};
+#endif
 
 //-----------------------------------------------------------------------------
 // Base class for Shaders, contains Helper Methods.
@@ -193,10 +222,16 @@ public:
 
 	virtual void InitShaderParams( IMaterialVar** ppParams, const char *pMaterialName );
 	virtual void InitShaderInstance( IMaterialVar** ppParams, IShaderInit *pShaderInit, const char *pMaterialName, const char *pTextureGroupName );
+#ifdef ASWSDK
+	// In Alien Swarm, each Shader receives an additional ** for Per-Instance Command Buffers
+	virtual void DrawElements( IMaterialVar **params, int nModulationFlags, IShaderShadow* pShaderShadow, IShaderDynamicAPI* pShaderAPI,
+								VertexCompressionType_t vertexCompression, CBasePerMaterialContextData **pContext, CBasePerInstanceContextData** pInstanceDataPtr);
+#else
 	virtual void DrawElements( IMaterialVar **params, int nModulationFlags, IShaderShadow* pShaderShadow, IShaderDynamicAPI* pShaderAPI,
 								VertexCompressionType_t vertexCompression, CBasePerMaterialContextData **pContext );
 
 	virtual	const SoftwareVertexShader_t GetSoftwareVertexShader() const { return m_SoftwareVertexShader; }
+#endif
 
 	virtual int ComputeModulationFlags( IMaterialVar** params, IShaderDynamicAPI* pShaderAPI );
 	virtual bool NeedsPowerOfTwoFrameBufferTexture( IMaterialVar **params, bool bCheckSpecificToThisFrame = true ) const;
@@ -216,6 +251,26 @@ public:
 
 	// Are we currently taking a Snapshot?
 	bool IsSnapshotting() const;
+
+	// This can ONLY be used in Alien Swarm
+#ifdef ASWSDK
+	// Methods related to building per-instance ("PI_") command buffers
+	void PI_BeginCommandBuffer();
+	void PI_EndCommandBuffer();
+	void PI_SetPixelShaderAmbientLightCube(int nFirstRegister);
+	void PI_SetPixelShaderLocalLighting(int nFirstRegister);
+	void PI_SetPixelShaderAmbientLightCubeLuminance(int nFirstRegister);
+	void PI_SetPixelShaderGlintDamping(int nFirstRegister);
+	void PI_SetVertexShaderAmbientLightCube( /*int nFirstRegister*/);
+	void PI_SetModulationPixelShaderDynamicState(int nRegister);
+	void PI_SetModulationPixelShaderDynamicState_LinearColorSpace_LinearScale(int nRegister, float scale);
+	void PI_SetModulationPixelShaderDynamicState_LinearScale(int nRegister, float scale);
+	void PI_SetModulationPixelShaderDynamicState_LinearScale_ScaleInW(int nRegister, float scale);
+	void PI_SetModulationPixelShaderDynamicState_LinearColorSpace(int nRegister);
+	void PI_SetModulationPixelShaderDynamicState_Identity(int nRegister);
+	void PI_SetModulationVertexShaderDynamicState(void);
+	void PI_SetModulationVertexShaderDynamicState_LinearScale(float flScale);
+#endif
 
 	// "Gets at the current Materialvar flags"
 	// ( Returns the int of Flags )
@@ -593,6 +648,20 @@ protected:
 
 
 private:
+#ifdef ASWSDK
+
+	// "This is a per-instance state which is handled completely by the system"
+	void PI_SetSkinningMatrices();
+	void PI_SetVertexShaderLocalLighting();
+
+	bool m_bBuildingInstanceCommandBuffer = false;
+	CPerInstanceContextData** m_ppInstanceDataPtr;
+	CPerInstanceContextData* m_pCurrentInstanceCommandBuffer;
+	int m_nCurrentPass;
+
+	// Unfortunate but we need this to temporarily store CommandBuilder Results
+	CommandBuilder_t<512> m_PerInstanceCommands;
+#endif
 	LUXPerMaterialContextData *m_pMaterialContextData;
 };
 

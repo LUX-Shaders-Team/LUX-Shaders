@@ -507,8 +507,13 @@ void CBaseShader::InitShaderInstance( IMaterialVar** ppParams, IShaderInit *pSha
 //-----------------------------------------------------------------------------
 // Called upon by the System. Forwards to a Shaders SHADER_INIT Section
 //-----------------------------------------------------------------------------
+#ifdef ASWSDK
+void CBaseShader::DrawElements( IMaterialVar **ppParams, int nModulationFlags,
+	IShaderShadow* pShaderShadow, IShaderDynamicAPI* pShaderAPI, VertexCompressionType_t vertexCompression, CBasePerMaterialContextData **pContextDataPtr, CBasePerInstanceContextData** pInstanceDataPtr )
+#else
 void CBaseShader::DrawElements( IMaterialVar **ppParams, int nModulationFlags,
 	IShaderShadow* pShaderShadow, IShaderDynamicAPI* pShaderAPI, VertexCompressionType_t vertexCompression, CBasePerMaterialContextData **pContextDataPtr )
+#endif
 {
 	VPROF("CBaseShader::DrawElements");
 
@@ -534,6 +539,10 @@ void CBaseShader::DrawElements( IMaterialVar **ppParams, int nModulationFlags,
 	m_pMeshBuilder = pShaderAPI ? pShaderAPI->GetVertexModifyBuilder() : NULL;
 	m_nVertexCompression = vertexCompression;
 
+#ifdef ASWSDK
+	m_ppInstanceDataPtr = (CPerInstanceContextData**)pInstanceDataPtr;
+	m_nCurrentPass = 0;
+#endif
 #ifdef DEBUG
 	bool bDebug = GetBool(Debug_True);
 
@@ -583,6 +592,11 @@ void CBaseShader::DrawElements( IMaterialVar **ppParams, int nModulationFlags,
 	m_pShaderAPI = NULL;
 	m_pShaderShadow = NULL;
 	m_pMeshBuilder = NULL;
+#ifdef ASWSDK
+	m_ppInstanceDataPtr = NULL;
+	m_pCurrentInstanceCommandBuffer = NULL;
+	m_nCurrentPass = 0;
+#endif
 
 	// Reset the Proxies.
 	// Ensures that the next Draw() doesn't get dangling Pointers
@@ -677,6 +691,22 @@ void CBaseShader::Draw( bool bMakeActualDrawCall )
 
 		GetShaderSystem()->TakeSnapshot();
 
+#ifdef ASWSDK
+		// "Automagically add skinning + vertex lighting"
+		if (!m_ppInstanceDataPtr[m_nCurrentPass])
+		{
+			bool bIsSkinning = HasFlag2(MATERIAL_VAR2_SUPPORTS_HW_SKINNING);
+			bool bIsVertexLit = HasFlag2(MATERIAL_VAR2_LIGHTING_VERTEX_LIT);
+			if (bIsSkinning || bIsVertexLit)
+			{
+				PI_BeginCommandBuffer();
+
+				// NOTE: EndCommandBuffer will insert the appropriate commands
+				PI_EndCommandBuffer();
+			}
+		}
+#endif
+
 #ifdef DEBUG
 		s_ShaderSpew.LogDraw_ShadowState();
 #endif
@@ -688,7 +718,13 @@ void CBaseShader::Draw( bool bMakeActualDrawCall )
 
 		// ShiroDkxtro2: $DynamicNoDraw is set to 0 by Default
 		// If it's set to 1 by a Proxy or via Client IMaterialVar*, this will fail and not draw the Material. Dynamically.
-		GetShaderSystem()->DrawSnapshot(bMakeActualDrawCall && !GetBool(DynamicNoDraw));
+		bool bActualDrawCall = bMakeActualDrawCall && !GetBool(DynamicNoDraw);
+#ifdef ASWSDK
+		GetShaderSystem()->DrawSnapshot(m_ppInstanceDataPtr[m_nCurrentPass] ?
+			m_ppInstanceDataPtr[m_nCurrentPass]->m_pCommandBuffer : NULL, bActualDrawCall);
+#else
+		GetShaderSystem()->DrawSnapshot(bActualDrawCall);
+#endif
 
 #ifdef DEBUG
 		// We only go down the Snapshot or Dynamic Path
@@ -697,7 +733,183 @@ void CBaseShader::Draw( bool bMakeActualDrawCall )
 		s_ShaderSpew.LogDraw_DynamicState();
 #endif
 	}
+
+#ifdef ASWSDK
+	m_nCurrentPass++;
+#endif
 }
+
+//-----------------------------------------------------------------------------
+// Methods related to building per-instance command buffers
+//-----------------------------------------------------------------------------
+#ifdef ASWSDK
+void CBaseShader::PI_BeginCommandBuffer()
+{
+	// "NOTE: This assertion is here because the memory allocation strategy
+	// is perhaps not the best if this is used in dynamic states; we should
+	// rethink in that case."
+	Assert(IsSnapshotting());
+	Assert(!m_bBuildingInstanceCommandBuffer);
+
+	m_bBuildingInstanceCommandBuffer = true;
+
+	// ShiroDkxtro2: Reset this Buffer like your Life depends on it.
+	// If you store some other Data on Lighting or Ambient Cube Constants you end up overwriting it
+	m_PerInstanceCommands.Reset(m_ppParams);
+}
+
+void CBaseShader::PI_EndCommandBuffer()
+{
+	Assert(m_bBuildingInstanceCommandBuffer);
+
+	// Automagically add skinning
+	if (HasFlag2(MATERIAL_VAR2_SUPPORTS_HW_SKINNING))
+	{
+		PI_SetSkinningMatrices();
+	}
+
+	if (HasFlag2(MATERIAL_VAR2_LIGHTING_VERTEX_LIT))
+	{
+		PI_SetVertexShaderLocalLighting();
+	}
+
+	m_bBuildingInstanceCommandBuffer = false;
+
+	m_PerInstanceCommands.End();
+
+	// This is a size_t for us, we know this fits into an int though since the local size is just 512
+	int nSize = (int)m_PerInstanceCommands.Size();
+	if (nSize > 0)
+	{
+		CPerInstanceContextData* pContextData = m_ppInstanceDataPtr[m_nCurrentPass];
+		if (!pContextData)
+		{
+			pContextData = new CPerInstanceContextData;
+			m_ppInstanceDataPtr[m_nCurrentPass] = pContextData;
+		}
+		unsigned char* pBuf = pContextData->m_pCommandBuffer;
+		if (pContextData->m_nSize < nSize)
+		{
+			if (pContextData->m_pCommandBuffer)
+			{
+				delete pContextData->m_pCommandBuffer;
+			}
+			pBuf = new unsigned char[nSize];
+			pContextData->m_pCommandBuffer = pBuf;
+			pContextData->m_nSize = nSize;
+		}
+		memcpy(pBuf, m_PerInstanceCommands.Base(), nSize);
+	}
+}
+
+
+//-----------------------------------------------------------------------------
+// Queues commands onto the instance command buffer
+//-----------------------------------------------------------------------------
+void CBaseShader::PI_SetPixelShaderAmbientLightCube(int nFirstRegister)
+{
+	Assert(m_bBuildingInstanceCommandBuffer);
+	m_PerInstanceCommands.CBICMD_SetPixelShaderAmbientLightCube(nFirstRegister);
+}
+
+void CBaseShader::PI_SetPixelShaderLocalLighting(int nFirstRegister)
+{
+	Assert(m_bBuildingInstanceCommandBuffer);
+	m_PerInstanceCommands.CBICMD_SetPixelShaderLocalLighting(nFirstRegister);
+}
+
+void CBaseShader::PI_SetVertexShaderAmbientLightCube( /*int nFirstRegister*/)
+{
+	Assert(m_bBuildingInstanceCommandBuffer);
+	m_PerInstanceCommands.CBICMD_SetVertexShaderAmbientLightCube( /*nFirstRegister*/);
+}
+
+void CBaseShader::PI_SetVertexShaderLocalLighting()
+{
+	Assert(m_bBuildingInstanceCommandBuffer);
+	m_PerInstanceCommands.CBICMD_SetVertexShaderLocalLighting();
+}
+
+void CBaseShader::PI_SetSkinningMatrices()
+{
+	Assert(m_bBuildingInstanceCommandBuffer);
+	m_PerInstanceCommands.CBICMD_SetSkinningMatrices();
+}
+
+void CBaseShader::PI_SetPixelShaderAmbientLightCubeLuminance(int nFirstRegister)
+{
+	Assert(m_bBuildingInstanceCommandBuffer);
+	m_PerInstanceCommands.CBICMD_SetPixelShaderAmbientLightCubeLuminance(nFirstRegister);
+}
+
+void CBaseShader::PI_SetPixelShaderGlintDamping(int nFirstRegister)
+{
+	Assert(m_bBuildingInstanceCommandBuffer);
+	m_PerInstanceCommands.CBICMD_SetPixelShaderGlintDamping(nFirstRegister);
+}
+
+void CBaseShader::PI_SetModulationPixelShaderDynamicState_LinearColorSpace_LinearScale(int nRegister, float scale)
+{
+	Assert(m_bBuildingInstanceCommandBuffer);
+	Vector color2(1.0f, 1.0f, 1.0f);
+	ApplyColor2Factor(color2.Base());
+	m_PerInstanceCommands.CBICMD_SetModulationPixelShaderDynamicState_LinearColorSpace_LinearScale(nRegister, color2, scale);
+}
+
+void CBaseShader::PI_SetModulationPixelShaderDynamicState_LinearScale(int nRegister, float scale)
+{
+	Assert(m_bBuildingInstanceCommandBuffer);
+	Vector color2(1.0f, 1.0f, 1.0f);
+	ApplyColor2Factor(color2.Base());
+	m_PerInstanceCommands.CBICMD_SetModulationPixelShaderDynamicState_LinearScale(nRegister, color2, scale);
+}
+
+void CBaseShader::PI_SetModulationPixelShaderDynamicState_LinearScale_ScaleInW(int nRegister, float scale)
+{
+	Assert(m_bBuildingInstanceCommandBuffer);
+	Vector color2(1.0f, 1.0f, 1.0f);
+	ApplyColor2Factor(color2.Base());
+	m_PerInstanceCommands.CBICMD_SetModulationPixelShaderDynamicState_LinearScale_ScaleInW(nRegister, color2, scale);
+}
+
+void CBaseShader::PI_SetModulationPixelShaderDynamicState_LinearColorSpace(int nRegister)
+{
+	Assert(m_bBuildingInstanceCommandBuffer);
+	Vector color2(1.0f, 1.0f, 1.0f);
+	ApplyColor2Factor(color2.Base());
+	m_PerInstanceCommands.CBICMD_SetModulationPixelShaderDynamicState_LinearColorSpace(nRegister, color2);
+}
+
+void CBaseShader::PI_SetModulationPixelShaderDynamicState(int nRegister)
+{
+	Assert(m_bBuildingInstanceCommandBuffer);
+	Vector color2(1.0f, 1.0f, 1.0f);
+	ApplyColor2Factor(color2.Base());
+	m_PerInstanceCommands.CBICMD_SetModulationPixelShaderDynamicState(nRegister, color2);
+}
+
+void CBaseShader::PI_SetModulationVertexShaderDynamicState()
+{
+	Assert(m_bBuildingInstanceCommandBuffer);
+	Vector color2(1.0f, 1.0f, 1.0f);
+	ApplyColor2Factor(color2.Base());
+	m_PerInstanceCommands.CBICMD_SetModulationVertexShaderDynamicState(VERTEX_SHADER_MODULATION_COLOR, color2);
+}
+
+void CBaseShader::PI_SetModulationVertexShaderDynamicState_LinearScale(float flScale)
+{
+	Assert(m_bBuildingInstanceCommandBuffer);
+	Vector color2(1.0f, 1.0f, 1.0f);
+	ApplyColor2Factor(color2.Base());
+	m_PerInstanceCommands.CBICMD_SetModulationVertexShaderDynamicState_LinearScale(VERTEX_SHADER_MODULATION_COLOR, color2, flScale);
+}
+
+void CBaseShader::PI_SetModulationPixelShaderDynamicState_Identity(int nRegister)
+{
+	Assert(m_bBuildingInstanceCommandBuffer);
+	m_PerInstanceCommands.CBICMD_SetModulationPixelShaderDynamicState_Identity(nRegister);
+}
+#endif
 
 //-----------------------------------------------------------------------------
 // Finds a particular Parameter	(works because the lowest parameters match the shader)
