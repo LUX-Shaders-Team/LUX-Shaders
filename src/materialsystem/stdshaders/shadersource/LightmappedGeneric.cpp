@@ -39,6 +39,7 @@ class LightmappedGenericContext : public LUXPerMaterialContextData
 public:
 	ShrinkableCommandBuilder_t<5000> m_StaticCmds;
 	CommandBuilder_t<1000> m_SemiStaticCmds;
+	float f1LightmapScaleFactor = 1.0f; // Only used on ASW
 
 	// Snapshot / Dynamic State
 	BlendType_t m_nBlendType = BT_NONE;
@@ -684,6 +685,13 @@ SHADER_DRAW
 			SET_STATIC_PIXEL_SHADER_COMBO(XBYBASEALPHA, bBlendTintByBaseAlpha + 2 * bDesaturateWithBaseAlpha);
 			SET_STATIC_PIXEL_SHADER(lux_lightmappedgeneric_simple_ps30);
 		}
+
+#ifdef ASWSDK
+		// LightmapScaleFactor is passed on via IShaderShadow instead of IShaderDynamicAPI
+		// The way LUX was designed, this is passed on with some other Control Data
+		// Store it so we can pack it together later
+		pContextData->f1LightmapScaleFactor = pShaderShadow->GetLightMapScaleFactor();
+#endif
 	}
 
 	//==========================================================================//
@@ -787,9 +795,10 @@ SHADER_DRAW
 		// all shadow state blocks will be re-run, so that's ok"
 		// So don't need to worry about LightmapScaleFactor,
 		// different for $color2, Proxies won't caues a Command Buffer refresh.
+		// NOTE: LightmapScaleFactor only used in ASW
 		bool bIsBrush = true;
 		bool bApplySSBumpMathFix = bHasSSBump && GetBool(SSBumpMathFix);
-		float4 f4ModulationConstant = GetModulationConstant(bIsBrush, bApplySSBumpMathFix);
+		float4 f4ModulationConstant = GetModulationConstant(bIsBrush, bApplySSBumpMathFix, pContextData->f1LightmapScaleFactor);
 		SemiStaticCmds.SetPixelShaderConstant(LUX_PS_FLOAT_MODULATIONCONSTANTS, f4ModulationConstant);
 
 		// c11 - Camera Position

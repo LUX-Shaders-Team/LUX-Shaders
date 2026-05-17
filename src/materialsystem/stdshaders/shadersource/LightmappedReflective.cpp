@@ -25,6 +25,21 @@ DEFINE_FALLBACK_SHADER(LightmappedReflective, LUX_LightmappedReflective)
 #endif
 
 //==========================================================================//
+// CommandBuffer Setup
+//==========================================================================//
+class LightmappedReflectiveContext : public LUXPerMaterialContextData
+{
+public:
+	float f1LightmapScaleFactor = 1.0f; // Only used on ASW
+
+	// Everything related to constants
+
+	LightmappedReflectiveContext(IMaterialVar** ppParams)
+	{
+	}
+};
+
+//==========================================================================//
 // Shader Start
 //==========================================================================//
 BEGIN_VS_SHADER(LUX_LightmappedReflective, "A shader used to produce perfectly reflective glass that renders world + entities.")
@@ -153,8 +168,17 @@ SHADER_INIT
 	}
 }
 
+// Virtual Void Override for Context Data
+LightmappedReflectiveContext* CreateMaterialContextData() override
+{
+	return new LightmappedReflectiveContext(NULL);
+}
+
 SHADER_DRAW
 {
+	// Get Context Data. BaseShader handles creation for us, using the CreateMaterialContextData() virtual
+	auto* pContextData = GetMaterialContextData<LightmappedReflectiveContext>(pContextDataPtr);
+
 	// NOTE: We already made sure we don't have conflicting flags on Shader Init ( see above )
 	bool bHasFlashlight = HasFlashlight();
 	
@@ -306,6 +330,13 @@ SHADER_DRAW
 			SET_STATIC_PIXEL_SHADER_COMBO(REFLECTIONLIGHTSCALE, bReflectLightScale + bHasSSBump * bReflectLightScale * !bHasBaseTexture);
 			SET_STATIC_PIXEL_SHADER(lux_lightmappedreflective_ps30);
 		}
+
+#ifdef ASWSDK
+		// LightmapScaleFactor is passed on via IShaderShadow instead of IShaderDynamicAPI
+		// The way LUX was designed, this is passed on with some other Control Data
+		// Store it so we can pack it together later
+		pContextData->f1LightmapScaleFactor = pShaderShadow->GetLightMapScaleFactor();
+#endif
 	}
 
 	//==========================================================================//
@@ -370,7 +401,7 @@ SHADER_DRAW
 
 		// c1 - Modulation Constant
 		// Function above, handles LightmapScaleFactor and Alpha Modulation
-		SetModulationConstant(bHasSSBump && GetBool(SSBumpMathFix));
+		SetModulationConstant(bHasSSBump && GetBool(SSBumpMathFix), pContextData->f1LightmapScaleFactor);
 			
 		// c3 - $ReflectTint & $Reflectance
 		// Stock-Consistency: GammaToLinear

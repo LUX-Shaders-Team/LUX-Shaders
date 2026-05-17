@@ -18,6 +18,21 @@ DEFINE_FALLBACK_SHADER(LightmappedGeneric_Decal, LUX_LightmappedGeneric_Decal)
 #endif
 
 //==========================================================================//
+// CommandBuffer Setup
+//==========================================================================//
+class LightmappedGenericDecalContext : public LUXPerMaterialContextData
+{
+public:
+	float f1LightmapScaleFactor = 1.0f; // Only used on ASW
+
+	// Everything related to constants
+
+	LightmappedGenericDecalContext(IMaterialVar** ppParams)
+	{
+	}
+};
+
+//==========================================================================//
 // Shader Start
 //==========================================================================//
 // ShiroDkxtro2 NOTE: LUX_LightmappedGeneric will redirect to this Shader whenever the Decal flag is used
@@ -182,8 +197,17 @@ SHADER_INIT
 	}
 }
 
+// Virtual Void Override for Context Data
+LightmappedGenericDecalContext* CreateMaterialContextData() override
+{
+	return new LightmappedGenericDecalContext(NULL);
+}
+
 SHADER_DRAW
 {
+	// Get Context Data. BaseShader handles creation for us, using the CreateMaterialContextData() virtual
+	auto* pContextData = GetMaterialContextData<LightmappedGenericDecalContext>(pContextDataPtr);
+
 	// Check Flashlight first, important for a lot of other parameters
 	bool bProjTex = HasFlashlight();
 
@@ -322,6 +346,13 @@ SHADER_DRAW
 			SET_STATIC_PIXEL_SHADER_COMBO(DETAILTEXTURE, bHasDetailTexture);
 			SET_STATIC_PIXEL_SHADER(lux_lightmappedgeneric_decal_ps30);
 		}
+
+#ifdef ASWSDK
+		// LightmapScaleFactor is passed on via IShaderShadow instead of IShaderDynamicAPI
+		// The way LUX was designed, this is passed on with some other Control Data
+		// Store it so we can pack it together later
+		pContextData->f1LightmapScaleFactor = pShaderShadow->GetLightMapScaleFactor();
+#endif
 	}
 
 	//==========================================================================//
@@ -396,7 +427,7 @@ SHADER_DRAW
 
 		// c1 - Modulation Constant
 		// Function above, handles LightmapScaleFactor and Alpha Modulation
-		SetModulationConstant(GetBool(SSBumpMathFix));
+		SetModulationConstant(GetBool(SSBumpMathFix), true, pContextData->f1LightmapScaleFactor);
 				
 		// c11 - Camera Position
 		SetPixelShaderCameraPosition(LUX_PS_FLOAT_CAMERAPOSITION);

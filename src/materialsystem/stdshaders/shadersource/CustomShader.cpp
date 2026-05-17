@@ -26,6 +26,21 @@
 #include "lux_custom_projtex_ps30.inc"
 
 //==========================================================================//
+// CommandBuffer Setup
+//==========================================================================//
+class CustomShaderContext : public LUXPerMaterialContextData
+{
+public:
+	float f1LightmapScaleFactor = 1.0f; // Only used on ASW
+
+	// Everything related to constants
+
+	CustomShaderContext(IMaterialVar** ppParams)
+	{
+	}
+};
+
+//==========================================================================//
 // Shader Start LUX_Custom
 //==========================================================================//
 BEGIN_VS_SHADER(LUX_Custom, "A Shader of the LUX Project")
@@ -503,8 +518,19 @@ SHADER_INIT
 		DefaultBool(EnvMapParallax, true);
 }
 
+// Virtual Void Override for Context Data
+CustomShaderContext* CreateMaterialContextData() override
+{
+	return new CustomShaderContext(NULL);
+}
+
 SHADER_DRAW
 {
+#ifdef ASWSDK
+	// Get Context Data. BaseShader handles creation for us, using the CreateMaterialContextData() virtual
+	auto* pContextData = GetMaterialContextData<CustomShaderContext>(pContextDataPtr);
+#endif
+
 	bool bParticle = GetBool(Shader_Particle);
 	bool bParticleDepthBlend = bParticle && GetBool(Shader_Particle_DepthBlend);
 
@@ -1201,6 +1227,13 @@ SHADER_DRAW
 			pShaderShadow->SetVertexShader(strStaticVS.c_str(), nIndexVS);
 			pShaderShadow->SetPixelShader(strStaticPS.c_str(), nIndexPS);
 		}
+
+#ifdef ASWSDK
+		// LightmapScaleFactor is passed on via IShaderShadow instead of IShaderDynamicAPI
+		// The way LUX was designed, this is passed on with some other Control Data
+		// Store it so we can pack it together later
+		pContextData->f1LightmapScaleFactor = pShaderShadow->GetLightMapScaleFactor();		
+#endif
 	}
 
 	//==========================================================================//
@@ -1419,9 +1452,14 @@ SHADER_DRAW
 			pShaderAPI->GetLightmapDimensions(&nWidth, &nHeight);
 			cSingleConstant.x = 1.0f / (float)nWidth;
 			cSingleConstant.y = 1.0f / (float)nHeight;
+#ifndef ASWSDK
 			cSingleConstant.z = pShaderAPI->GetLightMapScaleFactor();
+#else
+			cSingleConstant.z = pContextData->f1LightmapScaleFactor;
+#endif
 			cSingleConstant.w = 0.0f; // Free
 			pShaderAPI->SetPixelShaderConstant(REGISTER_FLOAT_031, cSingleConstant);
+
 		}
 
 		// If this isn't supported and you try to set >c31,

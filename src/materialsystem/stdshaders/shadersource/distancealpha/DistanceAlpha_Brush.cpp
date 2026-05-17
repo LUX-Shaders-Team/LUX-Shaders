@@ -15,6 +15,21 @@
 #include "lux_model_simplified_vs30.inc"
 
 //==========================================================================//
+// CommandBuffer Setup
+//==========================================================================//
+class DistanceAlphaBrushContext : public LUXPerMaterialContextData
+{
+public:
+	float f1LightmapScaleFactor = 1.0f; // Only used on ASW
+
+	// Everything related to constants
+
+	DistanceAlphaBrushContext(IMaterialVar** ppParams)
+	{
+	}
+};
+
+//==========================================================================//
 // Brush ONLY
 //==========================================================================//
 BEGIN_VS_SHADER(LUX_DistanceAlpha_Brush, "A Shader for the 'Signed Distance Fields' Alpha Effect.\n" )
@@ -99,8 +114,17 @@ SHADER_INIT
 	SetBool(ReceiveProjectedTextures, 0);
 }
 
+// Virtual Void Override for Context Data
+DistanceAlphaBrushContext* CreateMaterialContextData() override
+{
+	return new DistanceAlphaBrushContext(NULL);
+}
+
 SHADER_DRAW
 {
+	// Get Context Data. BaseShader handles creation for us, using the CreateMaterialContextData() virtual
+	auto * pContextData = GetMaterialContextData<DistanceAlphaBrushContext>(pContextDataPtr);
+
 	bool bHasBaseTexture = IsTextureLoaded(BaseTexture);
 	bool bHasDetailTexture = IsTextureLoaded(Detail);
 	bool bProjTex = HasFlashlight(); // Drawing Behaviour handled on Param Init!
@@ -220,6 +244,13 @@ SHADER_DRAW
 		SET_STATIC_PIXEL_SHADER_COMBO(OUTLINE, GetBool(Outline));
 		SET_STATIC_PIXEL_SHADER_COMBO(OUTER_GLOW, GetBool(Glow));
 		SET_STATIC_PIXEL_SHADER(lux_distancealpha_ps30);
+
+#ifdef ASWSDK
+		// LightmapScaleFactor is passed on via IShaderShadow instead of IShaderDynamicAPI
+		// The way LUX was designed, this is passed on with some other Control Data
+		// Store it so we can pack it together later
+		pContextData->f1LightmapScaleFactor = pShaderShadow->GetLightMapScaleFactor();
+#endif
 	}
 
 	//==========================================================================//
@@ -283,7 +314,7 @@ SHADER_DRAW
 
 		// c1 - Modulation Constant
 		// Function above, handles LightmapScaleFactor and Alpha Modulation
-		SetModulationConstant(false);
+		SetModulationConstant(false, true, pContextData->f1LightmapScaleFactor);
 			
 		// c11 - Camera Position
 		SetPixelShaderCameraPosition(LUX_PS_FLOAT_CAMERAPOSITION);

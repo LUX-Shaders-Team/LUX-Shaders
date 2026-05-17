@@ -24,6 +24,21 @@ DEFINE_FALLBACK_SHADER(ShatteredGlass, LUX_ShatteredGlass)
 #endif
 
 //==========================================================================//
+// CommandBuffer Setup
+//==========================================================================//
+class ShatteredGlassContext : public LUXPerMaterialContextData
+{
+public:
+	float f1LightmapScaleFactor = 1.0f; // Only used on ASW
+
+	// Everything related to constants
+
+	ShatteredGlassContext(IMaterialVar** ppParams)
+	{
+	}
+};
+
+//==========================================================================//
 // Shader Start
 //==========================================================================//
 BEGIN_VS_SHADER(LUX_ShatteredGlass, "A shader used to simulate realtime breaking glass." )
@@ -158,8 +173,17 @@ SHADER_INIT
 	}
 }
 
+// Virtual Void Override for Context Data
+ShatteredGlassContext* CreateMaterialContextData() override
+{
+	return new ShatteredGlassContext(NULL);
+}
+
 SHADER_DRAW
 {
+	// Get Context Data. BaseShader handles creation for us, using the CreateMaterialContextData() virtual
+	auto* pContextData = GetMaterialContextData<ShatteredGlassContext>(pContextDataPtr);
+
 	bool bHasBaseTexture = IsTextureLoaded(BaseTexture);
 	bool bHasDetailTexture = IsTextureLoaded(Detail);
 	bool bHasEnvMap = IsTextureLoaded(EnvMap);
@@ -279,6 +303,13 @@ SHADER_DRAW
 		SET_STATIC_PIXEL_SHADER_COMBO(ENVMAPMODE, nEnvMapMode);
 		SET_STATIC_PIXEL_SHADER_COMBO(VERTEXCOLORS, bHasVertexColors);
 		SET_STATIC_PIXEL_SHADER(lux_shatteredglass_ps30);
+
+#ifdef ASWSDK
+		// LightmapScaleFactor is passed on via IShaderShadow instead of IShaderDynamicAPI
+		// The way LUX was designed, this is passed on with some other Control Data
+		// Store it so we can pack it together later
+		pContextData->f1LightmapScaleFactor = pShaderShadow->GetLightMapScaleFactor();
+#endif
 	}
 
 	//==========================================================================//
@@ -343,7 +374,7 @@ SHADER_DRAW
 
 		// c1 - Modulation Constant
 		// Function above, handles LightmapScaleFactor and Alpha Modulation
-		SetModulationConstant();
+		SetModulationConstant(false, true, pContextData->f1LightmapScaleFactor);
 			
 		// c11 - Camera Position
 		SetPixelShaderCameraPosition(LUX_PS_FLOAT_CAMERAPOSITION);

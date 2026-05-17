@@ -16,6 +16,21 @@
 #include "lux_triplanar_brush_flashlight_ps30.inc"
 
 //==========================================================================//
+// CommandBuffer Setup
+//==========================================================================//
+class TriplanarBrushContext : public LUXPerMaterialContextData
+{
+public:
+	float f1LightmapScaleFactor = 1.0f; // Only used on ASW
+
+	// Everything related to constants
+
+	TriplanarBrushContext(IMaterialVar** ppParams)
+	{
+	}
+};
+
+//==========================================================================//
 // Triplanar for Model based Geometry
 //==========================================================================//
 BEGIN_VS_SHADER(LUX_Triplanar_Brush, "Pretty much LightmappedGeneric but with Triplanar Mapping.")
@@ -292,8 +307,17 @@ SHADER_INIT
 	}
 }
 
+// Virtual Void Override for Context Data
+TriplanarBrushContext* CreateMaterialContextData() override
+{
+	return new TriplanarBrushContext(NULL);
+}
+
 SHADER_DRAW
 {
+	// Get Context Data. BaseShader handles creation for us, using the CreateMaterialContextData() virtual
+	auto* pContextData = GetMaterialContextData<TriplanarBrushContext>(pContextDataPtr);
+
 	bool bProjTex = HasFlashlight();
 
 	// Texture related Boolean. Check for existing booleans first!
@@ -463,6 +487,13 @@ SHADER_DRAW
 			SET_STATIC_PIXEL_SHADER_COMBO(ENVMAPMODE, nEnvMapMode);
 			SET_STATIC_PIXEL_SHADER(lux_triplanar_brush_ps30);
 		}
+
+#ifdef ASWSDK
+		// LightmapScaleFactor is passed on via IShaderShadow instead of IShaderDynamicAPI
+		// The way LUX was designed, this is passed on with some other Control Data
+		// Store it so we can pack it together later
+		pContextData->f1LightmapScaleFactor = pShaderShadow->GetLightMapScaleFactor();
+#endif
 	}
 	
 	//==========================================================================//
@@ -541,7 +572,7 @@ SHADER_DRAW
 
 		// c1 - Modulation Constant
 		// Function above, handles LightmapScaleFactor and Alpha Modulation
-		SetModulationConstant(bHasNormalMap && GetBool(SSBumpMathFix));
+		SetModulationConstant(bHasNormalMap && GetBool(SSBumpMathFix), true, pContextData->f1LightmapScaleFactor);
 
 		// c11 - Camera Position
 		SetPixelShaderCameraPosition(LUX_PS_FLOAT_CAMERAPOSITION);
