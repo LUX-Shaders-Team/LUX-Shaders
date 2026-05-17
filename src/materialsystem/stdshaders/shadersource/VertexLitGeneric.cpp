@@ -785,7 +785,15 @@ SHADER_INIT
 		bAlternativeSelfIllum = GetBool(SelfIllumFresnel) || GetBool(SelfIllum_EnvMapMask_Alpha) || bHasSelfIllumMask;
 
 	if (bHasSelfIllumMask)
-		LoadTexture(SelfIllumMask,0);
+	{
+		LoadTexture(SelfIllumMask, 0);
+
+		// This is mostly used with Phong but in ASW this Flag gets set on regular VertexLitGeneric
+		// Don't set this and Materials using $SelfIllumMask and $Translucent will be broken!
+		#ifdef ASWSDK
+			SetFlag2(MATERIAL_VAR2_SELFILLUMMASK);
+		#endif
+	}
 
 	// Need to load this for the second Pass
 	LoadTexture(SelfIllumTexture, TEXTUREFLAGS_SRGB);
