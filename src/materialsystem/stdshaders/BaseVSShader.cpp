@@ -1107,7 +1107,9 @@ bool CBaseVSShader::SetupFlashlight()
 			f4tweaks.y = ProjTexState.m_flShadowFilterSize / (float)pProjTexDepthTexture->GetActualHeight();
 		}
 
-
+		#ifdef SFM_COMPATIBILITY
+			HashShadow2DJitter(ProjTexState.m_flShadowJitterSeed, &f4tweaks.z, &f4tweaks.w);
+		#endif
 
 		m_pShaderAPI->SetPixelShaderConstant(LUX_PS_FLOAT_PROJTEX_TWEAKS, f4tweaks);
 	}
@@ -1142,6 +1144,20 @@ bool CBaseVSShader::SetupFlashlight()
 
 #ifdef ASWSDK
 	SetupUberlightFromState(ProjTexState);
+
+	#ifdef SFM_COMPATIBILITY
+		float4 cNoiseScreenScale = 0.0f;
+		int nWidth, nHeight;
+		m_pShaderAPI->GetBackBufferDimensions(nWidth, nHeight);
+
+		int nTexWidth, nTexHeight;
+		m_pShaderAPI->GetStandardTextureDimensions(&nTexWidth, &nTexHeight, TEXTURE_SHADOW_NOISE_2D);
+
+		cNoiseScreenScale.x = float(nWidth) / float(nTexWidth);
+		cNoiseScreenScale.y = float(nHeight) / float(nTexHeight);
+
+		m_pShaderAPI->SetPixelShaderConstant(LUX_PS_FLOAT_SFM_PROJTEX_NOISESCALE, cNoiseScreenScale);
+	#endif
 
 	// Want to return this so we can set the Dynamic Combo with it
 	// NOTE: Some Shaders may not support bUberlight yet, I made it a pointer so a default can be set ( NULL )

@@ -42,6 +42,10 @@
 	const float4 cAABB						: register(LUX_PS_FLOAT_UBERLIGHT_AABB);
 	const float4x4 xmFlashlightWorldToLight : register(LUX_PS_FLOAT_UBERLIGHT_WORLD_TO_LIGHT);
 
+	#if defined(SFM_COMPATIBILITY)
+		const float2 cScreenScale			: register(LUX_PS_FLOAT_SFM_PROJTEX_NOISESCALE);
+		#define g_f2NoiseScreenScale			(cScreenScale.xy)
+	#endif
 #endif
 
 #define NVIDIA_PCF_POISSON	0
@@ -98,7 +102,7 @@ float RemapValClamped(float val, float A, float B, float C, float D)
 //==========================================================================//
 //	Stock SDK Shadow Filters.
 //==========================================================================//
-#if 0
+#if defined(SFM_COMPATIBILITY)
 float FilterShadow(const int nFilterMode, float f1ObjectDepth, float3 RMatTop, float3 RMatBottom)
 {
 	// Prepare these..
@@ -265,14 +269,41 @@ float ComputeShadowNvidiaPCF5x5Gaussian(const float2 f2ProjectedCenter, const fl
 //==========================================================================//
 // Computes Flashlight Shadow from Depth Textures
 //==========================================================================//
+#if defined(SFM_COMPATIBILITY)
+float3 InternalProjectedTextureShadow(float2 f2DepthTextureUV, float2 f2ScreenPos, float f1ComparisonDepth, float f1DistanceFalloff, const bool bDoShadows = false)
+#else
 float3 InternalProjectedTextureShadow(float2 f2DepthTextureUV, float f1ComparisonDepth, float f1DistanceFalloff, const bool bDoShadows = false)
+#endif
 {
 	if (bDoShadows)
 	{
+		// We *MUST* use a Noise Texture on SFM.
+		// It will accumulate a lot of Images with different Noise together, resulting in a crisp Image with no Noise
+		// When the 5x5 Gaussian is used, it will produce Shadows with obvious banding Artefacts, as the Results are always the same for each Accumulation
+#if defined(SFM_COMPATIBILITY)
+		float3 RMatTop = 0.0f;
+		float3 RMatBottom = 0.0f;
+
+		// NOTE: I expect ScreenPos to come from SV_Position ( VPOS )
+		// Therefore no * 0.5f + 0.5f to bring it from NDC to UV Range
+		RMatTop.xy = tex2D(Sampler_RandomRotation, g_f2NoiseScreenScale * (f2ScreenPos  /** 0.5f + 0.5f*/) + g_f2NoiseOffsets).xy * 2.0f - 1.0f;
+		RMatBottom.xy = float2(-1.0, 1.0) * RMatTop.yx;	// 2x2 rotation matrix in 4-tuple
+
+		// Scale up kernel while accounting for texture resolution
+		float2 f2ScaleOverMapSize = g_f2ProjTexTexelSize * 2.0f;
+		RMatTop.xy *= f2ScaleOverMapSize;
+		RMatBottom.xy *= f2ScaleOverMapSize;
+
+		RMatTop.z = f2DepthTextureUV.x;
+		RMatBottom.z = f2DepthTextureUV.y;
+
+		float f1Shadow = FilterShadow(NVIDIA_PCF_POISSON, f1ComparisonDepth, RMatTop, RMatBottom);
+		f1Shadow = saturate(f1Shadow); // Saturate because the Math in the ShadowFilter is wrong
+#else
 		// We would usually have some alternative Shadow Filters here ( Their Functions remain above )
 		// But we only do this for LUX since it drastically speeds up Compiles and just looks better
 		float f1Shadow = ComputeShadowNvidiaPCF5x5Gaussian(f2DepthTextureUV, f1ComparisonDepth);
-
+#endif
 		// "Blend between fully attenuated and not attenuated"
 		float f1Attenuated = lerp(f1Shadow, 1.0f, g_f1ProjTexShadowAtten);
 
@@ -288,7 +319,11 @@ float3 InternalProjectedTextureShadow(float2 f2DepthTextureUV, float f1Compariso
 //==========================================================================//
 // Direct Diffuse Projected Texture Function
 //==========================================================================//
+#if defined(SFM_COMPATIBILITY)
+float3 ComputeProjectedTextureDiffuse(float3 f3WorldPos, float3 f3NormalWS, float2 f2ScreenPos, const bool bDoShadows = false)
+#else
 float3 ComputeProjectedTextureDiffuse(float3 f3WorldPos, float3 f3NormalWS, const bool bDoShadows = false)
+#endif
 {
 	// ShiroDkxtro2:
 	// Here's how this works, in case whoever reads this doesn't know how Projected Textures work.
@@ -358,7 +393,11 @@ float3 ComputeProjectedTextureDiffuse(float3 f3WorldPos, float3 f3NormalWS, cons
 	float f1Attenuation = saturate(dot(g_f3ProjTexDistanceAtten, float3(1.0f, 1.0f / f1Dist, 1.0f / f1DistSquared)));
 
 	// Compute Projected Texture Shadows
+#if defined(SFM_COMPATIBILITY)
+	float3 f3Shadow = InternalProjectedTextureShadow(f3ProjPos.xy, f2ScreenPos, min(f3ProjPos.z, 0.999999f), f1Attenuation, bDoShadows);
+#else
 	float3 f3Shadow = InternalProjectedTextureShadow(f3ProjPos.xy, min(f3ProjPos.z, 0.999999f), f1Attenuation, bDoShadows);
+#endif
 
 	float3 f3DirectDiffuseLighting = f3ProjTexColor;
 		// NoLambertValue is either 0 or 2

@@ -343,7 +343,11 @@ float4 main(PS_INPUT i) : COLOR
 
 		// Special Path for proj. Tex.'s
 		#if PROJTEX
+			#if defined(SFM_COMPATIBILITY)
+				f3DirectDiffuse = ComputeProjectedTextureDiffuse(f3WorldPos, f3NormalWS, f2ScreenUV, PROJTEXSHADOWS);
+			#else // SDK and ASW Path
 				f3DirectDiffuse = ComputeProjectedTextureDiffuse(f3WorldPos, f3NormalWS, PROJTEXSHADOWS);
+			#endif
 		#else
 			// f3DirectDiffuse is later used for $EnvMapLightScale
 			f3DirectDiffuse = ComputeDirectDiffuse(f3WorldPos, f3NormalWS, i.LightAtten);
@@ -355,7 +359,11 @@ float4 main(PS_INPUT i) : COLOR
 
 		// FIXME: Same Code as above. Preferably split new NormalWS calc from this then calculate Lighting as
 		// #if PROJTEX, #elif !VLG_SIMPLE #else .. #endif
+		#if defined(SFM_COMPATIBILITY)
+			f3DirectDiffuse = ComputeProjectedTextureDiffuse(f3WorldPos, f3NormalWS, f2ScreenUV, PROJTEXSHADOWS);
+		#else // SDK and ASW Path
 			f3DirectDiffuse = ComputeProjectedTextureDiffuse(f3WorldPos, f3NormalWS, PROJTEXSHADOWS);
+		#endif
 
 	// If we use VLG Simple but aren't using proj. Tex.'s, figure out what Lighting to apply
 	#else
