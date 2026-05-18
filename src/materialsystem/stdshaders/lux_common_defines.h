@@ -1,7 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	20.01.2023 DMY
-//	Last Change :	01.02.2026 DMY
+//	Last Change :	18.05.2026 DMY
 //
 //	Purpose of this File :	Define what features should be used
 //							Define If we use sdk2013 MP or SP
@@ -20,6 +20,12 @@
 // #define SDK2013SP
 #define TF2SDK
 // #define ASWSDK
+// #define SFM_COMPATIBILITY
+
+// Current SFM Shaderloader is based on ASW, therefore ASWSDK must be used with this Directive
+#if defined(SFM_COMPATIBILITY)
+	#define ASWSDK
+#endif
 
 // This is only required for Parabellum
 // #define PARABELLUM
