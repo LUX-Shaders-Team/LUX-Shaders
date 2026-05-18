@@ -173,6 +173,11 @@ void RimLightPass_Shader_Draw(CBaseVSShader* pShader, IShaderShadow* pShaderShad
 			pShader->SetVertexShaderTextureTransform(LUX_VS_TEXTURETRANSFORM_01, info.Base.m_nBaseTextureTransform);
 
 			nRegisterShift += 2;
+
+			// c225 used by cFlexScales, skip over it on SFM
+			#ifdef SFM_COMPATIBILITY
+				nRegisterShift += 1;
+			#endif
 		}
 
 		// VS c223, c224, c225, c226
