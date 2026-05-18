@@ -269,7 +269,7 @@ SHADER_DRAW
 			// Fudge-Bilinear
 			if(nFilter == 0)
 			{
-				float Fudge = 0.01f / max(w, h); // 'per ATI' wonder if thats still needed
+				float Fudge = 0.01f / MAX(w, h); // 'per ATI' wonder if thats still needed
 
 				float4 f4Data;
 				f4Data.x = 0.5f / (w - Fudge);

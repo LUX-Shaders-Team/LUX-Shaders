@@ -527,7 +527,7 @@ void DrawEyes(IShaderShadow* pShaderShadow, IShaderDynamicAPI* pShaderAPI, CBase
 		// c0
 		// Stock-Consistency: Replicating this 1:1 to avoid visual Disparities
 		float f1AmbientCubeLuminance = pShaderAPI->GetAmbientLightCubeLuminance();
-		float f1GlintDamping = max(0.0f, min(f1AmbientCubeLuminance, 1.0f));
+		float f1GlintDamping = MAX(0.0f, MIN(f1AmbientCubeLuminance, 1.0f));
 		const float f1DimGlint = 0.01f;
 
 		// "Remap so that glint damping smooth steps to zero for low luminances"

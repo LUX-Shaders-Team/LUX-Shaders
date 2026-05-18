@@ -521,7 +521,7 @@ SHADER_DRAW
 		nNeededTexCoords += bTriplanarBump;
 		nNeededTexCoords += bTriplanarEnvMapMask;
 		nNeededTexCoords += bTriplanarDetail;
-		nNeededTexCoords = Clamp(nNeededTexCoords, 0, 3);
+		nNeededTexCoords = clamp(nNeededTexCoords, 0, 3);
 
 		// Allow disabling Normal Mapping for Diffuse
 		bool bNeedsBumpedLightmaps = !bProjTex && bAnyBump && !GetBool(NoDiffuseBumpLighting);

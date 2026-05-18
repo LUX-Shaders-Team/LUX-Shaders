@@ -657,7 +657,7 @@ SHADER_DRAW
 
 				// ..1: Up these resolutions, find a dynamic approach for these constants?
 				// ..2: (float), those are integers right now
-				float f1ResScale = max(0.5f, max(1024.0f / nWidth, 768.0f / nHeight));
+				float f1ResScale = MAX(0.5f, MAX(1024.0f / nWidth, 768.0f / nHeight));
 
 				if (bScaleEdges)
 				{
@@ -894,7 +894,7 @@ SHADER_DRAW
 
 				// ..1: Up these resolutions, find a dynamic approach for these constants?
 				// ..2: (float), those are integers right now
-				float f1ResScale = max(0.5f, max(1024.0f / nWidth, 768.0f / nHeight));
+				float f1ResScale = MAX(0.5f, MAX(1024.0f / nWidth, 768.0f / nHeight));
 
 				if (bScaleEdges)
 				{

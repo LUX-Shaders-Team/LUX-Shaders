@@ -466,7 +466,7 @@ SHADER_DRAW
 		nNeededTexCoords += bTriplanarBump;
 		nNeededTexCoords += bTriplanarEnvMapMask;
 		nNeededTexCoords += bTriplanarDetail;
-		nNeededTexCoords = Clamp(nNeededTexCoords, 0, 3);
+		nNeededTexCoords = clamp(nNeededTexCoords, 0, 3);
 
 		bool bHasVertexColors = HasFlag(MATERIAL_VAR_VERTEXCOLOR) || HasFlag(MATERIAL_VAR_VERTEXALPHA);
 		if(bProjTex)

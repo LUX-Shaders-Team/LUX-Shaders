@@ -1628,7 +1628,7 @@ void LuxVertexLitGeneric_Shader_Draw(IMaterialVar** ppParams, IShaderShadow* pSh
 				f4SelfIllumFresnelTerms.y = (f1Max != 0.0f) ? (f1Min / f1Max) : 0.0f;
 				f4SelfIllumFresnelTerms.x = 1.0f - f4SelfIllumFresnelTerms.y;
 				f4SelfIllumFresnelTerms.z = f1Exp;
-				f4SelfIllumFresnelTerms.w = Max(f1Max, 0.0f);
+				f4SelfIllumFresnelTerms.w = MAX(f1Max, 0.0f);
 
 				// This saves a multiply in the Shader
 				f4SelfIllumTint_Scale.rgb *= f4SelfIllumFresnelTerms.w;
