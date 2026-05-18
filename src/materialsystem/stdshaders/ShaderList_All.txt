@@ -61,8 +61,6 @@ lux_lightmappedreflective_ps30.fxc
 lux_lightmappedreflective_vs30.fxc
 lux_meshoutline_ps30.fxc
 lux_meshoutline_vs30.fxc
-lux_modelshadertest_ps30.fxc
-lux_modelshadertest_vs30.fxc
 lux_model_bump_vs30.fxc
 lux_model_simplified_vs30.fxc
 lux_model_vs30.fxc

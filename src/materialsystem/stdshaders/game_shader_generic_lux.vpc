@@ -147,8 +147,6 @@ $Project
 				$File "$STDSHADERS/lux_lightmappedreflective_vs30.fxc"
 				$File "$STDSHADERS/lux_meshoutline_ps30.fxc"
 				$File "$STDSHADERS/lux_meshoutline_vs30.fxc"
-				$File "$STDSHADERS/lux_modelshadertest_ps30.fxc"
-				$File "$STDSHADERS/lux_modelshadertest_vs30.fxc"
 				$File "$STDSHADERS/lux_model_bump_vs30.fxc"
 				$File "$STDSHADERS/lux_model_simplified_vs30.fxc"
 				$File "$STDSHADERS/lux_model_vs30.fxc"
