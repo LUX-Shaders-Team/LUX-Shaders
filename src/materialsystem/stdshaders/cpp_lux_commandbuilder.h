@@ -30,7 +30,9 @@
 
 #include "shaderapi/ishaderapi.h"
 #include "materialsystem/imaterialvar.h"
-#include "shaderlib/shaderdll_global.h"
+
+// Need this for GetShaderSystem()->GetShaderAPITextureBindHandle
+#include "../shaderlib/shaderdll_global.h"
 
 template<int N>
 class CCommandStorageBuffer
