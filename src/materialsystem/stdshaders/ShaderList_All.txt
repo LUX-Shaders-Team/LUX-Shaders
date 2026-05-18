@@ -100,6 +100,10 @@ lux_vertexlitgeneric_bump_ps30.fxc
 lux_vertexlitgeneric_flashlight_ps30.fxc
 lux_vertexlitgeneric_phong_ps30.fxc
 lux_vertexlitgeneric_simple_ps30.fxc
+lux_vertexlitgeneric_asw_simple_ps30.fxc
+lux_vertexlitgeneric_asw_bump_ps30.fxc
+lux_vertexlitgeneric_asw_phong_ps30.fxc
+lux_vertexlitgeneric_asw_flashlight_ps30.fxc
 lux_water_cheap_ps30.fxc
 lux_water_expensive_ps30.fxc
 lux_water_vs30.fxc

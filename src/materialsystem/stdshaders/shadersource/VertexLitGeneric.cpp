@@ -8,7 +8,9 @@
 // Commonly Shared Definitions, Defines and Data for all Shaders
 #include "../cpp_lux_shared.h"
 
+#ifndef ASWSDK
 #include "materialsystem/MaterialSystemUtil.h"
+#endif
 
 #ifdef ASWSDK
 #include "renderpasses/SSAODrawNormalPass.h"
@@ -25,10 +27,17 @@
 #include "lux_model_simplified_vs30.inc"
 #include "lux_model_vs30.inc"
 #include "lux_model_bump_vs30.inc"
+#ifndef ASWSDK
 #include "lux_vertexlitgeneric_simple_ps30.inc"
 #include "lux_vertexlitgeneric_bump_ps30.inc"
 #include "lux_vertexlitgeneric_phong_ps30.inc"
 #include "lux_vertexlitgeneric_flashlight_ps30.inc"
+#else
+#include "lux_vertexlitgeneric_asw_simple_ps30.inc"
+#include "lux_vertexlitgeneric_asw_bump_ps30.inc"
+#include "lux_vertexlitgeneric_asw_phong_ps30.inc"
+#include "lux_vertexlitgeneric_asw_flashlight_ps30.inc"
+#endif
 
 // LUX Shaders will replace existing Shaders.
 #ifdef REPLACE_SDK_SHADERS
@@ -49,6 +58,7 @@ DEFINE_FALLBACK_SHADER(VertexLitGeneric_DX7,	LUX_VertexLitGeneric)
 DEFINE_FALLBACK_SHADER(VertexLitGeneric_DX6,	LUX_VertexLitGeneric)
 #endif
 
+#ifndef ASWSDK
 CON_COMMAND_F(lux_toggle_envmaplerp, "Forces EnvMapLerp and reloads all Materials.\n", FCVAR_NONE)
 {
 	// Connect MatSys if it hasn't been
@@ -62,6 +72,7 @@ CON_COMMAND_F(lux_toggle_envmaplerp, "Forces EnvMapLerp and reloads all Material
 	// Reload all Materials
 	g_pMaterialSystem->ReloadMaterials();
 }
+#endif
 
 //==========================================================================//
 // CommandBuffer Setup
@@ -95,11 +106,13 @@ public:
 	bool m_bPhong_InvertPhongMask = false;
 	bool m_bPhong_PhongExponentTextureMask = false;
 
+#ifndef ASWSDK
 	bool m_bEnvMapLerp = false;
 	bool m_bLerpLock = false;
 	CTextureReference m_RefCubemapA;
 	CTextureReference m_RefCubemapB;
 	float m_f1LerpStart = 0.0f;
+#endif
 
 	VertexLitGenericContext(IMaterialVar** ppParams)
 		: m_SemiStaticCmds(ppParams),
@@ -157,7 +170,9 @@ BEGIN_SHADER_PARAMS
 	Declare_SelfIllumTextureParameters()
 	Declare_EnvironmentMapParameters()
 	Declare_EnvMapMaskParameters()
+#ifndef ASWSDK
 	SHADER_PARAM(EnvMapLerp, SHADER_PARAM_TYPE_BOOL, "", "When the local Cubemap changes it traditionally snaps, enabling this causes them to interpolate based on Time instead.")
+#endif
 	SHADER_PARAM(BaseAlphaEnvMapMaskMinMaxExp, SHADER_PARAM_TYPE_VEC3, "", "ASW+ Feature, only allowed on Materials without BumpMaps and Phong. Applies Scale, Bias, Exponent to BaseAlphaEnvMapMask.")
 
 #ifndef ASWSDK
@@ -611,12 +626,14 @@ SHADER_INIT_PARAMS()
 			DefaultFloat(EnvMapLightScale, 1.0f);
 		}
 
+#ifndef ASWSDK
 		if(lux_envmap_forcelerp.GetBool())
 			SetBool(EnvMapLerp, true);
 
 		// Disable EnvMapLerp if the Cubemap is NOT env_cubemap
 		if(GetBool(EnvMapLerp) && V_stricmp(GetString(EnvMap), "env_cubemap"))
 			SetBool(EnvMapLerp, false);
+#endif
 	}
 
 	// Default Value is supposed to be 1.0f
@@ -1212,8 +1229,10 @@ void LuxVertexLitGeneric_Shader_Draw(IMaterialVar** ppParams, IShaderShadow* pSh
 #endif
 
 
+#ifndef ASWSDK
 		// s12 - Previous Envmap for $EnvMapLerp
 		EnableSampler(bHasEnvMap && GetBool(EnvMapLerp), SHADER_SAMPLER12, !IsHDREnabled());
+#endif
 
 		// s13 - $SelfIllumMask
 		EnableSampler(bSelfIllum && !GetBool(SelfIllum_EnvMapMask_Alpha), SAMPLER_SELFILLUM, false);
@@ -1266,15 +1285,34 @@ void LuxVertexLitGeneric_Shader_Draw(IMaterialVar** ppParams, IShaderShadow* pSh
 
 		if (bProjTex)
 		{
+#ifdef ASWSDK
+			DECLARE_STATIC_PIXEL_SHADER(lux_vertexlitgeneric_asw_flashlight_ps30);
+			SET_STATIC_PIXEL_SHADER_COMBO(LIGHTCOMBO, bBumpedShader + bHasPhong + bHasPhongExponentTexture); // Phong can be used without a BumpMap
+			SET_STATIC_PIXEL_SHADER_COMBO(WRINKLEMAPS, bAnyWrinkleMapping);
+			SET_STATIC_PIXEL_SHADER_COMBO(XBYBASEALPHA, bBlendTintByBaseAlpha + 2 * bDesaturateWithBaseAlpha);
+			SET_STATIC_PIXEL_SHADER_COMBO(DETAILTEXTURE, bHasDetailTexture);
+			SET_STATIC_PIXEL_SHADER(lux_vertexlitgeneric_asw_flashlight_ps30);
+#else
 			DECLARE_STATIC_PIXEL_SHADER(lux_vertexlitgeneric_flashlight_ps30);
 			SET_STATIC_PIXEL_SHADER_COMBO(LIGHTCOMBO, bBumpedShader + bHasPhong + bHasPhongExponentTexture); // Phong can be used without a BumpMap
 			SET_STATIC_PIXEL_SHADER_COMBO(WRINKLEMAPS, bAnyWrinkleMapping);
 			SET_STATIC_PIXEL_SHADER_COMBO(XBYBASEALPHA, bBlendTintByBaseAlpha + 2 * bDesaturateWithBaseAlpha);
 			SET_STATIC_PIXEL_SHADER_COMBO(DETAILTEXTURE, bHasDetailTexture);
 			SET_STATIC_PIXEL_SHADER(lux_vertexlitgeneric_flashlight_ps30);
+#endif
 		}
 		else if (bHasPhong)
 		{
+#ifdef ASWSDK
+			DECLARE_STATIC_PIXEL_SHADER(lux_vertexlitgeneric_asw_phong_ps30);
+			SET_STATIC_PIXEL_SHADER_COMBO(ENVMAPMODE, pContextData->m_nEnvMapMode);
+			SET_STATIC_PIXEL_SHADER_COMBO(DETAILTEXTURE, bHasDetailTexture);
+			SET_STATIC_PIXEL_SHADER_COMBO(SELFILLUMMODE, nSelfIllumMode);
+			SET_STATIC_PIXEL_SHADER_COMBO(XBYBASEALPHA, bBlendTintByBaseAlpha + 2 * bDesaturateWithBaseAlpha);
+			SET_STATIC_PIXEL_SHADER_COMBO(EXPONENTTEXTURE, bHasPhongExponentTexture);
+			SET_STATIC_PIXEL_SHADER_COMBO(WRINKLEMAPS, bAnyWrinkleMapping);
+			SET_STATIC_PIXEL_SHADER(lux_vertexlitgeneric_asw_phong_ps30);
+#else
 			DECLARE_STATIC_PIXEL_SHADER(lux_vertexlitgeneric_phong_ps30);
 			SET_STATIC_PIXEL_SHADER_COMBO(ENVMAPMODE, pContextData->m_nEnvMapMode);
 			SET_STATIC_PIXEL_SHADER_COMBO(ENVMAPLERP, bHasEnvMap && GetBool(EnvMapLerp));
@@ -1284,9 +1322,18 @@ void LuxVertexLitGeneric_Shader_Draw(IMaterialVar** ppParams, IShaderShadow* pSh
 			SET_STATIC_PIXEL_SHADER_COMBO(EXPONENTTEXTURE, bHasPhongExponentTexture);
 			SET_STATIC_PIXEL_SHADER_COMBO(WRINKLEMAPS, bAnyWrinkleMapping);
 			SET_STATIC_PIXEL_SHADER(lux_vertexlitgeneric_phong_ps30);
+#endif
 		}
 		else if (bBumpedShader)
 		{
+#ifdef ASWSDK
+			DECLARE_STATIC_PIXEL_SHADER(lux_vertexlitgeneric_asw_bump_ps30);
+			SET_STATIC_PIXEL_SHADER_COMBO(ENVMAPMODE, pContextData->m_nEnvMapMode);
+			SET_STATIC_PIXEL_SHADER_COMBO(DETAILTEXTURE, bHasDetailTexture);
+			SET_STATIC_PIXEL_SHADER_COMBO(SELFILLUMMODE, nSelfIllumMode);
+			SET_STATIC_PIXEL_SHADER_COMBO(XBYBASEALPHA, bBlendTintByBaseAlpha + 2 * bDesaturateWithBaseAlpha);
+			SET_STATIC_PIXEL_SHADER(lux_vertexlitgeneric_asw_bump_ps30);
+#else
 			DECLARE_STATIC_PIXEL_SHADER(lux_vertexlitgeneric_bump_ps30);
 			SET_STATIC_PIXEL_SHADER_COMBO(ENVMAPMODE, pContextData->m_nEnvMapMode);
 			SET_STATIC_PIXEL_SHADER_COMBO(ENVMAPLERP, bHasEnvMap && GetBool(EnvMapLerp));
@@ -1294,9 +1341,18 @@ void LuxVertexLitGeneric_Shader_Draw(IMaterialVar** ppParams, IShaderShadow* pSh
 			SET_STATIC_PIXEL_SHADER_COMBO(SELFILLUMMODE, nSelfIllumMode);
 			SET_STATIC_PIXEL_SHADER_COMBO(XBYBASEALPHA, bBlendTintByBaseAlpha + 2 * bDesaturateWithBaseAlpha);
 			SET_STATIC_PIXEL_SHADER(lux_vertexlitgeneric_bump_ps30);
+#endif
 		}
 		else
 		{
+#ifdef ASWSDK
+			DECLARE_STATIC_PIXEL_SHADER(lux_vertexlitgeneric_asw_simple_ps30);
+			SET_STATIC_PIXEL_SHADER_COMBO(ENVMAPMODE, pContextData->m_nEnvMapMode + 2 * bEnvMapSphere);
+			SET_STATIC_PIXEL_SHADER_COMBO(DETAILTEXTURE, bHasDetailTexture);
+			SET_STATIC_PIXEL_SHADER_COMBO(SELFILLUMMODE, nSelfIllumMode);
+			SET_STATIC_PIXEL_SHADER_COMBO(XBYBASEALPHA, bBlendTintByBaseAlpha + 2 * bDesaturateWithBaseAlpha);
+			SET_STATIC_PIXEL_SHADER(lux_vertexlitgeneric_asw_simple_ps30);
+#else
 			DECLARE_STATIC_PIXEL_SHADER(lux_vertexlitgeneric_simple_ps30);
 			SET_STATIC_PIXEL_SHADER_COMBO(ENVMAPMODE, pContextData->m_nEnvMapMode + 2 * bEnvMapSphere);
 			SET_STATIC_PIXEL_SHADER_COMBO(ENVMAPLERP, bHasEnvMap && GetBool(EnvMapLerp));
@@ -1304,6 +1360,7 @@ void LuxVertexLitGeneric_Shader_Draw(IMaterialVar** ppParams, IShaderShadow* pSh
 			SET_STATIC_PIXEL_SHADER_COMBO(SELFILLUMMODE, nSelfIllumMode);
 			SET_STATIC_PIXEL_SHADER_COMBO(XBYBASEALPHA, bBlendTintByBaseAlpha + 2 * bDesaturateWithBaseAlpha);
 			SET_STATIC_PIXEL_SHADER(lux_vertexlitgeneric_simple_ps30);
+#endif
 		}
 
 #ifdef ASWSDK
@@ -1699,6 +1756,7 @@ void LuxVertexLitGeneric_Shader_Draw(IMaterialVar** ppParams, IShaderShadow* pSh
 			f4EnvMapControls.y = (float)pContextData->m_bNormalMapAlphaEnvMapMask;
 			f4EnvMapControls.z = (float)pContextData->m_bPhong_InvertEnvMapMask;
 
+#ifndef ASWSDK
 			// Make really really sure ContextData is real here
 			if(GetBool(EnvMapLerp) && pContextData)
 			{
@@ -1752,6 +1810,7 @@ void LuxVertexLitGeneric_Shader_Draw(IMaterialVar** ppParams, IShaderShadow* pSh
 				BindTexture(SAMPLER_ENVMAPTEXTURE, pContextData->m_RefCubemapA);
 			}
 			else
+#endif
 				BindTexture(SAMPLER_ENVMAPTEXTURE, EnvMap, EnvMapFrame);
 
 			pShaderAPI->SetPixelShaderConstant(LUX_PS_FLOAT_ENVMAP_CONTROLS, f4EnvMapControls);
@@ -1950,27 +2009,50 @@ void LuxVertexLitGeneric_Shader_Draw(IMaterialVar** ppParams, IShaderShadow* pSh
 
 		if (bProjTex)
 		{
+#ifdef ASWSDK
+			DECLARE_DYNAMIC_PIXEL_SHADER(lux_vertexlitgeneric_asw_flashlight_ps30);
+			SET_DYNAMIC_PIXEL_SHADER_COMBO(PROJTEXSHADOWS, bFlashlightShadows);
+			SET_DYNAMIC_PIXEL_SHADER(lux_vertexlitgeneric_asw_flashlight_ps30);
+#else
 			DECLARE_DYNAMIC_PIXEL_SHADER(lux_vertexlitgeneric_flashlight_ps30);
 			SET_DYNAMIC_PIXEL_SHADER_COMBO(PROJTEXSHADOWS, bFlashlightShadows);
 			SET_DYNAMIC_PIXEL_SHADER(lux_vertexlitgeneric_flashlight_ps30);
+#endif
 		}
 		else if (bHasPhong)
 		{
+#ifdef ASWSDK
+			DECLARE_DYNAMIC_PIXEL_SHADER(lux_vertexlitgeneric_asw_phong_ps30);
+			SET_DYNAMIC_PIXEL_SHADER_COMBO(NUM_LIGHTS_COMBO, LightState.m_nNumLights);
+			SET_DYNAMIC_PIXEL_SHADER(lux_vertexlitgeneric_asw_phong_ps30);
+#else
 			DECLARE_DYNAMIC_PIXEL_SHADER(lux_vertexlitgeneric_phong_ps30);
 			SET_DYNAMIC_PIXEL_SHADER_COMBO(NUM_LIGHTS_COMBO, LightState.m_nNumLights);
 			SET_DYNAMIC_PIXEL_SHADER(lux_vertexlitgeneric_phong_ps30);
+#endif
 		}
 		else if (bBumpedShader)
 		{
+#ifdef ASWSDK
+			DECLARE_DYNAMIC_PIXEL_SHADER(lux_vertexlitgeneric_asw_bump_ps30);
+			SET_DYNAMIC_PIXEL_SHADER_COMBO(NUM_LIGHTS_COMBO, LightState.m_nNumLights);
+			SET_DYNAMIC_PIXEL_SHADER(lux_vertexlitgeneric_asw_bump_ps30);
+#else
 			DECLARE_DYNAMIC_PIXEL_SHADER(lux_vertexlitgeneric_bump_ps30);
 			SET_DYNAMIC_PIXEL_SHADER_COMBO(NUM_LIGHTS_COMBO, LightState.m_nNumLights);
 			SET_DYNAMIC_PIXEL_SHADER(lux_vertexlitgeneric_bump_ps30);
+#endif
 		}
 		else
 		{
+#ifdef ASWSDK
+			DECLARE_DYNAMIC_PIXEL_SHADER(lux_vertexlitgeneric_asw_simple_ps30);
+			SET_DYNAMIC_PIXEL_SHADER(lux_vertexlitgeneric_asw_simple_ps30);
+#else
 			DECLARE_DYNAMIC_PIXEL_SHADER(lux_vertexlitgeneric_simple_ps30);
 			SET_DYNAMIC_PIXEL_SHADER_COMBO(LIGHTMAPPED_MODEL, bHasLightmapTexture);
 			SET_DYNAMIC_PIXEL_SHADER(lux_vertexlitgeneric_simple_ps30);
+#endif
 		}
 
 //		pShaderAPI->ExecuteCommandBuffer(StaticCmds.Base());

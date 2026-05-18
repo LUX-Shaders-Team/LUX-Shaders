@@ -1,0 +1,59 @@
+//===================== File of the LUX Shader Project =====================//
+//
+//	Initial D.	:	24.12.2023 DMY
+//	Last Change :	06.05.2026 DMY
+//
+//==========================================================================//
+
+//==========================================================================//
+//	Declare Static Combos
+//==========================================================================//
+// STATIC:	"LIGHTCOMBO"				"0..3"
+// STATIC:	"WRINKLEMAPS"				"0..1"
+// STATIC:	"XBYBASEALPHA"				"0..2"
+// STATIC:	"DETAILTEXTURE"				"0..1"
+
+//==========================================================================//
+//	Declare Dynamic Combos
+//==========================================================================//
+// DYNAMIC: "PROJTEXSHADOWS"			"0..1"
+
+//==========================================================================//
+//	Skipping undesired Combos
+//	The Order of Static Combos and Skips has a drastic Impact on Compile Time!
+//==========================================================================//
+// SKIP: ( $LIGHTCOMBO < 2 && $WRINKLEMAPS != 0 )
+
+//==========================================================================//
+//	Unpack Combos specific to this Shader
+//==========================================================================//
+
+#if (LIGHTCOMBO > 0)
+	#define VLG_SIMPLE 0
+
+	#if (LIGHTCOMBO > 1)
+		#define PHONG 1
+		
+		#if (LIGHTCOMBO == 3)
+			#define PHONGEXPONENTTEXTURE 1
+		#else
+			#define PHONGEXPONENTTEXTURE 0
+		#endif
+	#else
+		#define PHONG 0
+		#define PHONGEXPONENTTEXTURE 0
+	#endif
+#else
+	#define VLG_SIMPLE 1
+	#define PHONG 0
+	#define PHONGEXPONENTTEXTURE 0
+#endif
+
+//==========================================================================//
+//	Call into Main Function
+//==========================================================================//
+
+// We are on a Projected Texture
+#define PROJTEX 1
+
+#include "lux_vertexlitgeneric_main.h"
