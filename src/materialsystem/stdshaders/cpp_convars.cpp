@@ -1,7 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	07.02.2023 DMY
-//	Last Change :	06.02.2026 DMY
+//	Last Change :	06.03.2026 DMY
 //
 //==========================================================================//
 
@@ -73,6 +73,10 @@ ConVar r_lightmap_bicubic("r_lightmap_bicubic", "0", FCVAR_NONE, "Enable bi-cubi
 
 // Used on Sky Shaders
 ConVar mat_use_compressed_hdr_textures("mat_use_compressed_hdr_textures", "0", FCVAR_NONE);
+
+#ifdef ASWSDK
+ConVar r_flashlightbrightness("r_flashlightbrightness", "0.25", FCVAR_CHEAT);
+#endif
 
 //==========================================================================//
 // General ConVars
@@ -213,3 +217,5 @@ ConVar lux_infected_forcerandomisation("lux_infected_forcerandomisation", "0", F
 //==========================================================================//
 
 ConVar lux_emissiveblend_allowopacity("lux_emissiveblend_allowopacity", "0", FCVAR_NONE, "Enables $BaseTexture Opacity to affect Emissive Blend");
+ConVar lux_projtex_shadowfiltersizefix("lux_projtex_shadowfiltersizefix", "0", FCVAR_NONE,
+"When enabled, the ShadowFilterSize is computed based on the Width/Height of the Depth Texture provided by the Engine.\nIn Contrast without, non 1:1 Aspect Ratios won't filter correctly AND sometimes the Engine provides the wrong Resolution in the Struct!");

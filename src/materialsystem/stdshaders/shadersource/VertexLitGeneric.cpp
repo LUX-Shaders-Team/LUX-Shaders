@@ -1837,7 +1837,12 @@ void LuxVertexLitGeneric_Shader_Draw(IMaterialVar** ppParams, IShaderShadow* pSh
 
 		// Binds Textures and sends Flashlight Constants
 		// Returns bFlashlightShadows
-		bool bFlashlightShadows = SetupFlashlight();
+		#ifdef ASWSDK
+			bool bUberlight = false;
+			bool bFlashlightShadows = SetupFlashlight(&bUberlight);
+		#else
+			bool bFlashlightShadows = SetupFlashlight();
+		#endif
 
 		//==========================================================================//
 		// Setup Constant Registers
@@ -2050,6 +2055,7 @@ void LuxVertexLitGeneric_Shader_Draw(IMaterialVar** ppParams, IShaderShadow* pSh
 #ifdef ASWSDK
 			DECLARE_DYNAMIC_PIXEL_SHADER(lux_vertexlitgeneric_asw_flashlight_ps30);
 			SET_DYNAMIC_PIXEL_SHADER_COMBO(PROJTEXSHADOWS, bFlashlightShadows);
+			SET_DYNAMIC_PIXEL_SHADER_COMBO(UBERLIGHT, bUberlight);
 			SET_DYNAMIC_PIXEL_SHADER(lux_vertexlitgeneric_asw_flashlight_ps30);
 #else
 			DECLARE_DYNAMIC_PIXEL_SHADER(lux_vertexlitgeneric_flashlight_ps30);

@@ -1,30 +1,47 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	24.01.2023 DMY
-//	Last Change :	 30.01.2026 DMY
+//	Last Change :	06.05.2026 DMY
 //
 //==========================================================================//
 
 #ifndef LUX_COMMON_FLASHLIGHT_H_
 #define LUX_COMMON_FLASHLIGHT_H_
 
+#include "lux_common_uberlight.h"
+
 //==========================================================================//
 // PixelShader *Float* Constant Registers
 //==========================================================================//
 // by Defining this, it allows Shaders to move the Registers to something else
 #if !defined(MOVED_REGISTERS_FLASHLIGHT)
-	const float4	cProjTexShadowTweaks			: register(LUX_PS_FLOAT_PROJTEX_TWEAKS);
+	const float4 cProjTexShadowTweaks				: register(LUX_PS_FLOAT_PROJTEX_TWEAKS);
 	#define g_f2ProjTexTexelSize						(cProjTexShadowTweaks.xy)
-	#define g_f1ProjTexShadowAtten						(cProjTexShadowTweaks.z)
-	#define g_f1ProjTexNoLambertValue					(cProjTexShadowTweaks.w)
+	#define g_f2NoiseOffsets							(cProjTexShadowTweaks.zw)
 
-	const float4	cProjTexAttenuationFactors		: register(LUX_PS_FLOAT_PROJTEX_ATTEN);
+	const float4 cProjTexAttenuationFactors			: register(LUX_PS_FLOAT_PROJTEX_ATTEN);
 	#define g_f3ProjTexDistanceAtten 					(cProjTexAttenuationFactors.xyz)
 	#define g_f1ProjTexFarZ								(cProjTexAttenuationFactors.w)
 
-	const float3	g_f3ProjTexColor				: register(LUX_PS_FLOAT_PROJTEX_COLOR);
-	const float3	g_f3ProjTexPos					: register(LUX_PS_FLOAT_PROJTEX_POSITION);
+	const float4 cProjTexColor_NoLambert			: register(LUX_PS_FLOAT_PROJTEX_COLOR);
+	#define g_f3ProjTexColor							(cProjTexColor_NoLambert.rgb)
+	#define g_f1ProjTexNoLambertValue					(cProjTexColor_NoLambert.w)
+
+	const float4 cProjTexPos_ShadowAtten			: register(LUX_PS_FLOAT_PROJTEX_POSITION);
+	#define g_f3ProjTexPos								(cProjTexPos_ShadowAtten.xyz)
+	#define g_f1ProjTexShadowAtten						(cProjTexPos_ShadowAtten.w)
+
 	const float4x4	g_f4x4ProjTexWorldToTexture		: register(LUX_PS_FLOAT_PROJTEX_MATRIX);
+#endif
+
+#if defined(ASWSDK)
+	const float3 cSmoothEdge0				: register(LUX_PS_FLOAT_UBERLIGHT_SMOOTH_EDGE_0);
+	const float3 cSmoothEdge1				: register(LUX_PS_FLOAT_UBERLIGHT_SMOOTH_EDGE_1);
+	const float3 cSmoothOneOverWidth		: register(LUX_PS_FLOAT_UBERLIGHT_SMOOTH_EDGE_OOW);
+	const float4 cShearRound				: register(LUX_PS_FLOAT_UBERLIGHT_SHEAR_ROUND);
+	const float4 cAABB						: register(LUX_PS_FLOAT_UBERLIGHT_AABB);
+	const float4x4 xmFlashlightWorldToLight : register(LUX_PS_FLOAT_UBERLIGHT_WORLD_TO_LIGHT);
+
 #endif
 
 #define NVIDIA_PCF_POISSON	0
@@ -41,32 +58,31 @@ sampler Sampler_RandomRotation	: register(s15);
 //==========================================================================//
 //	Constants
 //==========================================================================//
-float2 g_PoissonOffsets8[8] = {	float2( 0.3475f,	0.0042f),
-								float2( 0.8806f,	0.3430f),
-								float2(-0.0041f,   -0.6197f),
-								float2( 0.0472f,	0.4964f),
-								float2(-0.3730f,	0.0874f),
-								float2(-0.9217f,   -0.3177f),
-								float2(-0.6289f,	0.7388f),
-								float2( 0.5744f,   -0.7741f)	};
+static const float2 g_PoissonOffsets8[8] = { float2( 0.3475f,	 0.0042f),
+											 float2( 0.8806f,	 0.3430f),
+											 float2( 0.0472f,	 0.4964f),
+											 float2(-0.0041f,   -0.6197f),
+											 float2(-0.3730f,	 0.0874f),
+											 float2(-0.9217f,   -0.3177f),
+											 float2(-0.6289f,	 0.7388f),
+											 float2( 0.5744f,   -0.7741f)  };
 
-float2 g_PoissonOffsets16[16] = {
-								float2(-0.94201624, -0.39906216),
-								float2(0.94558609, -0.76890725),
-								float2(-0.094184101, -0.92938870),
-								float2(0.34495938, 0.29387760),
-								float2(-0.91588581, 0.45771432),
-								float2(-0.81544232, -0.87912464),
-								float2(-0.38277543, 0.27676845),
-								float2(0.97484398, 0.75648379),
-								float2(0.44323325, -0.97511554),
-								float2(0.53742981, -0.47373420),
-								float2(-0.26496911, -0.41893023),
-								float2(0.79197514, 0.19090188),
-								float2(-0.24188840, 0.99706507),
-								float2(-0.81409955, 0.91437590),
-								float2(0.19984126, 0.78641367),
-								float2(0.14383161, -0.14100790)	};
+static const float2 g_PoissonOffsets16[16] = { float2(-0.94201624, -0.39906216),
+											   float2( 0.94558609, -0.76890725),
+											   float2(-0.94184101, -0.92938870),
+											   float2( 0.34495938,  0.29387760),
+											   float2(-0.91588581,  0.45771432),
+											   float2(-0.81544232, -0.87912464),
+											   float2(-0.38277543,  0.27676845),
+											   float2( 0.97484398,  0.75648379),
+											   float2( 0.44323325, -0.97511554),
+											   float2( 0.53742981, -0.47373420),
+											   float2(-0.26496911, -0.41893023),
+											   float2( 0.79197514,  0.19090188),
+											   float2(-0.24188840,  0.99706507),
+											   float2(-0.81409955,  0.91437590),
+											   float2( 0.19984126,  0.78641367),
+											   float2( 0.14383161, -0.14100790)	 };
 
 //==========================================================================//
 //	Stock remapping Function.
@@ -83,7 +99,7 @@ float RemapValClamped(float val, float A, float B, float C, float D)
 //	Stock SDK Shadow Filters.
 //==========================================================================//
 #if 0
-float FilterShadow(const int nFilterMode, float f1ObjectDepth, float3 RMatTop, float3 RMatBottom, float distance = 0.0f)
+float FilterShadow(const int nFilterMode, float f1ObjectDepth, float3 RMatTop, float3 RMatBottom)
 {
 	// Prepare these..
 	float f1Shadow = 0.0f;
@@ -125,7 +141,10 @@ float FilterShadow(const int nFilterMode, float f1ObjectDepth, float3 RMatTop, f
 		f2RotationOffset.y = dot(RMatBottom.xy, g_PoissonOffsets8[7].xy) + RMatBottom.z;
 		f4LightDepths.w += tex2Dproj(Sampler_ShadowDepth, float4(f2RotationOffset, f1ObjectDepth, 1)).x;
 
-		f1Shadow = dot(f4LightDepths, float4(0.25, 0.25, 0.25, 0.25));
+		// ShiroDkxtro2: ASW Comment correctly points out 0.25f is a Bug. We have 8 Samples so we need 1/8 not 1/4
+		// However to keep.. say it with me.. *Stock-Consistency* we have to use the broken one
+//		f1Shadow = dot(f4LightDepths, float4(0.125f, 0.125f, 0.125f, 0.125f));
+		f1Shadow = dot(f4LightDepths, float4(0.25f, 0.25f, 0.25f, 0.25f));
 	}
 	else if (nFilterMode == ATI_NOPCF) // ATI_NOPCF
 	{
@@ -240,13 +259,13 @@ float ComputeShadowNvidiaPCF5x5Gaussian(const float2 f2ProjectedCenter, const fl
 	float flCenterTap = tex2Dproj(Sampler_ShadowDepth, float4(f2ProjectedCenter, f1ProjectedDepth, 1)).x * (55.0f / 331.0f);
 
 	// Sum all 25 Taps
-	return flOneTaps + flSevenTaps + +flFourTapsA + flFourTapsB + fl20Taps + fl33Taps + flCenterTap;
+	return flOneTaps + flSevenTaps + flFourTapsA + flFourTapsB + fl20Taps + fl33Taps + flCenterTap;
 }
 
 //==========================================================================//
 // Computes Flashlight Shadow from Depth Textures
 //==========================================================================//
-float InternalProjectedTextureShadow(float2 f2DepthTextureUV, float f1ComparisonDepth, float f1DistanceFalloff, const bool bDoShadows = false)
+float3 InternalProjectedTextureShadow(float2 f2DepthTextureUV, float f1ComparisonDepth, float f1DistanceFalloff, const bool bDoShadows = false)
 {
 	if (bDoShadows)
 	{
@@ -260,7 +279,7 @@ float InternalProjectedTextureShadow(float2 f2DepthTextureUV, float f1Comparison
 		// "Blend between shadow and the above, according to light attenuation"
 		f1Shadow = saturate(lerp(f1Attenuated, f1Shadow, f1DistanceFalloff));
 
-		return f1Shadow;
+		return (float3)f1Shadow;
 	}
 	else
 		return 1.0f;
@@ -304,8 +323,8 @@ float3 ComputeProjectedTextureDiffuse(float3 f3WorldPos, float3 f3NormalWS, cons
 	// ( Look at some 'Cookie Cutter' Images if you still don't understand )
 	//
 	// To make the Light look nicer we apply some Distance Attenuation and some hacky Math
-	float4 f4ProjTexPos = mul(float4(f3WorldPos, 1.0), g_f4x4ProjTexWorldToTexture);
-
+	float4 f4ProjTexPos = mul(float4(f3WorldPos, 1.0f), g_f4x4ProjTexWorldToTexture);
+	
 	// Clip all Pixels behind the Spotlight
 	clip(f4ProjTexPos.w);
 
@@ -313,7 +332,13 @@ float3 ComputeProjectedTextureDiffuse(float3 f3WorldPos, float3 f3NormalWS, cons
 	float3 f3ProjPos = f4ProjTexPos.xyz / f4ProjTexPos.www;
 
 	// Color * Cookie
-	float3 f3ProjTexColor = g_f3ProjTexColor.rgb * tex2D(Sampler_FlashlightCookie, f3ProjPos.xy).rgb;
+	float3 f3ProjTexColor = g_f3ProjTexColor * tex2D(Sampler_FlashlightCookie, f3ProjPos.xy).rgb;
+
+#if (defined(ASWSDK) && UBERLIGHT)
+	float4 f4UberLightPosition = mul(float4(f3WorldPos.xyz, 1.0f), xmFlashlightWorldToLight).yzxw;
+	f3ProjTexColor *= PerformUberlight(f4UberLightPosition.xyz, cSmoothEdge0, cSmoothEdge1,
+		cSmoothOneOverWidth, cShearRound.xy, cAABB, cShearRound.zw);
+#endif
 
 	// We want to normalize.
 	// normalize(v) does
@@ -333,20 +358,17 @@ float3 ComputeProjectedTextureDiffuse(float3 f3WorldPos, float3 f3NormalWS, cons
 	float f1Attenuation = saturate(dot(g_f3ProjTexDistanceAtten, float3(1.0f, 1.0f / f1Dist, 1.0f / f1DistSquared)));
 
 	// Compute Projected Texture Shadows
-	float f1Shadow = InternalProjectedTextureShadow(f3ProjPos.xy, min(f3ProjPos.z, 0.999999f), f1Attenuation, bDoShadows);
+	float3 f3Shadow = InternalProjectedTextureShadow(f3ProjPos.xy, min(f3ProjPos.z, 0.999999f), f1Attenuation, bDoShadows);
 
 	float3 f3DirectDiffuseLighting = f3ProjTexColor;
-	f3DirectDiffuseLighting *= f1Attenuation;
-	f3DirectDiffuseLighting *= f1Shadow;
-	f3DirectDiffuseLighting *= f1EndFalloffFactor;
-
-	// ShiroDkxtro2: This is pretty Important to avoid Noise at grazing Angles
-	// NoLambertValue is either 0 or 2
-	// The dot could be -1 so it has to be +2 not +1 in order to force No-Lambert Lighting
-	// Strangely enough, doesn't support Half-Lambert
-	// NOTE: Incident Light Vector so flip it
-	float f1NdL = saturate(dot(-f3LightDir.xyz, f3NormalWS) + g_f1ProjTexNoLambertValue);
-	f3DirectDiffuseLighting *= f1NdL;
+		// NoLambertValue is either 0 or 2
+		// The dot could be -1 so it has to be +2 not +1 in order to force No-Lambert Lighting
+		// NOTE: Incident Light Vector so flip it
+		float f1NdL = saturate(dot(-f3LightDir.xyz, f3NormalWS) + g_f1ProjTexNoLambertValue);
+		f3DirectDiffuseLighting *= f1NdL;
+		f3DirectDiffuseLighting *= f1Attenuation;
+		f3DirectDiffuseLighting *= f3Shadow;
+		f3DirectDiffuseLighting *= f1EndFalloffFactor;
 	
 	return f3DirectDiffuseLighting;
 }

@@ -34,6 +34,10 @@ extern ConVar mat_disable_lightwarp;
 extern ConVar r_lightmap_bicubic;
 extern ConVar mat_use_compressed_hdr_textures;
 
+#ifdef ASWSDK
+extern ConVar r_flashlightbrightness;
+#endif
+
 //==========================================================================//
 // General ConVars
 //==========================================================================//
@@ -156,5 +160,6 @@ extern ConVar lux_infected_forcerandomisation;
 //==========================================================================//
 
 extern ConVar lux_emissiveblend_allowopacity;
+extern ConVar lux_projtex_shadowfiltersizefix;
 
 #endif // CPP_CONVARS_H

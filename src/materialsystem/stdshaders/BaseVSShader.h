@@ -130,6 +130,10 @@ public:
 	float ShadowAttenFromState( FlashlightState_t const &state );
 	float ShadowFilterFromState( FlashlightState_t const &state );
 
+#ifdef ASWSDK
+	void SetupUberlightFromState(FlashlightState_t const& state);
+#endif
+
 	//==========================================================================//
 	// LUX ADDITIONS
 	//==========================================================================//
@@ -167,7 +171,11 @@ public:
 	// Bind Samplers and send constants to the shader for the flashlight.
 	// This is uniform on LUX, which is why we can do this in one function
 	// Returns bFlashlightShadow and doesn't do anything if not in flashlightmode
+#ifdef ASWSDK
+	bool SetupFlashlight(bool* bUberlight = NULL);
+#else
 	bool SetupFlashlight();
+#endif
 
 	// Compute the mipmap count of a texture
 	// This Function assumes a *square* Texture

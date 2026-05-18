@@ -845,6 +845,9 @@ void CBaseVSShader::SetFlashLightColorFromState(FlashlightState_t const &state, 
 
 	// Force flashlight to 25% bright always
 	float flFlashlightScale = 0.25f;
+#ifdef ASWSDK
+	flFlashlightScale = r_flashlightbrightness.GetFloat();
+#endif
 
 	if ( !g_pHardwareConfig->GetHDREnabled() )
 	{
@@ -858,16 +861,20 @@ void CBaseVSShader::SetFlashLightColorFromState(FlashlightState_t const &state, 
 		flFlashlightScale *= 2.5f; // Magic number that works well on the NVIDIA 8800
 	}
 
+#ifdef ASWSDK
+	flFlashlightScale *= state.m_fBrightnessScale;
+#endif
+
 	// Generate pixel shader constant
 	float const *pFlashlightColor = state.m_Color;
-	float4 f4PsConst;
+	float4 f4PsConst = 0.0f;
 	f4PsConst.x = flFlashlightScale * pFlashlightColor[0];
 	f4PsConst.y = flFlashlightScale * pFlashlightColor[1];
 	f4PsConst.z = flFlashlightScale * pFlashlightColor[2];
 
 	// This will be added to N.L before saturate to force a 1.0 N.L Term
 	// NoLambert means NdL = 1.0f
-	f4PsConst.w = bFlashlightNoLambert ? 2.0f : pFlashlightColor[3];
+	f4PsConst.w = bFlashlightNoLambert ? 2.0f : 0.0f;
 
 	// Red flashlight for testing
 	//vPsConst[0] = 0.5f; vPsConst[1] = 0.0f; vPsConst[2] = 0.0f;
@@ -889,6 +896,38 @@ float CBaseVSShader::ShadowFilterFromState( FlashlightState_t const &state )
 	// We developed shadow maps at 1024, so we expect the penumbra size to have been tuned relative to that
 	return state.m_flShadowFilterSize / state.m_flShadowMapResolution;
 }
+
+#ifdef ASWSDK
+void CBaseVSShader::SetupUberlightFromState(FlashlightState_t const& state)
+{
+	if (!state.m_bUberlight)
+		return;
+
+	UberlightState_t u = state.m_uberlightState;
+
+	// Set uberlight shader parameters as function of user controls from UberlightState_t
+	Vector4D vSmoothEdge0 = Vector4D(0.0f, u.m_fCutOn - u.m_fNearEdge, u.m_fCutOff, 0.0f);
+	Vector4D vSmoothEdge1 = Vector4D(0.0f, u.m_fCutOn, u.m_fCutOff + u.m_fFarEdge, 0.0f);
+	Vector4D vSmoothOneOverW = Vector4D(0.0f, 1.0f / u.m_fNearEdge, 1.0f / u.m_fFarEdge, 0.0f);
+	Vector4D vShearRound = Vector4D(u.m_fShearx, u.m_fSheary, 2.0f / u.m_fRoundness, -u.m_fRoundness / 2.0f);
+	Vector4D vaAbB = Vector4D(u.m_fWidth, u.m_fWidth + u.m_fWedge, u.m_fHeight, u.m_fHeight + u.m_fHedge);
+
+	m_pShaderAPI->SetPixelShaderConstant(LUX_PS_FLOAT_UBERLIGHT_SMOOTH_EDGE_0, vSmoothEdge0.Base(), 1);
+	m_pShaderAPI->SetPixelShaderConstant(LUX_PS_FLOAT_UBERLIGHT_SMOOTH_EDGE_1, vSmoothEdge1.Base(), 1);
+	m_pShaderAPI->SetPixelShaderConstant(LUX_PS_FLOAT_UBERLIGHT_SMOOTH_EDGE_OOW, vSmoothOneOverW.Base(), 1);
+	m_pShaderAPI->SetPixelShaderConstant(LUX_PS_FLOAT_UBERLIGHT_SHEAR_ROUND, vShearRound.Base(), 1);
+	m_pShaderAPI->SetPixelShaderConstant(LUX_PS_FLOAT_UBERLIGHT_AABB, vaAbB.Base(), 1);
+
+	QAngle angles;
+	QuaternionAngles(state.m_quatOrientation, angles);
+
+	// World to Light's View matrix
+	matrix3x4_t viewMatrix, viewMatrixInverse;
+	AngleMatrix(angles, state.m_vecLightOrigin, viewMatrixInverse);
+	MatrixInvert(viewMatrixInverse, viewMatrix);
+	m_pShaderAPI->SetPixelShaderConstant(LUX_PS_FLOAT_UBERLIGHT_WORLD_TO_LIGHT, viewMatrix.Base(), 4);
+}
+#endif
 
 //==========================================================================//
 // LUX ADDITIONS
@@ -978,7 +1017,11 @@ void CBaseVSShader::SetupFlashlightSamplers()
 	}
 }
 
+#ifdef ASWSDK
+bool CBaseVSShader::SetupFlashlight(bool* bUberlight)
+#else
 bool CBaseVSShader::SetupFlashlight()
+#endif
 {
 	// No Flashlight, no Data.
 	if (!m_pShaderAPI->InFlashlightMode())
@@ -1046,30 +1089,39 @@ bool CBaseVSShader::SetupFlashlight()
 		// ShiroDkxtro2: Stock uses ShadowFilterFromState
 		// This doesn't consider non 1:1 Depth Textures ( which no one will ever use anyways )
 		// To replicate Stock Behaviour here, we have to divide the ShadowFilterSize by the Resolution
-		#if 0
+		// NOTE: In SFM GetActualWidth() reports 2048 to me but m_flShadowMapResolution is 1024
+		// ShadowFilterFromState() gives the original Constant but it's wrong
+		if (!lux_projtex_shadowfiltersizefix.GetBool())
+		{
+			// This must be 1024.0f, the Value is hardcoded in the ASW Code. ( Note that changing also messes up Consistency for the SFM FilterSize Option )
+#ifdef ASWSDK
+			f4tweaks.x = ProjTexState.m_flShadowFilterSize / 1024.0f;
+#else
 			f4tweaks.x = ShadowFilterFromState(ProjTexState);
+#endif
 			f4tweaks.y = f4tweaks.x;
-		#else
+		}
+		else
+		{
 			f4tweaks.x = ProjTexState.m_flShadowFilterSize / (float)pProjTexDepthTexture->GetActualWidth();
 			f4tweaks.y = ProjTexState.m_flShadowFilterSize / (float)pProjTexDepthTexture->GetActualHeight();
-		#endif
+		}
+
+
+
+		m_pShaderAPI->SetPixelShaderConstant(LUX_PS_FLOAT_PROJTEX_TWEAKS, f4tweaks);
 	}
-	f4tweaks.z = ShadowAttenFromState(ProjTexState);
-
-	// .w should be the No Lambert Value
-
-	// Old Tweaks that we no longer need ( not using Noise-based Shadow Filter anymore )
-	/*
-	HashShadow2DJitter(flashlightState.m_flShadowJitterSeed, &f4tweaks.z, &f4tweaks.w);
-	*/
-	m_pShaderAPI->SetPixelShaderConstant(LUX_PS_FLOAT_PROJTEX_TWEAKS, f4tweaks);
 
 	// Attenuation Factors
 	float4 f4ProjTexAttenuations;
 	f4ProjTexAttenuations.x = ProjTexState.m_fConstantAtten;
 	f4ProjTexAttenuations.y = ProjTexState.m_fLinearAtten;
 	f4ProjTexAttenuations.z = ProjTexState.m_fQuadraticAtten;
+#ifdef ASWSDK
+	f4ProjTexAttenuations.w = ProjTexState.m_FarZAtten; // Uses FarZAtten on ASW
+#else
 	f4ProjTexAttenuations.w = ProjTexState.m_FarZ;
+#endif
 	m_pShaderAPI->SetPixelShaderConstant(LUX_PS_FLOAT_PROJTEX_ATTEN, f4ProjTexAttenuations);
 
 	// Send Flashlight Tint
@@ -1082,11 +1134,20 @@ bool CBaseVSShader::SetupFlashlight()
 	f4ProjTexPos.x = ProjTexState.m_vecLightOrigin[0];
 	f4ProjTexPos.y = ProjTexState.m_vecLightOrigin[1];
 	f4ProjTexPos.z = ProjTexState.m_vecLightOrigin[2];
-//	f4pos.w; // .w is still free!
+	f4ProjTexPos.w = ShadowAttenFromState(ProjTexState);
 	m_pShaderAPI->SetPixelShaderConstant(LUX_PS_FLOAT_PROJTEX_POSITION, f4ProjTexPos);
 
 	// Send WorldToShadow Matrix
 	m_pShaderAPI->SetPixelShaderConstant(LUX_PS_FLOAT_PROJTEX_MATRIX, xmWorldToTexture.Base(), 4);
+
+#ifdef ASWSDK
+	SetupUberlightFromState(ProjTexState);
+
+	// Want to return this so we can set the Dynamic Combo with it
+	// NOTE: Some Shaders may not support bUberlight yet, I made it a pointer so a default can be set ( NULL )
+	if(bUberlight)
+		*bUberlight = ProjTexState.m_bUberlight;
+#endif
 
 	return bProjTexShadows;
 }
