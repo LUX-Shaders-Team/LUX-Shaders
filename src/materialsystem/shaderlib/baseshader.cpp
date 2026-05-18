@@ -1267,6 +1267,18 @@ int CBaseShader::ComputeModulationFlags( IMaterialVar** params, IShaderDynamicAP
 		}
 	}
 
+#ifdef SFM_COMPATIBILITY
+
+	// No idea what does this do.
+	if (pShaderAPI->Unknown63() >= 1)
+	{
+		if (!CommandLine()->CheckParm("-Unknown63"))
+			Error("pShaderAPI->Unknown63() >= 1. Tell @ShiroDkxtro2 what you did to cause this! Launch with -Unknown63 to remove this Error.");
+
+		mod |= SHADER_USING_UNKNOWN;
+	}
+#endif
+
 #ifdef ASWSDK
 	if (IsSnapshotting())
 	{

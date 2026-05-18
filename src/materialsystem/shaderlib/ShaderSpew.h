@@ -1,9 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	17.09.2025 DMY
-//	Last Change :	 30.01.2026 DMY
-//
-//	Purpose of this File :	Wrapper for IShaderDynamicAPI
+//	Last Change :	18.05.2026 DMY
 //
 //==========================================================================//
 

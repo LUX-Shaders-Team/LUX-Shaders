@@ -1,7 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	17.09.2025 DMY
-//	Last Change :	 30.01.2026 DMY
+//	Last Change :	18.05.2026 DMY
 //
 //	Purpose of this File :	'Wrapper' for IShaderDynamicAPI
 //
@@ -15,6 +15,7 @@
 // extern
 CProxyShaderDynamicAPI s_ProxyShaderAPI;
 
+#ifndef ASWSDK
 void CProxyShaderDynamicAPI::SetViewports(int nCount, const ShaderViewport_t* pViewports)
 {
 	m_pShaderAPI->SetViewports(nCount, pViewports);
@@ -24,6 +25,7 @@ int CProxyShaderDynamicAPI::GetViewports(ShaderViewport_t* pViewports, int nMax)
 {
 	return m_pShaderAPI->GetViewports(pViewports, nMax);
 }
+#endif
 
 double CProxyShaderDynamicAPI::CurrentTime() const
 {
@@ -45,6 +47,7 @@ void CProxyShaderDynamicAPI::GetSceneFogColor(unsigned char* rgb)
 	m_pShaderAPI->GetSceneFogColor(rgb);
 }
 
+#ifndef ASWSDK
 void CProxyShaderDynamicAPI::MatrixMode(MaterialMatrixMode_t matrixMode)
 {
 m_pShaderAPI->MatrixMode(matrixMode);
@@ -73,12 +76,14 @@ void CProxyShaderDynamicAPI::MultMatrixLocal(float* m)
 {
 	m_pShaderAPI->MultMatrixLocal(m);
 }
+#endif
 
 void CProxyShaderDynamicAPI::GetMatrix(MaterialMatrixMode_t matrixMode, float* dst)
 {
 	m_pShaderAPI->GetMatrix(matrixMode, dst);
 }
 
+#ifndef ASWSDK
 void CProxyShaderDynamicAPI::LoadIdentity(void)
 {
 	m_pShaderAPI->LoadIdentity();
@@ -163,6 +168,7 @@ void CProxyShaderDynamicAPI::Color4ubv(unsigned char const* pColor)
 {
 	m_pShaderAPI->Color4ubv(pColor);
 }
+#endif
 
 void CProxyShaderDynamicAPI::SetVertexShaderConstant(int var, float const* pVec, int numConst, bool bForce)
 {
@@ -187,21 +193,31 @@ void CProxyShaderDynamicAPI::GetWorldSpaceCameraPosition(float* pPos) const
 	m_pShaderAPI->GetWorldSpaceCameraPosition(pPos);
 }
 
+#ifdef ASWSDK
+void CProxyShaderDynamicAPI::GetWorldSpaceCameraDirection(float* pDir) const
+{
+	m_pShaderAPI->GetWorldSpaceCameraDirection(pDir);
+}
+#endif
+
 int CProxyShaderDynamicAPI::GetCurrentNumBones(void) const
 {
 	return m_pShaderAPI->GetCurrentNumBones();
 }
 
+#ifndef ASWSDK
 int CProxyShaderDynamicAPI::GetCurrentLightCombo(void) const
 {
 	return m_pShaderAPI->GetCurrentLightCombo();
 }
+#endif
 
 MaterialFogMode_t CProxyShaderDynamicAPI::GetCurrentFogType(void) const 
 {
 	return m_pShaderAPI->GetCurrentFogType();
 }
 
+#ifndef ASWSDK
 void CProxyShaderDynamicAPI::SetTextureTransformDimension(TextureStage_t textureStage, int dimension, bool projected)
 {
 	m_pShaderAPI->SetTextureTransformDimension(textureStage, dimension, projected);
@@ -216,6 +232,7 @@ void CProxyShaderDynamicAPI::SetBumpEnvMatrix(TextureStage_t textureStage, float
 {
 	m_pShaderAPI->SetBumpEnvMatrix(textureStage, m00, m01, m10, m11);
 }
+#endif
 
 void CProxyShaderDynamicAPI::SetVertexShaderIndex(int vshIndex)
 {
@@ -232,6 +249,21 @@ void CProxyShaderDynamicAPI::GetBackBufferDimensions(int& width, int& height) co
 	m_pShaderAPI->GetBackBufferDimensions(width, height);
 }
 
+#ifdef ASWSDK
+// Get the dimensions of the current render target
+void CProxyShaderDynamicAPI::GetCurrentRenderTargetDimensions(int& nWidth, int& nHeight) const
+{
+	m_pShaderAPI->GetCurrentRenderTargetDimensions(nWidth, nHeight);
+}
+
+// Get the current viewport
+void CProxyShaderDynamicAPI::GetCurrentViewport(int& nX, int& nY, int& nWidth, int& nHeight) const
+{
+	m_pShaderAPI->GetCurrentViewport(nX, nY, nWidth, nHeight);
+}
+#endif
+
+#ifndef ASWSDK
 int CProxyShaderDynamicAPI::GetMaxLights(void) const
 {
 	return m_pShaderAPI->GetMaxLights();
@@ -241,6 +273,7 @@ const LightDesc_t& CProxyShaderDynamicAPI::GetLight(int lightNum) const
 {
 	return m_pShaderAPI->GetLight(lightNum);
 }
+#endif
 
 void CProxyShaderDynamicAPI::SetPixelShaderFogParams(int reg)
 {
@@ -248,6 +281,7 @@ void CProxyShaderDynamicAPI::SetPixelShaderFogParams(int reg)
 	m_pShaderAPI->SetPixelShaderFogParams(reg);
 }
 
+#ifndef ASWSDK
 void CProxyShaderDynamicAPI::SetVertexShaderStateAmbientLightCube()
 {
 	s_ShaderSpew.LogVertexShaderRegister(21, 6, "Ambient Cube");
@@ -260,7 +294,6 @@ void CProxyShaderDynamicAPI::SetPixelShaderStateAmbientLightCube(int pshReg, boo
 	m_pShaderAPI->SetPixelShaderStateAmbientLightCube(pshReg, bForceToBlack);
 }
 
-
 void CProxyShaderDynamicAPI::CommitPixelShaderLighting(int pshReg)
 {
 	s_ShaderSpew.LogPixelShaderRegister(pshReg, 6, "Light Data");
@@ -271,6 +304,7 @@ CMeshBuilder* CProxyShaderDynamicAPI::GetVertexModifyBuilder()
 {
 	return m_pShaderAPI->GetVertexModifyBuilder();
 }
+#endif
 
 bool CProxyShaderDynamicAPI::InFlashlightMode() const
 {
@@ -287,10 +321,12 @@ bool CProxyShaderDynamicAPI::InEditorMode() const
 	return m_pShaderAPI->InEditorMode();
 }
 
+#ifndef ASWSDK
 MorphFormat_t CProxyShaderDynamicAPI::GetBoundMorphFormat()
 {
 	return m_pShaderAPI->GetBoundMorphFormat();
 }
+#endif
 
 void CProxyShaderDynamicAPI::BindStandardTexture(Sampler_t sampler, StandardTextureId_t id)
 {
@@ -298,7 +334,11 @@ void CProxyShaderDynamicAPI::BindStandardTexture(Sampler_t sampler, StandardText
 	m_pShaderAPI->BindStandardTexture(sampler, id);
 }
 
+#ifdef ASWSDK
+ITexture* CProxyShaderDynamicAPI::GetRenderTargetEx(int nRenderTargetID) const
+#else
 ITexture* CProxyShaderDynamicAPI::GetRenderTargetEx(int nRenderTargetID)
+#endif
 {
 	return m_pShaderAPI->GetRenderTargetEx(nRenderTargetID);
 }
@@ -313,6 +353,7 @@ const Vector& CProxyShaderDynamicAPI::GetToneMappingScaleLinear(void) const
 	return m_pShaderAPI->GetToneMappingScaleLinear();
 }
 
+#ifndef ASWSDK
 float CProxyShaderDynamicAPI::GetLightMapScaleFactor(void) const
 {
 	return m_pShaderAPI->GetLightMapScaleFactor();
@@ -327,6 +368,13 @@ void CProxyShaderDynamicAPI::PerspectiveOffCenterX(double fovx, double aspect, d
 {
 	m_pShaderAPI->PerspectiveOffCenterX(fovx, aspect, zNear, zFar, bottom, top, left, right);
 }
+#else
+// Sets the ambient light color
+void CProxyShaderDynamicAPI::SetAmbientLightColor(float r, float g, float b)
+{
+	m_pShaderAPI->SetAmbientLightColor(r, g, b);
+}
+#endif
 
 void CProxyShaderDynamicAPI::SetFloatRenderingParameter(int parm_number, float value)
 {
@@ -358,6 +406,7 @@ Vector CProxyShaderDynamicAPI::GetVectorRenderingParameter(int parm_number) cons
 	return m_pShaderAPI->GetVectorRenderingParameter(parm_number);
 }
 
+#ifndef ASWSDK
 void CProxyShaderDynamicAPI::SetStencilEnable(bool onoff)
 {
 	m_pShaderAPI->SetStencilEnable(onoff);
@@ -407,16 +456,19 @@ void CProxyShaderDynamicAPI::GetDXLevelDefaults(uint& max_dxlevel, uint& recomme
 {
 	m_pShaderAPI->GetDXLevelDefaults(max_dxlevel, recommended_dxlevel);
 }
+#endif
 	
 const FlashlightState_t& CProxyShaderDynamicAPI::GetFlashlightStateEx(VMatrix& worldToTexture, ITexture** pFlashlightDepthTexture) const
 {
 	return m_pShaderAPI->GetFlashlightStateEx(worldToTexture, pFlashlightDepthTexture);
 }
 
+#ifndef ASWSDK
 float CProxyShaderDynamicAPI::GetAmbientLightCubeLuminance()
 {
 	return m_pShaderAPI->GetAmbientLightCubeLuminance();
 }
+#endif
 
 void CProxyShaderDynamicAPI::GetDX9LightState(LightState_t* state) const
 {
@@ -506,21 +558,78 @@ void CProxyShaderDynamicAPI::ExecuteCommandBuffer(uint8* pCmdBuffer)
 	m_pShaderAPI->ExecuteCommandBuffer(pCmdBuffer);	
 }
 
+#ifndef ASWSDK
 void CProxyShaderDynamicAPI::SetStandardTextureHandle(StandardTextureId_t nId, ShaderAPITextureHandle_t nHandle)
 {
 	m_pShaderAPI->SetStandardTextureHandle(nId, nHandle);
 }
+#endif
 
 void CProxyShaderDynamicAPI::GetCurrentColorCorrection(ShaderColorCorrectionInfo_t* pInfo)
 {
 	m_pShaderAPI->GetCurrentColorCorrection(pInfo);
 }
 
-void CProxyShaderDynamicAPI::SetPSNearAndFarZ(int pshReg)
-{
-	s_ShaderSpew.LogPixelShaderRegister(pshReg, 1, "NearZ and FarZ");
-	m_pShaderAPI->SetPSNearAndFarZ(pshReg);	 
-}
+#ifdef SFM_COMPATIBILITY
+	ITexture* CProxyShaderDynamicAPI::GetTextureRenderingParameter(int parm_number) const
+	{
+		return m_pShaderAPI->GetTextureRenderingParameter(parm_number);
+	}
+
+	void CProxyShaderDynamicAPI::SetScreenSizeForVPOS(int pshReg)
+	{
+		m_pShaderAPI->SetScreenSizeForVPOS(pshReg);
+	}
+
+	void CProxyShaderDynamicAPI::SetVSNearAndFarZ(int vshReg)
+	{
+		m_pShaderAPI->SetVSNearAndFarZ(vshReg);
+	}
+
+	float CProxyShaderDynamicAPI::GetFarZ()
+	{
+		return m_pShaderAPI->GetFarZ();
+	}
+
+	// allows overriding texture filtering mode on an already bound texture.
+	void CProxyShaderDynamicAPI::SetTextureFilterMode(Sampler_t sampler, TextureFilterMode_t nMode)
+	{
+		m_pShaderAPI->SetTextureFilterMode(sampler, nMode);
+	}
+#else
+	#ifdef ASWSDK
+		ITexture* CProxyShaderDynamicAPI::GetTextureRenderingParameter(int parm_number) const
+		{
+			return m_pShaderAPI->GetTextureRenderingParameter(parm_number);
+		}
+
+		void CProxyShaderDynamicAPI::SetScreenSizeForVPOS(int pshReg)
+		{
+			m_pShaderAPI->SetScreenSizeForVPOS(pshReg);
+		}
+
+		void CProxyShaderDynamicAPI::SetVSNearAndFarZ(int vshReg)
+		{
+			m_pShaderAPI->SetScreenSizeForVPOS(vshReg);
+		}
+
+		float CProxyShaderDynamicAPI::GetFarZ()
+		{
+			return m_pShaderAPI->GetFarZ();
+		}
+
+		bool CProxyShaderDynamicAPI::SinglePassFlashlightModeEnabled(void)
+		{
+			return m_pShaderAPI->SinglePassFlashlightModeEnabled();
+		}
+	#else
+		void CProxyShaderDynamicAPI::SetPSNearAndFarZ(int pshReg)
+		{
+			s_ShaderSpew.LogPixelShaderRegister(pshReg, 1, "NearZ and FarZ");
+			m_pShaderAPI->SetPSNearAndFarZ(pshReg);
+		}
+	#endif
+#endif
 
 void CProxyShaderDynamicAPI::SetDepthFeatheringPixelShaderConstant(int iConstant, float fDepthBlendScale)
 {
@@ -528,9 +637,58 @@ void CProxyShaderDynamicAPI::SetDepthFeatheringPixelShaderConstant(int iConstant
 	m_pShaderAPI->SetDepthFeatheringPixelShaderConstant(iConstant, fDepthBlendScale);
 }
 
-#ifdef TF2SDK
-int CProxyShaderDynamicAPI::GetPixelFogCombo1(bool bSupportsRadial)
-{
-	return m_pShaderAPI->GetPixelFogCombo1(bSupportsRadial);
-}
+#ifdef SFM_COMPATIBILITY
+	void CProxyShaderDynamicAPI::GetFlashlightShaderInfo(bool* pShadowsEnabled, bool* pUberLight) const
+	{
+		m_pShaderAPI->GetFlashlightShaderInfo(pShadowsEnabled, pUberLight);
+	}
+
+	float CProxyShaderDynamicAPI::GetFlashlightAmbientOcclusion() const
+	{
+		return m_pShaderAPI->GetFlashlightAmbientOcclusion();
+	}
+
+	TessellationMode_t CProxyShaderDynamicAPI::GetTessellationMode() const
+	{
+		return m_pShaderAPI->GetTessellationMode();
+	}
+
+	float CProxyShaderDynamicAPI::GetSubDHeight() const
+	{
+		return m_pShaderAPI->GetSubDHeight();
+	}
+#else
+	#ifdef ASWSDK
+		void CProxyShaderDynamicAPI::GetFlashlightShaderInfo(bool* pShadowsEnabled, bool* pUberLight) const
+		{
+			m_pShaderAPI->GetFlashlightShaderInfo(pShadowsEnabled, pUberLight);
+		}
+
+		float CProxyShaderDynamicAPI::GetFlashlightAmbientOcclusion() const
+		{
+			return m_pShaderAPI->GetFlashlightAmbientOcclusion();
+		}
+
+		void CProxyShaderDynamicAPI::SetTextureFilterMode(Sampler_t sampler, TextureFilterMode_t nMode)
+		{
+			m_pShaderAPI->SetTextureFilterMode(sampler, nMode);
+		}
+
+		TessellationMode_t CProxyShaderDynamicAPI::GetTessellationMode() const
+		{
+			return m_pShaderAPI->GetTessellationMode();
+		}
+
+		float CProxyShaderDynamicAPI::GetSubDHeight()
+		{
+			return m_pShaderAPI->GetSubDHeight();
+		}
+	#else
+		#ifdef TF2SDK
+			int CProxyShaderDynamicAPI::GetPixelFogCombo1(bool bSupportsRadial)
+			{
+				return m_pShaderAPI->GetPixelFogCombo1(bSupportsRadial);
+			}
+		#endif
+	#endif
 #endif

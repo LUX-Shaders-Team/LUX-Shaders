@@ -1,7 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	19.09.2025 DMY
-//	Last Change :	19.03.2026 DMY
+//	Last Change :	18.05.2026 DMY
 //
 //	Purpose of this File :	Helper Function for logging and spewing Shader Data
 //
@@ -1131,6 +1131,7 @@ int CShaderSpew::InterpretCommand(uint8_t** pBuffer)
 		break;
 	}
 
+#ifndef ASWSDK
 	case CBCMD_COMMITPIXELSHADERLIGHTING:
 	{
 		// After Command comes the first Register
@@ -1170,6 +1171,7 @@ int CShaderSpew::InterpretCommand(uint8_t** pBuffer)
 		// Next Command!
 		break;
 	}
+#endif
 
 	case CBCMD_SET_DEPTH_FEATHERING_CONST:
 	{

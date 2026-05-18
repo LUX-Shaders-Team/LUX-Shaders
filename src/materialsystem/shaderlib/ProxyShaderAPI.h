@@ -1,7 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	17.09.2025 DMY
-//	Last Change :	 30.01.2026 DMY
+//	Last Change :	18.05.2026 DMY
 //
 //	Purpose of this File :	'Wrapper' for IShaderDynamicAPI
 //
@@ -17,20 +17,31 @@
 #include "shaderapi/ishaderdynamic.h"
 #include "ShaderSpew.h"
 
-// For the TF2SDK Define
+// For the TF2SDK and ASWSDK Define
 #include "../stdshaders/lux_common_defines.h"
+
+#define EMPTY_IMPL(func) \
+    void func() override {}
+
+#define EMPTY_IMPL_CONST(func) \
+    void func() const override {}
+
+#define EMPTY_INT_IMPL_CONST(func) \
+    int func() const override { return 0; }
 
 // Inherit the original class
 class CProxyShaderDynamicAPI : IShaderDynamicAPI
 {
 	// NOTE: Do not put any Functions at the Top here, this needs to follow the Layout of IShaderDynamicAPI!
 public:
+#ifndef ASWSDK
 	// Likely not intended to be used by a Shader
 	void SetViewports( int nCount, const ShaderViewport_t* pViewports ) override;
 
 	// Returns Information on the current ViewPort
 	// For an Example of how this is used, see LUX_Cable_Spline
 	int GetViewports( ShaderViewport_t* pViewports, int nMax ) const override;
+#endif
 
 	// Returns the Time in Seconds.
 	// NOTE: This is not Game Time! The Value of the double WILL increase if the Game is paused
@@ -51,6 +62,7 @@ public:
 	// ????: Linear? Does this change with ShadowState Fog Modes?
 	void GetSceneFogColor( unsigned char *rgb ) override;
 
+#ifndef ASWSDK
 	// Stuff related to Matrix Stacks
 	// Likely not intended to be used by a Shader
 	void MatrixMode( MaterialMatrixMode_t matrixMode ) override;
@@ -59,7 +71,11 @@ public:
 	void LoadMatrix( float *m ) override;
 	void MultMatrix( float *m ) override;
 	void MultMatrixLocal( float *m ) override;
+#endif
+
 	void GetMatrix( MaterialMatrixMode_t matrixMode, float *dst ) override;
+
+#ifndef ASWSDK
 	void LoadIdentity( void ) override;
 	void LoadCameraToWorld( void ) override;
 	void Ortho( double left, double right, double bottom, double top, double zNear, double zFar ) override;
@@ -80,6 +96,7 @@ public:
 	void Color3ubv( unsigned char const* pColor ) override;
 	void Color4ub( unsigned char r, unsigned char g, unsigned char b, unsigned char a ) override;
 	void Color4ubv( unsigned char const* pColor ) override;
+#endif
 
 	// Sets one or more Float Constant Register for the Vertex Shader
 	void SetVertexShaderConstant( int var, float const* pVec, int numConst = 1, bool bForce = false ) override;
@@ -94,11 +111,17 @@ public:
 	// Gets the current Camera Position in World Space. [float3]
 	void GetWorldSpaceCameraPosition( float* pPos ) const override;
 
+#ifdef ASWSDK
+	void GetWorldSpaceCameraDirection(float* pDir) const override;
+#endif
+
 	// Returns the Bone Count for animated Models
 	int GetCurrentNumBones( void ) const override;
 
+#ifndef ASWSDK
 	// ????: What does this return exactly?
 	int GetCurrentLightCombo( void ) const override;
+#endif
 
 	// Although I have not confirmed this,
 	// GetCurrentFogType() likely returns the Fog Type of the Material itself
@@ -109,9 +132,11 @@ public:
 
 	// Outdated Methods
 	// "fixme: move this to shadow state"
+#ifndef ASWSDK
 	void SetTextureTransformDimension( TextureStage_t textureStage, int dimension, bool projected ) override;
 	void DisableTextureTransform( TextureStage_t textureStage ) override;
 	void SetBumpEnvMatrix( TextureStage_t textureStage, float m00, float m01, float m10, float m11 ) override;
+#endif
 
 	// Sets the Dynamic Shader Combo
 	// ????: Why is one default -1 the other 0?
@@ -124,15 +149,25 @@ public:
 	// or use ITexture* GetRenderTargetEx() if you want to handle multiple Destination Targets
 	void GetBackBufferDimensions( int& width, int& height ) const override;
 
+#ifdef ASWSDK
+	// Get the dimensions of the current render target
+	void GetCurrentRenderTargetDimensions(int& nWidth, int& nHeight) const override;
+
+	// Get the current viewport
+	void GetCurrentViewport(int& nX, int& nY, int& nWidth, int& nHeight) const override;
+#endif
+
 	// "FIXME: The following 6 methods used to live in IShaderAPI
 	// and were moved for stdshader_dx8. Let's try to move them back!"
 
+#ifndef ASWSDK
 	// Get the current maximum Number of Lights a Model receives
 	// The Maximum for this is usually be 4, but it has been seen at 3
 	int GetMaxLights( void ) const override;
 
 	// Returns LightData for a specific Light Index
 	const LightDesc_t& GetLight( int lightNum ) const override;
+#endif
 
 	// Sets a float4 to the specified Register containing the Fog Parameters
 	// .x FogEndOverRange
@@ -144,6 +179,7 @@ public:
 	// NOTE2: WaterZ is set to the latest WaterZ even if the Water Surface is no longer in View
 	void SetPixelShaderFogParams( int reg ) override;
 
+#ifndef ASWSDK
 	// Sets a float3[6] Ambient Color Cube to 6 Registers on the Vertex Shader
 	// Specifically on c21, c22, c23, c24, c25, c26
 	void SetVertexShaderStateAmbientLightCube() override;
@@ -159,6 +195,7 @@ public:
 	// NOTE: This does not appear to be functional
 	// Probably a dead DX8 Feature
 	CMeshBuilder* GetVertexModifyBuilder() override;
+#endif
 
 	// Returns whether or not the Shader finds itself on an additive projected Texture Pass
 	// You should probably use the CBaseShader Function 'UsingFlashlight' instead
@@ -172,17 +209,23 @@ public:
 	// You should probably use the CBaseShader Function 'UsingEditor' instead
 	bool InEditorMode() const override;
 
+#ifndef ASWSDK
 	// "Gets the bound morph's vertex format returns 0 if no morph is bound"
 	MorphFormat_t GetBoundMorphFormat() override;
+#endif
 
 	// Binds a Standard Texture
 	// See also the CBaseShader Functions
 	void BindStandardTexture( Sampler_t sampler, StandardTextureId_t id ) override;
 
+#ifdef ASWSDK
 	// Returns the ITexture of currently bound Rendertargets 0-3
 	// Note that usually Source only has 1 Rendertarget
 	// Note also that this can randomly return a nullptr. Might be better to go through the Materialsystem here
+	ITexture* GetRenderTargetEx(int nRenderTargetID) const override;
+#else
 	ITexture *GetRenderTargetEx( int nRenderTargetID ) override;
+#endif
 
 	// Sets the ToneMappingScale, this should probably not be called from a Shader.
 	void SetToneMappingScaleLinear( const Vector &scale ) override;
@@ -191,6 +234,7 @@ public:
 	// NOTE: This is a Vector, implying it returns more than one Value
 	const Vector &GetToneMappingScaleLinear( void ) const override;
 
+#ifndef ASWSDK
 	// Returns the LightmapScaleFactor.
 	// For HDR this will be 16.0f
 	// LDR gets 4.594794f (?)
@@ -205,6 +249,10 @@ public:
 	// "Special off-center perspective matrix for DoF, MSAA jitter and poster rendering" - Alien Swarm imaterialsystem.h
 	// This is likely not intended to be used on a Shader
 	void PerspectiveOffCenterX( double fovx, double aspect, double zNear, double zFar, double bottom, double top, double left, double right ) override;
+#else
+	// Sets the ambient light color
+	void SetAmbientLightColor(float r, float g, float b) override;
+#endif
 
 	// Shaders shouldn't set Rendering Parameters during Rendering!!
 	void SetFloatRenderingParameter(int parm_number, float value) override;
@@ -220,6 +268,7 @@ public:
 	int GetIntRenderingParameter(int parm_number) const override ;
 	Vector GetVectorRenderingParameter(int parm_number) const override ;
 
+#ifndef ASWSDK
 	// Stencil Buffer Operations.
 	// This is likely not intended to be used on a Shader
 	void SetStencilEnable(bool onoff) override;
@@ -235,13 +284,23 @@ public:
 	// Returns some DXLevel Information
 	// NOTE: Shouldn't this be a g_pHardwareConfig Method? See also GetDXSupportLevel
 	void GetDXLevelDefaults(uint &max_dxlevel,uint &recommended_dxlevel) override;
+#endif
 
 	// Returns the FlashlightState_t and the assosciated Matrix of the current projected Texture
 	// If the Depth Texture ITexture* is NOT nullptr it means the projected Texture has a Shadows
 	const FlashlightState_t &GetFlashlightStateEx( VMatrix &worldToTexture, ITexture **pFlashlightDepthTexture ) const override;
 
+#ifndef ASWSDK
 	// Returns the perceptual(?) Luminance of the AmbientLightCube
 	float GetAmbientLightCubeLuminance() override;
+#endif
+
+#ifdef SFM_COMPATIBILITY
+	EMPTY_IMPL(Unk32);
+	EMPTY_IMPL(Unk33);
+	EMPTY_IMPL(Unk34);
+	EMPTY_IMPL(Unk35);
+#endif
 
 	// Returns the LightState for a Model.
 	// This is mostly useless for Brushes.
@@ -308,32 +367,79 @@ public:
 	// You can also check ProxyShaderAPI.cpp to see how this *may* be interpreted by the ShaderAPI
 	void ExecuteCommandBuffer( uint8 *pCmdBuffer ) override;
 
+#ifndef ASWSDK
 	// "interface for mat system to tell shaderapi about standard texture handles"
 	// This is used by CBaseShader.
 	// This is likely not intended to be used by a Shader directly
 	void SetStandardTextureHandle( StandardTextureId_t nId, ShaderAPITextureHandle_t nHandle ) override;
+#endif
 
 	// "Interface for mat system to tell shaderapi about color correction"
 	// Used in EnginePost
 	void GetCurrentColorCorrection( ShaderColorCorrectionInfo_t* pInfo ) override;
 
-	// Sets a float4 to the specified Register containing Near and FarZ
-	// .x NearZ
-	// .y FarZ
-	// .zw Empty
-	void SetPSNearAndFarZ( int pshReg ) override;
+#ifdef SFM_COMPATIBILITY
+	ITexture* GetTextureRenderingParameter(int parm_number) const override;
+
+	void SetScreenSizeForVPOS(int pshReg = 32) override;
+	void SetVSNearAndFarZ(int vshReg) override;
+	EMPTY_IMPL(Unk57);
+	float GetFarZ() override;
+
+	// allows overriding texture filtering mode on an already bound texture.
+	void SetTextureFilterMode(Sampler_t sampler, TextureFilterMode_t nMode) override;
+#else
+	#ifdef ASWSDK
+		ITexture* GetTextureRenderingParameter(int parm_number) const override;
+		void SetScreenSizeForVPOS(int pshReg = 32) override;
+		void SetVSNearAndFarZ(int vshReg) override;
+		float GetFarZ() override;
+		bool SinglePassFlashlightModeEnabled(void) override;
+	#else
+		// Sets a float4 to the specified Register containing Near and FarZ
+		// .x NearZ
+		// .y FarZ
+		// .zw Empty
+		void SetPSNearAndFarZ( int pshReg ) override;
+	#endif
+#endif
 
 	// Sets (DepthRange / Scale), .yzw is empty(?)
 	// See lux_common_depth.h for more Information.
 	void SetDepthFeatheringPixelShaderConstant( int iConstant, float fDepthBlendScale ) override;
 	
-#ifdef TF2SDK
-	// Introduced by the TF2SDK. This is identical to GetPixelFogCombo,
-	// Except, it returns 2 for Radial Fog.
-	// Preferably use HasRadialFog() from CBaseVSShader,
-	// It allows support for lux_radialfog and subsequently SDK2013SP
-	int GetPixelFogCombo1( bool bSupportsRadial ) override;
+#ifdef SFM_COMPATIBILITY
+	void GetFlashlightShaderInfo(bool* pShadowsEnabled, bool* pUberLight) const override;
+
+	float GetFlashlightAmbientOcclusion() const override;
+
+	EMPTY_INT_IMPL_CONST(Unknown63);
+	EMPTY_IMPL_CONST(Unknown64);
+
+	TessellationMode_t GetTessellationMode() const override;
+
+	float GetSubDHeight() const override;
+#else
+	#ifdef ASWSDK
+		void GetFlashlightShaderInfo(bool* pShadowsEnabled, bool* pUberLight) const override;
+		float GetFlashlightAmbientOcclusion() const override;
+
+		// allows overriding texture filtering mode on an already bound texture.
+		void SetTextureFilterMode(Sampler_t sampler, TextureFilterMode_t nMode) override;
+
+		TessellationMode_t GetTessellationMode() const override;
+		float GetSubDHeight() override;
+	#else
+		#ifdef TF2SDK
+			// Introduced by the TF2SDK. This is identical to GetPixelFogCombo,
+			// Except, it returns 2 for Radial Fog.
+			// Preferably use HasRadialFog() from CBaseVSShader,
+			// It allows support for lux_radialfog and subsequently SDK2013SP
+			int GetPixelFogCombo1( bool bSupportsRadial ) override;
+		#endif
+	#endif
 #endif
+
 
 	private:
 	IShaderDynamicAPI* m_pShaderAPI = NULL;

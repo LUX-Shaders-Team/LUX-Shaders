@@ -17,6 +17,7 @@
 
 #include "interface.h"
 #include <materialsystem/IShader.h>
+#include "../stdshaders/lux_common_defines.h"
 
 //-----------------------------------------------------------------------------
 // Forward declarations
@@ -29,6 +30,7 @@ class IShader;
 //-----------------------------------------------------------------------------
 // The Shader system interface version
 //-----------------------------------------------------------------------------
+// The Interface Version does not change from Orange Box to ASW!
 #define SHADERSYSTEM_INTERFACE_VERSION		"ShaderSystem002"
 
 
@@ -37,17 +39,75 @@ class IShader;
 //-----------------------------------------------------------------------------
 enum
 {
-	SHADER_USING_COLOR_MODULATION = 0x1,
-	SHADER_USING_ALPHA_MODULATION = 0x2,
-	SHADER_USING_FLASHLIGHT = 0x4,
+#ifdef SFM_COMPATIBILITY
+	SHADER_USING_ALPHA_MODULATION = 0x1,
+	SHADER_USING_FLASHLIGHT = 0x2,
+	SHADER_USING_UNKNOWN = 0x04,
 	SHADER_USING_FIXED_FUNCTION_BAKED_LIGHTING = 0x8,
 	SHADER_USING_EDITOR = 0x10,
-};
 
+	// the BUFFER0 and GBUFFER1 bits provide 3 g-buffermodes plus the normal modes.
+	// the modes are:
+	// Normal rendering = ( gbuffer1 = 0, gbuffer0 = 0 )
+	// Output pos, normal, albedo via mrts = (0,1)
+	// output fixed lighted single image = (1,0)
+	// output the normal = (1,1)
+	SHADER_USING_GBUFFER0 = 0x20,
+	SHADER_USING_GBUFFER1 = 0x40,
+#else
+	#ifdef ASWSDK
+		SHADER_USING_ALPHA_MODULATION = 0x1,
+		SHADER_USING_FLASHLIGHT = 0x2,
+		SHADER_USING_FIXED_FUNCTION_BAKED_LIGHTING = 0x4,
+		SHADER_USING_EDITOR = 0x8,
+	
+		// the BUFFER0 and GBUFFER1 bits provide 3 g-buffermodes plus the normal modes.
+		// the modes are:
+		// Normal rendering = ( gbuffer1 = 0, gbuffer0 = 0 )
+		// Output pos, normal, albedo via mrts = (0,1)
+		// output fixed lighted single image = (1,0)
+		// output the normal = (1,1)
+		SHADER_USING_GBUFFER0 = 0x10,
+		SHADER_USING_GBUFFER1 = 0x20,
+	#else
+		SHADER_USING_COLOR_MODULATION = 0x1,
+		SHADER_USING_ALPHA_MODULATION = 0x2,
+		SHADER_USING_FLASHLIGHT = 0x4,
+		SHADER_USING_FIXED_FUNCTION_BAKED_LIGHTING = 0x8,
+		SHADER_USING_EDITOR = 0x10,
+	#endif
+#endif
+};
 
 //-----------------------------------------------------------------------------
 // The shader system (a singleton)
 //-----------------------------------------------------------------------------
+#ifdef ASWSDK
+abstract_class IShaderSystem
+{
+public:
+	virtual ShaderAPITextureHandle_t GetShaderAPITextureBindHandle( ITexture *pTexture, int nFrameVar, int nTextureChannel = 0 ) =0;
+
+	// Binds a texture
+	virtual void BindTexture( Sampler_t sampler1, ITexture *pTexture, int nFrameVar = 0 ) = 0;
+	virtual void BindTexture( Sampler_t sampler1, Sampler_t sampler2, ITexture *pTexture, int nFrameVar = 0 ) = 0;
+
+	// Takes a snapshot
+	virtual void TakeSnapshot( ) = 0;
+
+	// Draws a snapshot
+	virtual void DrawSnapshot( const unsigned char *pInstanceCommandBuffer, bool bMakeActualDrawCall = true ) = 0;
+
+	// Are we using graphics?
+	virtual bool IsUsingGraphics() const = 0;
+
+	// Are editor materials enabled?
+	virtual bool CanUseEditorMaterials() const = 0;
+
+	// Bind vertex texture
+	virtual void BindVertexTexture( VertexTextureSampler_t vtSampler, ITexture *pTexture, int nFrameVar = 0 ) = 0;
+};
+#else
 abstract_class IShaderSystem
 {
 public:
@@ -69,7 +129,7 @@ public:
 	// Are we using graphics?
 	virtual bool CanUseEditorMaterials() const = 0;
 };
-
+#endif
 
 //-----------------------------------------------------------------------------
 // The Shader plug-in DLL interface version
