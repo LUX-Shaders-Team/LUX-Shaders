@@ -33,7 +33,7 @@
 #include "lux_common_vs_model.h"
 
 // 14 Transform across 28 Registers
-const float4 g_Transforms[28]	: register(LUX_VS_TEXTURETRANSFORM_01);
+const float4 g_Transforms[28]	: register(LUX_VS_TEXTURETRANSFORM_02);
 
 //==========================================================================//
 //	VS Input

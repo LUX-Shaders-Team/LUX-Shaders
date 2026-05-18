@@ -312,7 +312,7 @@ void DrawCombineTextures(IShaderShadow* pShaderShadow, IShaderDynamicAPI* pShade
 			BindTexture((Sampler_t)nCurTexture, BaseTexture, Frame);
 
 			// Do TexCoord while we are already riding the looping coaster
-			SetVertexShaderTextureTransform(LUX_VS_TEXTURETRANSFORM_01 + (nCurTexture * 2), BaseTextureTransform);
+			SetVertexShaderTextureTransform(LUX_VS_TEXTURETRANSFORM_02 + (nCurTexture * 2), BaseTextureTransform);
 
 			// Keep Track
 			nCurTexture++;
@@ -329,7 +329,7 @@ void DrawCombineTextures(IShaderShadow* pShaderShadow, IShaderDynamicAPI* pShade
 				BindTexture((Sampler_t)nCurTexture, Texture2 + n, Frame2 + n);
 
 				// Do TexCoord while we are already riding the looping coaster
-				SetVertexShaderTextureTransform(LUX_VS_TEXTURETRANSFORM_01 + (nCurTexture * 2), Texture2Transform + n);
+				SetVertexShaderTextureTransform(LUX_VS_TEXTURETRANSFORM_02 + (nCurTexture * 2), Texture2Transform + n);
 
 				nCurTexture++;
 			}
