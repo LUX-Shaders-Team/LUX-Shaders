@@ -83,6 +83,8 @@ lux_sky_simple_ps30.fxc
 lux_spritecard_ps30.fxc
 lux_spritecard_spline_vs30.fxc
 lux_spritecard_vs30.fxc
+lux_ssao_drawnormal_ps30.fxc
+lux_ssao_drawnormal_vs30.fxc
 lux_sprite_ps30.fxc
 lux_sprite_vs30.fxc
 lux_teeth_ps30.fxc

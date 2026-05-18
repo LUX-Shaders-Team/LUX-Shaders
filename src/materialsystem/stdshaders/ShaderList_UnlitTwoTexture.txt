@@ -19,3 +19,7 @@ lux_combinetextures_ps30.fxc
 // This Shader supports Cloak
 lux_cloak_vs30.fxc
 lux_cloak_ps30.fxc
+
+// ASW
+lux_ssao_drawnormal_ps30.fxc
+lux_ssao_drawnormal_vs30.fxc

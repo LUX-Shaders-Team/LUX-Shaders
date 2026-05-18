@@ -1,12 +1,16 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	20.01.2023 DMY
-//	Last Change :	01.02.2026 DMY
+//	Last Change :	18.05.2026 DMY
 //
 //==========================================================================//
 
 // Commonly Shared Definitions, Defines and Data for all Shaders
 #include "../cpp_lux_shared.h"
+
+#ifdef ASWSDK
+#include "renderpasses/SSAODrawNormalPass.h"
+#endif
 
 // Includes for Shaderfiles...
 #include "lux_teeth_vs30.inc"
@@ -93,6 +97,19 @@ BEGIN_SHADER_PARAMS
 	SHADER_PARAM(EntityOrigin,	SHADER_PARAM_TYPE_VEC3,	 "", "Requires $Intro 1. World-space location of the entity, required to correctly animate the Warp.");
 	SHADER_PARAM(WarpParam,		SHADER_PARAM_TYPE_FLOAT, "", "Requires $Intro 1. How far into the Warp Animation we are.\nAnimation Parameter with a Range of 0 to 1.");
 END_SHADER_PARAMS
+
+#ifdef ASWSDK
+void Teeth_SetupSSAODrawNormalVars(SSAODrawNormalPass_Vars_t& SSAODrawNormalVars)
+{
+	SSAODrawNormalVars.m_bIsModel = true;
+	SSAODrawNormalVars.m_nBumpMap = NormalTexture;
+	SSAODrawNormalVars.m_nBumpMapFrame = BumpFrame;
+	SSAODrawNormalVars.m_nBumpMapTransform = BumpTransform;
+
+	// Need this for $BaseTextureTransform
+	SSAODrawNormalVars.BaseVars.InitVars(BaseTexture, Frame, BaseTextureTransform);
+}
+#endif
 
 SHADER_INIT_PARAMS()
 {
@@ -367,6 +384,16 @@ TeethContext* CreateMaterialContextData() override
 
 SHADER_DRAW
 {
+#ifdef ASWSDK
+	if (ShouldDrawNormalsForSSAO())
+	{
+		SSAODrawNormalPass_Vars_t Vars;
+		Teeth_SetupSSAODrawNormalVars(Vars);
+		SSAONormalPass_Shader_Draw(this, pShaderShadow, pShaderAPI, Vars);
+		return;
+	}
+#endif
+
 	// Get Context Data. BaseShader handles creation for us, using the CreateMaterialContextData() virtual
 	auto* pContextData = GetMaterialContextData<TeethContext>(pContextDataPtr);
 //	auto& StaticCmds = pContextData->m_StaticCmds;

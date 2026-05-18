@@ -1,7 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	20.01.2023 DMY
-//	Last Change :	27.03.2026 DMY
+//	Last Change :	18.05.2026 DMY
 //
 //==========================================================================//
 
@@ -205,6 +205,15 @@ LightmappedGenericDecalContext* CreateMaterialContextData() override
 
 SHADER_DRAW
 {
+#ifdef ASWSDK
+	// Not doing this here, take the SSAO Factor from the Surface behind this Decal
+	if (ShouldDrawNormalsForSSAO())
+	{
+		Draw(false); // Without this crash + "No render states in shader ".."
+		return;
+	}
+#endif
+
 	// Get Context Data. BaseShader handles creation for us, using the CreateMaterialContextData() virtual
 	auto* pContextData = GetMaterialContextData<LightmappedGenericDecalContext>(pContextDataPtr);
 

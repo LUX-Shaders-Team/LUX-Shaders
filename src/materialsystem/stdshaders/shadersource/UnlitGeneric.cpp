@@ -1,12 +1,16 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	20.01.2023 DMY
-//	Last Change :	01.02.2026 DMY
+//	Last Change :	18.05.2026 DMY
 //
 //==========================================================================//
 
 // Commonly Shared Definitions, Defines and Data for all Shaders
 #include "../cpp_lux_shared.h"
+
+#ifdef ASWSDK
+#include "renderpasses/SSAODrawNormalPass.h"
+#endif
 
 // Includes for Shaderfiles...
 #include "lux_model_vs30.inc"
@@ -85,6 +89,16 @@ BEGIN_SHADER_PARAMS
 	// FIXME: Not implemented yet
 	SHADER_PARAM(DepthBlend, SHADER_PARAM_TYPE_INTEGER, "", "(FALLBACK) This Parameter will cause the Shader to fallback to LUX_DepthBlendGeneric.")
 END_SHADER_PARAMS
+
+#ifdef ASWSDK
+void UG_SetupSSAODrawNormalVars(SSAODrawNormalPass_Vars_t& SSAODrawNormalVars)
+{
+	// Treat as a Model? Entirely relying on HasVertexCompression() for this one
+	SSAODrawNormalVars.m_bIsModel = true;
+
+	// None of the other Stuff is supported on this Shader
+}
+#endif
 
 SHADER_INIT_PARAMS()
 {
@@ -266,6 +280,16 @@ UnlitGenericContext* CreateMaterialContextData() override
 
 SHADER_DRAW
 {
+#ifdef ASWSDK
+	if (ShouldDrawNormalsForSSAO())
+	{
+		SSAODrawNormalPass_Vars_t Vars;
+		UG_SetupSSAODrawNormalVars(Vars);
+		SSAONormalPass_Shader_Draw(this, pShaderShadow, pShaderAPI, Vars);
+		return;
+	}
+#endif
+
 #if FIXED_COMMANDBUFFER
 	// Get Context Data. BaseShader handles creation for us, using the CreateMaterialContextData() virtual
 	auto* pContextData = GetMaterialContextData<UnlitGenericContext>(pContextDataPtr);

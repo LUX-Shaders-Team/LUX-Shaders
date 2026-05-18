@@ -2,12 +2,16 @@
 //
 //	Original D.	:	26.03.2025 DMY
 //	Initial D.	:	28.09.2025 DMY
-//	Last Change :	08.02.2026 DMY
+//	Last Change :	18.05.2026 DMY
 //
 //==========================================================================//
 
 // Commonly Shared Definitions, Defines and Data for all Shaders
 #include "Triplanar.h"
+
+#ifdef ASWSDK
+#include "../renderpasses/SSAODrawNormalPass.h"
+#endif
 
 // Includes for Shaderfiles...
 #include "lux_model_simplified_vs30.inc"
@@ -170,6 +174,15 @@ void SetTriplanarModelFlags()
 	}
 }
 
+#ifdef ASWSDK
+void Triplanar_SetupSSAODrawNormalVars(SSAODrawNormalPass_Vars_t& SSAODrawNormalVars)
+{
+	SSAODrawNormalVars.m_bIsModel = false;
+
+	// FIXME: SSAO Draw Pass does not support Triplanar, I set up no other Vars here so it at least draws a flat Normal
+}
+#endif
+
 SHADER_INIT_PARAMS()
 {
 	SetTriplanarModelFlags();
@@ -262,6 +275,16 @@ SHADER_INIT
 
 SHADER_DRAW
 {
+#ifdef ASWSDK
+	if (ShouldDrawNormalsForSSAO())
+	{
+		SSAODrawNormalPass_Vars_t Vars;
+		Triplanar_SetupSSAODrawNormalVars(Vars);
+		SSAONormalPass_Shader_Draw(this, pShaderShadow, pShaderAPI, Vars);
+		return;
+	}
+#endif
+
 	bool bProjTex = HasFlashlight();
 
 	// Texture related Boolean. Check for existing booleans first!

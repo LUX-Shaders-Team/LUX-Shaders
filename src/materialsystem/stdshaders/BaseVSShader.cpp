@@ -811,6 +811,26 @@ void CBaseVSShader::DrawEqualDepthToDestAlpha( void )
 	Draw(bActualDrawCall);
 }
 
+#ifdef ASWSDK
+bool CBaseVSShader::ShouldDrawNormalsForSSAO()
+{
+	if (m_pShaderShadow)
+	{
+		int nGBufferMode = (HasFlag2(MATERIAL_VAR2_USE_GBUFFER0) + 2 * HasFlag2(MATERIAL_VAR2_USE_GBUFFER1));
+		if (nGBufferMode != ENABLE_FIXED_LIGHTING_OUTPUTNORMAL_AND_DEPTH)
+			return false;
+	}
+	else if (m_pShaderAPI)
+	{
+		int nGBufferMode = m_pShaderAPI->GetIntRenderingParameter(INT_RENDERPARM_ENABLE_FIXED_LIGHTING);
+		if (nGBufferMode != ENABLE_FIXED_LIGHTING_OUTPUTNORMAL_AND_DEPTH)
+			return false;
+	}
+
+	return true;
+}
+#endif
+
 void CBaseVSShader::SetFlashLightColorFromState(FlashlightState_t const &state, int nPSRegister, bool bFlashlightNoLambert)
 {
 	// Old code

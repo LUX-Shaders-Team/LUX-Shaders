@@ -526,7 +526,30 @@ CustomShaderContext* CreateMaterialContextData() override
 
 SHADER_DRAW
 {
+	// FIXME: Draw Normals for SSAO on ASW somehow? Bit of a Problem here
+	// Lets start with some IDEAS:
+	/*
+		- Particles don't get a Normal, just NOPE and return for those.
+		- Translucent SUrfaces are also easy to detect, those can just NOPE as well ( ShatteredGlass, $Translucent )
+			- What about AlphaTesting ? Should maybe be allowed?
+		- Fallback to default Draw Normal Pass *unless*
+		- Parameter specified for VS and PS that can draw the Normals the way the Shader is using them
+			- Instant Problem with this : Need a new Template File for the Pass or Combo on every existing Template File
+				- New Template would be dirty
+				- Combo should be ok but creates new Problem for non-ASW Projects
+				- Combo increases Filesize for all Custom Shader
+		- Don't Draw Normal and SSAO Factor.. "Good luck, not my Problem" basically
+			-> Lazy
+
+		For now:
+			- Let whoever forks LUX for a ASW based Project ( dead Branch ) worry about this Problem if they want to support SSAO *and* the CSS
+			- Not a concern for other Branches
+			- Pointless for SFM
+	*/
 #ifdef ASWSDK
+	if (ShouldDrawNormalsForSSAO())
+		return;
+
 	// Get Context Data. BaseShader handles creation for us, using the CreateMaterialContextData() virtual
 	auto* pContextData = GetMaterialContextData<CustomShaderContext>(pContextDataPtr);
 #endif

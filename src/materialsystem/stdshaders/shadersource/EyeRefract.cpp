@@ -1,12 +1,16 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	20.01.2023 DMY
-//	Last Change :	 30.01.2026 DMY
+//	Last Change :	18.05.2026 DMY
 //
 //==========================================================================//
 
 // Commonly Shared Definitions, Defines and Data for all Shaders
 #include "../cpp_lux_shared.h"
+
+#ifdef ASWSDK
+#include "renderpasses/SSAODrawNormalPass.h"
+#endif
 
 #include "renderpasses/Cloak.h"
 #include "renderpasses/EmissiveBlend.h"
@@ -223,7 +227,7 @@ SHADER_INIT
 
 SHADER_DRAW
 {
-	
+	// FIXME: Draw flat Normals for SSAO
 }
 END_SHADER
 
@@ -271,6 +275,15 @@ BEGIN_SHADER_PARAMS
 	// Cloak Blended Pass Support
 	Declare_CloakParameters()
 END_SHADER_PARAMS
+
+#ifdef ASWSDK
+void Eyes_SetupSSAODrawNormalVars(SSAODrawNormalPass_Vars_t& SSAODrawNormalVars)
+{
+	SSAODrawNormalVars.m_bIsModel = true;
+
+	// Shader supports nothing else here
+}
+#endif
 
 void Eyes_SetupCloakVars(Cloak_Vars_t& CloakVars)
 {
@@ -586,6 +599,16 @@ void DrawEyes(IShaderShadow* pShaderShadow, IShaderDynamicAPI* pShaderAPI, CBase
 
 SHADER_DRAW
 {
+#ifdef ASWSDK
+	if (ShouldDrawNormalsForSSAO())
+	{
+		SSAODrawNormalPass_Vars_t Vars;
+		Eyes_SetupSSAODrawNormalVars(Vars);
+		SSAONormalPass_Shader_Draw(this, pShaderShadow, pShaderAPI, Vars);
+		return;
+	}
+#endif
+
 	bool bDrawBasePass = true;
 
 	Cloak_Vars_t CloakVars;

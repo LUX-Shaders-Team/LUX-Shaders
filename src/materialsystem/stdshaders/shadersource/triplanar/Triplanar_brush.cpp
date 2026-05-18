@@ -2,12 +2,16 @@
 //
 //	Original D.	:	26.03.2025 DMY
 //	Initial D.	:	28.09.2025 DMY
-//	Last Change :	08.02.2026 DMY
+//	Last Change :	18.05.2026 DMY
 //
 //==========================================================================//
 
 // Commonly Shared Definitions, Defines and Data for all Shaders
 #include "Triplanar.h"
+
+#ifdef ASWSDK
+#include "../renderpasses/SSAODrawNormalPass.h"
+#endif
 
 // Includes for Shaderfiles...
 #include "lux_brush_simplified_vs30.inc"
@@ -168,6 +172,16 @@ void HandleFallback()
 	}
 }
 
+#ifdef ASWSDK
+void Triplanar_SetupSSAODrawNormalVars(SSAODrawNormalPass_Vars_t& SSAODrawNormalVars)
+{
+	SSAODrawNormalVars.m_bIsModel = false;
+
+	// FIXME: SSAO Draw Pass does not support Triplanar, I set up no other Vars here so it at least draws a flat Normal
+}
+#endif
+
+
 void SetTriplanarBrushFlags()
 {
 	// Always needed for the Flashlight
@@ -315,6 +329,16 @@ TriplanarBrushContext* CreateMaterialContextData() override
 
 SHADER_DRAW
 {
+#ifdef ASWSDK
+	if (ShouldDrawNormalsForSSAO())
+	{
+		SSAODrawNormalPass_Vars_t Vars;
+		Triplanar_SetupSSAODrawNormalVars(Vars);
+		SSAONormalPass_Shader_Draw(this, pShaderShadow, pShaderAPI, Vars);
+		return;
+	}
+#endif
+
 	// Get Context Data. BaseShader handles creation for us, using the CreateMaterialContextData() virtual
 	auto* pContextData = GetMaterialContextData<TriplanarBrushContext>(pContextDataPtr);
 

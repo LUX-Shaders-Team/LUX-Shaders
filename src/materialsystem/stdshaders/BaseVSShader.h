@@ -119,7 +119,11 @@ public:
 	//This pass fills in the areas that passed the alpha test with depth in dest alpha 
 	//by writing only equal depth pixels and only if we should be writing depth to dest alpha
 	void DrawEqualDepthToDestAlpha( void );
-	
+
+#ifdef ASWSDK
+	bool ShouldDrawNormalsForSSAO();
+#endif
+
 	// Stock Functions
 	// I changed the default Register Index here but it's not using the LUX_PS_FLOAT_PROJTEX_COLOR Macro!!
 	void SetFlashLightColorFromState(FlashlightState_t const &state, int nPSRegister = 19, bool bFlashlightNoLambert = false);

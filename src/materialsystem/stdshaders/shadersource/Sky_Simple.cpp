@@ -2,7 +2,7 @@
 //
 //	Original D. :	20.01.2023 DMY
 //	Initial D.	:	10.12.2025 DMY
-//	Last Change :	01.02.2026 DMY
+//	Last Change :	18.05.2026 DMY
 //
 //==========================================================================//
 
@@ -92,6 +92,15 @@ SHADER_INIT
 
 SHADER_DRAW
 {
+#ifdef ASWSDK
+	// Not doing this here
+	if (ShouldDrawNormalsForSSAO())
+	{
+		Draw(false); // Without this crash + "No render states in shader ".."
+		return;
+	}
+#endif
+
 	// Always needed!
 	bool bHDR = GetBool(Internal_HDR);
 

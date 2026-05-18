@@ -1,12 +1,16 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	20.01.2023 DMY
-//	Last Change :	06.03.2026 DMY
+//	Last Change :	18.05.2026 DMY
 //
 //==========================================================================//
 
 // Commonly Shared Definitions, Defines and Data for all Shaders
 #include "../cpp_lux_shared.h"
+
+#ifdef ASWSDK
+#include "renderpasses/SSAODrawNormalPass.h"
+#endif
 
 // Includes for Shaderfiles...
 #include "lux_worldvertextransition_simple_ps30.inc"
@@ -126,6 +130,28 @@ BEGIN_SHADER_PARAMS
 	Declare_SeamlessParameters()
 	SHADER_PARAM(DistanceAlpha, SHADER_PARAM_TYPE_BOOL, "", "Cheap edge filtering technique for raster images, great for UI elements, foliage, chain link fences, grates, and more. (Note: $DistanceAlpha is not implemented in WVT, using this Parameter a causes fallback to the DistanAlpha shader).")
 END_SHADER_PARAMS
+
+#ifdef ASWSDK
+void WVT_SetupSSAODrawNormalVars(SSAODrawNormalPass_Vars_t& SSAODrawNormalVars)
+{
+	SSAODrawNormalVars.m_bIsModel = false;
+
+	SSAODrawNormalVars.m_nBumpMap = BumpMap;
+	SSAODrawNormalVars.m_nBumpMapFrame = BumpFrame;
+	SSAODrawNormalVars.m_nBumpMapTransform = BumpTransform;
+
+	SSAODrawNormalVars.m_nBumpMap2 = BumpMap2;
+	SSAODrawNormalVars.m_nBumpMapFrame2 = BumpFrame2;
+	SSAODrawNormalVars.m_nBumpMapTransform2 = BumpTransform2;
+
+	SSAODrawNormalVars.m_nBlendModulateTexture = BlendModulateTexture;
+	SSAODrawNormalVars.m_nBlendModulateFrame = BlendMaskFrame;
+	SSAODrawNormalVars.m_nBlendModulateTransform = BlendMaskTransform;
+
+	// Need this for $BaseTextureTransform
+	SSAODrawNormalVars.BaseVars.InitVars(BaseTexture, Frame, BaseTextureTransform);
+}
+#endif
 
 SHADER_INIT_PARAMS()
 {
@@ -424,6 +450,16 @@ WorldVertexTransitionContext* CreateMaterialContextData() override
 
 SHADER_DRAW
 {
+#ifdef ASWSDK
+	if (ShouldDrawNormalsForSSAO())
+	{
+		SSAODrawNormalPass_Vars_t Vars;
+		WVT_SetupSSAODrawNormalVars(Vars);
+		SSAONormalPass_Shader_Draw(this, pShaderShadow, pShaderAPI, Vars);
+		return;
+	}
+#endif
+
 	// Get Context Data. BaseShader handles creation for us, using the CreateMaterialContextData() virtual
 	auto* pContextData = GetMaterialContextData<WorldVertexTransitionContext>(pContextDataPtr);
 //		auto& StaticCmds = pContextData->m_StaticCmds;

@@ -1,7 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	20.01.2023 DMY
-//	Last Change :	16.05.2026 DMY
+//	Last Change :	18.05.2026 DMY
 //
 //==========================================================================//
 
@@ -9,6 +9,10 @@
 #include "../cpp_lux_shared.h"
 
 #include "materialsystem/MaterialSystemUtil.h"
+
+#ifdef ASWSDK
+#include "renderpasses/SSAODrawNormalPass.h"
+#endif
 
 // This allows for additional passes for other effects
 #include "renderpasses/Cloak.h"
@@ -185,6 +189,26 @@ BEGIN_SHADER_PARAMS
 	// We can't replicate this Parameter but we can at least make Materials from L4D1 not utterly broken
 	SHADER_PARAM(ShinyBlood, SHADER_PARAM_TYPE_BOOL, "", "(INTERNAL PARAMETER) Disables Phong to unbreak some L4D1 Materials.")
 END_SHADER_PARAMS
+
+#ifdef ASWSDK
+void VLG_SetupSSAODrawNormalVars(SSAODrawNormalPass_Vars_t &SSAODrawNormalVars)
+{
+	SSAODrawNormalVars.m_bIsModel = true;
+	SSAODrawNormalVars.m_nBumpMap = NormalTexture;
+	SSAODrawNormalVars.m_nBumpMapFrame = BumpFrame;
+	SSAODrawNormalVars.m_nBumpMapTransform = BumpTransform;
+
+	// Shader supports Wrinklemapping
+	SSAODrawNormalVars.m_nBumpCompress = BumpCompress;
+	SSAODrawNormalVars.m_nBumpStretch = BumpStretch;
+
+	// Shader supports Treesway
+	SSAODrawNormalVars.TreeSwayVars.InitVars(TreeSway);
+
+	// Need this for $BaseTextureTransform
+	SSAODrawNormalVars.BaseVars.InitVars(BaseTexture, Frame, BaseTextureTransform);
+}
+#endif
 
 void VLG_SetupCloakVars(Cloak_Vars_t &CloakVars)
 {
@@ -2002,6 +2026,15 @@ void LuxVertexLitGeneric_Shader_Draw(IMaterialVar** ppParams, IShaderShadow* pSh
 
 SHADER_DRAW
 {
+#ifdef ASWSDK
+	if(ShouldDrawNormalsForSSAO())
+	{
+		SSAODrawNormalPass_Vars_t Vars;
+		VLG_SetupSSAODrawNormalVars(Vars);
+		SSAONormalPass_Shader_Draw(this, pShaderShadow, pShaderAPI, Vars);
+		return;
+	}
+#endif
 	// Outline Support
 	if (GetBool(MeshOutline_Enable))
 	{

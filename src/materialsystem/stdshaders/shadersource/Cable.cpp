@@ -1,7 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	20.01.2023 DMY
-//	Last Change :	01.02.2026 DMY
+//	Last Change :	18.05.2026 DMY
 //
 //	TODO: Figure out if using the Lightstate works for this Shader
 //
@@ -159,6 +159,13 @@ SHADER_INIT
 
 SHADER_DRAW
 {
+	// This Shader doesn't get SSAO.. Would be nice though for Attachment Points on a Wall.
+	// Raises some Questions again, ASW doesn't need this Shader it uses Splineropes so pointless here
+#ifdef ASWSDK
+	if (ShouldDrawNormalsForSSAO())
+		return;
+#endif
+
 	bool bHasBaseTexture = IsTextureLoaded(BaseTexture);
 	bool bHasBaseTextureTransform = HasTransform(bHasBaseTexture, BaseTextureTransform);
 	bool bIgnoreLightDirInfluence = GetBool(NoLightDirInfluence);
@@ -366,6 +373,16 @@ SHADER_INIT
 
 SHADER_DRAW
 {
+	// This Shader doesn't get SSAO.. Would be nice though for Attachment Points on a Wall.
+	// Raises some Questions:
+	// - Is the Normal Map strong enough to have an impact on SSAO? Cables are usually very thin and don't take up much Space on the Screen
+	// - Will anyone even notice?
+	// - Will it negatively impact the Surfaces behind the Shader?
+#ifdef ASWSDK
+	if (ShouldDrawNormalsForSSAO())
+		return;
+#endif
+
 	bool bHasBaseTexture = IsTextureLoaded(BaseTexture);
 	bool bIgnoreLightDirInfluence = GetBool(NoLightDirInfluence);
 	bool bHasNormalTexture = IsTextureLoaded(BumpMap);

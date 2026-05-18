@@ -2,7 +2,7 @@
 //
 //	Original D. :	20.01.2023 DMY
 //	Initial D.	:	10.12.2025 DMY
-//	Last Change :	 30.01.2026 DMY
+//	Last Change :	18.05.2026 DMY
 //
 //==========================================================================//
 
@@ -142,6 +142,15 @@ SHADER_INIT
 
 SHADER_DRAW
 {
+#ifdef ASWSDK
+	// Not doing this here
+	if (ShouldDrawNormalsForSSAO())
+	{
+		Draw(false); // Without this crash + "No render states in shader ".."
+		return;
+	}
+#endif
+
 	//==========================================================================//
 	// Static Snapshot of the Shader Settings
 	//==========================================================================//

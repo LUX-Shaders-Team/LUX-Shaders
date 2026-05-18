@@ -1,7 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	20.01.2023 DMY
-//	Last Change :	06.03.2026 DMY
+//	Last Change :	18.05.2026 DMY
 //
 //==========================================================================//
 
@@ -272,6 +272,15 @@ void Sprite_DetermineBools(int nRenderMode, SpriteSettings_t &Settings)
 
 SHADER_DRAW
 {
+#ifdef ASWSDK
+	// Not doing this here
+	if (ShouldDrawNormalsForSSAO())
+	{
+		Draw(false); // Without this crash + "No render states in shader ".."
+		return;
+	}
+#endif
+
 	//	bool bsRGB = !GetBool(info.m_nNoSRGB);
 	int nRenderMode = GetInt(SpriteRenderMode);
 

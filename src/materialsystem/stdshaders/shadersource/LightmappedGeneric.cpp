@@ -1,12 +1,16 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	20.01.2023 DMY
-//	Last Change :	06.02.2026 DMY
+//	Last Change :	18.05.2026 DMY
 //
 //==========================================================================//
 
 // Commonly Shared Definitions, Defines and Data for all Shaders
 #include "../cpp_lux_shared.h"
+
+#ifdef ASWSDK
+#include "renderpasses/SSAODrawNormalPass.h"
+#endif
 
 #include "renderpasses/EmissiveBlend.h"
 
@@ -99,6 +103,19 @@ BEGIN_SHADER_PARAMS
 	SHADER_PARAM(LinearWrite,		SHADER_PARAM_TYPE_BOOL,	"", "Disables SRGB conversion of Shader Results.")
 	Declare_EmissiveBlendParameters()
 END_SHADER_PARAMS
+
+#ifdef ASWSDK
+void LMG_SetupSSAODrawNormalVars(SSAODrawNormalPass_Vars_t& SSAODrawNormalVars)
+{
+	SSAODrawNormalVars.m_bIsModel = false;
+	SSAODrawNormalVars.m_nBumpMap = BumpMap;
+	SSAODrawNormalVars.m_nBumpMapFrame = BumpFrame;
+	SSAODrawNormalVars.m_nBumpMapTransform = BumpTransform;
+
+	// Need this for $BaseTextureTransform
+	SSAODrawNormalVars.BaseVars.InitVars(BaseTexture, Frame, BaseTextureTransform);
+}
+#endif
 
 void LMG_SetupEmissiveBlendVars(EmissiveBlend_Vars_t &EmissiveVars)
 {
@@ -449,6 +466,16 @@ LightmappedGenericContext* CreateMaterialContextData() override
 
 SHADER_DRAW
 {
+#ifdef ASWSDK
+	if (ShouldDrawNormalsForSSAO())
+	{
+		SSAODrawNormalPass_Vars_t Vars;
+		LMG_SetupSSAODrawNormalVars(Vars);
+		SSAONormalPass_Shader_Draw(this, pShaderShadow, pShaderAPI, Vars);
+		return;
+	}
+#endif
+
 	// Get Context Data. BaseShader handles creation for us, using the CreateMaterialContextData() virtual
 	auto* pContextData = GetMaterialContextData<LightmappedGenericContext>(pContextDataPtr);
 //	auto& StaticCmds = pContextData->m_StaticCmds;

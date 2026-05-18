@@ -2,7 +2,7 @@
 //
 //	Original D. :	29.10.2024 DMY
 //	Initial D.	:	11.11.2025 DMY
-//	Last Change :	18.02.2026 DMY
+//	Last Change :	18.05.2026 DMY
 //
 //==========================================================================//
 
@@ -106,6 +106,15 @@ SHADER_INIT
 
 SHADER_DRAW
 {
+#ifdef ASWSDK
+	// Non-Opaque Surface, draw Nothing
+	if (ShouldDrawNormalsForSSAO())
+	{
+		Draw(false);
+		return;
+	}
+#endif
+
 	// Set up some booleans
 	//===============================//
 	bool bHasBaseTexture = IsTextureLoaded(BaseTexture);

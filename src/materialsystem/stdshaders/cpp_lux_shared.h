@@ -396,6 +396,54 @@ struct FleshInterior_Vars_t
 	// TODO: Flesh Interior Pass
 };
 
+struct TreeSway_Vars_t
+{
+	TreeSway_Vars_t() { memset(this, 0xFF, sizeof(TreeSway_Vars_t)); }
+
+	int m_nTreeSway;
+	int m_nTreeSwayHeight;
+	int m_nTreeSwayStartHeight;
+	int m_nTreeSwayRadius;
+	int m_nTreeSwayStartRadius;
+	int m_nTreeSwaySpeed;
+	int m_nTreeSwaySpeedHighWindMultiplier;
+	int m_nTreeSwayStrength;
+	int m_nTreeSwayScrumbleSpeed;
+	int m_nTreeSwayScrumbleStrength;
+	int m_nTreeSwayScrumbleFrequency;
+	int m_nTreeSwayFalloffExp;
+	int m_nTreeSwayScrumbleFalloffExp;
+	int m_nTreeSwaySpeedLerpStart;
+	int m_nTreeSwaySpeedLerpEnd;
+	int m_nTreeSwayStatic;
+	int m_nTreeSwayStaticValues;
+
+	// Instead of a Macro, just copy this.
+/*
+	InitVars(TreeSway);
+*/
+	void InitVars(int nTreeSwayVar)
+	{
+		m_nTreeSway							= nTreeSwayVar + 0;
+		m_nTreeSwayHeight					= nTreeSwayVar + 1;
+		m_nTreeSwayStartHeight				= nTreeSwayVar + 2;
+		m_nTreeSwayRadius					= nTreeSwayVar + 3;
+		m_nTreeSwayStartRadius				= nTreeSwayVar + 4;
+		m_nTreeSwaySpeed					= nTreeSwayVar + 5;
+		m_nTreeSwaySpeedHighWindMultiplier	= nTreeSwayVar + 6;
+		m_nTreeSwayStrength					= nTreeSwayVar + 7;
+		m_nTreeSwayScrumbleSpeed			= nTreeSwayVar + 8;
+		m_nTreeSwayScrumbleStrength			= nTreeSwayVar + 9;
+		m_nTreeSwayScrumbleFrequency		= nTreeSwayVar + 10;
+		m_nTreeSwayFalloffExp				= nTreeSwayVar + 11;
+		m_nTreeSwayScrumbleFalloffExp		= nTreeSwayVar + 12;
+		m_nTreeSwaySpeedLerpStart			= nTreeSwayVar + 13;
+		m_nTreeSwaySpeedLerpEnd				= nTreeSwayVar + 14;
+		m_nTreeSwayStatic					= nTreeSwayVar + 15;
+		m_nTreeSwayStaticValues				= nTreeSwayVar + 16;
+	}
+};
+
 // TODO: Move Links to dedicated Link Macro or per Shader Links once we have a GitHub Wiki for this
 #define LUX_DEFAULT_DESCRIPTION	"\nVDC: https://developer.valvesoftware.com/wiki/Category:Shaders\n"
 #define WEBLINK_VDC "Valve Developer Community: https://developer.valvesoftware.com/wiki/Category:Shaders\n"

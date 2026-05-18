@@ -1,12 +1,16 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	20.01.2023 DMY
-//	Last Change :	 30.01.2026 DMY
+//	Last Change :	18.05.2026 DMY
 //
 //==========================================================================//
 
 // Commonly Shared Definitions, Defines and Data for all Shaders
 #include "../cpp_lux_shared.h"
+
+#ifdef ASWSDK
+#include "renderpasses/SSAODrawNormalPass.h"
+#endif
 
 // Cloak Functions, because for some reason this shader has cloak
 #include "renderpasses/Cloak.h"
@@ -95,6 +99,16 @@ BEGIN_SHADER_PARAMS
 	// For some Reason this shader has a Cloak Pass
 	Declare_CloakParameters()
 END_SHADER_PARAMS
+
+#ifdef ASWSDK
+void UTT_SetupSSAODrawNormalVars(SSAODrawNormalPass_Vars_t& SSAODrawNormalVars)
+{
+	// Treat as a Model? Entirely relying on HasVertexCompression() for this one
+	SSAODrawNormalVars.m_bIsModel = true;
+
+	// None of the other Stuff is supported on this Shader
+}
+#endif
 
 void UTT_SetupCloakVars(Cloak_Vars_t& CloakVars)
 {
@@ -367,6 +381,16 @@ void DrawCombineTextures(IShaderShadow* pShaderShadow, IShaderDynamicAPI* pShade
 
 SHADER_DRAW
 {
+#ifdef ASWSDK
+	if (ShouldDrawNormalsForSSAO())
+	{
+		SSAODrawNormalPass_Vars_t Vars;
+		UTT_SetupSSAODrawNormalVars(Vars);
+		SSAONormalPass_Shader_Draw(this, pShaderShadow, pShaderAPI, Vars);
+		return;
+	}
+#endif
+
 	bool bDrawBasePass = true;
 
 	Cloak_Vars_t CloakVars;

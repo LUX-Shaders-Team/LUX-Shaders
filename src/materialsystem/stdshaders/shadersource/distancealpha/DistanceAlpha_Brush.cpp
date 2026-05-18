@@ -2,7 +2,7 @@
 //
 //	Original D. :	29.10.2024 DMY
 //	Initial D.	:	11.11.2025 DMY
-//	Last Change :	18.02.2026 DMY
+//	Last Change :	18.05.2026 DMY
 //
 //==========================================================================//
 
@@ -47,7 +47,6 @@ SHADER_INFO_D3D			(LUX_SHADERINFO_SM30)
 BEGIN_SHADER_PARAMS
 	// Detail Textures are about the only Feature that DistanceAlpha ever supported
 	Declare_DetailTextureParameters()
-	Declare_LightmappingParameters()
 	Declare_DistanceAlphaParameters()
 
 	SHADER_PARAM(BlendTintByBaseAlpha, SHADER_PARAM_TYPE_BOOL, "", "Use the BaseTextures Alpha Channel to blend in Tint Parameters.")
@@ -122,6 +121,15 @@ DistanceAlphaBrushContext* CreateMaterialContextData() override
 
 SHADER_DRAW
 {
+#ifdef ASWSDK
+	// Non-Opaque Surface, draw Nothing
+	if (ShouldDrawNormalsForSSAO())
+	{
+		Draw(false);
+		return;
+	}
+#endif
+
 	// Get Context Data. BaseShader handles creation for us, using the CreateMaterialContextData() virtual
 	auto * pContextData = GetMaterialContextData<DistanceAlphaBrushContext>(pContextDataPtr);
 

@@ -169,6 +169,8 @@ $Project
 				$File "$STDSHADERS/lux_spritecard_ps30.fxc"
 				$File "$STDSHADERS/lux_spritecard_spline_vs30.fxc"
 				$File "$STDSHADERS/lux_spritecard_vs30.fxc"
+				$File "$STDSHADERS/lux_ssao_drawnormal_ps30.fxc"
+				$File "$STDSHADERS/lux_ssao_drawnormal_vs30.fxc"
 				$File "$STDSHADERS/lux_sprite_ps30.fxc"
 				$File "$STDSHADERS/lux_sprite_vs30.fxc"
 				$File "$STDSHADERS/lux_teeth_ps30.fxc"
@@ -225,6 +227,8 @@ $Project
 				$File "$SHADERSOURCE/renderpasses/MeshOutline.h"
 				$File "$SHADERSOURCE/renderpasses/SheenPass.cpp"
 				$File "$SHADERSOURCE/renderpasses/SheenPass.h"
+				$File "$SHADERSOURCE/renderpasses/SSAODrawNormalPass.cpp"
+				$File "$SHADERSOURCE/renderpasses/SSAODrawNormalPass.h"
 			}
 
 			$File "$SHADERSOURCE/LightmappedGeneric.cpp"
