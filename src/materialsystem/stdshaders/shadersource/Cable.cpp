@@ -38,7 +38,9 @@ DEFINE_FALLBACK_SHADER(LUX_Cable_DX9, LUX_Rope_Router)
 // L4D Uses this specific Shader Name for Spline Ropes
 // Since we don't have it on the SDK, this is a safe replace
 // Note that we send it to the router, so if you don't have splineropes it will use regular ones. 
+#ifndef SFM_COMPATIBILITY
 DEFINE_FALLBACK_SHADER(SplineRope, LUX_Rope_Router)
+#endif
 
 //==========================================================================//
 // Fallback Shader to control what variant we should actually be using
