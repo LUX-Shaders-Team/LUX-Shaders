@@ -165,6 +165,10 @@ SHADER_INFO_D3D			(LUX_SHADERINFO_SM30)
 
 BEGIN_SHADER_PARAMS
 	Declare_NormalTextureParameters()
+#ifdef ASWSDK
+	SHADER_PARAM(TF2Compatability, SHADER_PARAM_TYPE_BOOL, "", "Makes the Shader favor TF2 Behavior over ASW Behavior ( Makes the Shader account for TF2 Quirks )")
+#endif
+
 	Declare_SelfIlluminationParameters()
 	Declare_DetailTextureParameters()
 	Declare_SelfIllumTextureParameters()
@@ -692,8 +696,14 @@ SHADER_INIT_PARAMS()
 		if (GetBool(BaseMapAlphaPhongMask) || bHasBumpMap || IsDefined(LightWarpTexture) && !GetBool(LightWarpNoBump))
 		{
 			// By Default, $BaseMapAlphaPhongMask forces a flat Normal even when $BumpMap is used.
-			if (!GetBool(PhongNewBehaviour) && GetBool(BaseMapAlphaPhongMask))
-				DefaultBool(PhongFlatNormal, true);
+			// Not on ASW, but we allow it with this Parameter so SFM can render the Materials correctly
+			#ifdef ASWSDK
+			if(GetBool(TF2Compatability))
+			#endif
+			{	
+				if (!GetBool(PhongNewBehaviour) && GetBool(BaseMapAlphaPhongMask))
+					DefaultBool(PhongFlatNormal, true);
+			}
 
 			// PhongFresnelRanges need this or Fresnel will be 0.0f
 			DefaultFloat3(PhongFresnelRanges, 0.0f, 0.5f, 1.0f);
@@ -716,13 +726,37 @@ SHADER_INIT_PARAMS()
 			{
 				// Default Value is supposed to be ... Well in SDK2013mp it's 0...
 				// It replaces the *149 of the calculation so that is what its default value SHOULD be
-				DefaultFloat(PhongExponent, 1.0f);
-				DefaultFloat(PhongExponentFactor, 149.0f);
+				// NOTE: ASW does 1.0 - .r + .r * 150.0f
+				// The 1.0-r isn't replicated here but the 150* IS
+				#ifdef ASWSDK
+				if (!GetBool(TF2Compatability))
+				{
+					DefaultFloat(PhongExponent, 0.0f);
+					DefaultFloat(PhongExponentFactor, 150.0f);
+				}
+				else
+				{
+					// NOTE: We still do the 1-.r but I'm trying to account for that here by not adding +1 at all times
+					DefaultFloat(PhongExponent, 0.0f);
+					DefaultFloat(PhongExponentFactor, 149.0f);
+				}
+				#else
+					DefaultFloat(PhongExponent, 1.0f);
+					DefaultFloat(PhongExponentFactor, 149.0f);
+				#endif
 			}
 			else
 			{
-				// Default Value is supposed to be 5.0f
-				DefaultFloat(PhongExponent, 5.0f);
+				#ifdef ASWSDK
+				// In ASW when $PhongExponent == 0.0f ( which is the default Value there )
+				// It will use the $PhongExponentTexture, if you don't have one, a White one will be assigned
+				// Since it does 1-r+r*150, the equivalent for LUX will be setting a $PhongExponent of 150
+				if(!GetBool(TF2Compatability))
+					DefaultFloat(PhongExponent, 150.0f);
+				else
+				#endif
+					// Default Value is supposed to be 5.0f
+					DefaultFloat(PhongExponent, 5.0f);
 			}
 		}
 	}
@@ -1081,6 +1115,9 @@ void LuxVertexLitGeneric_Shader_Draw(IMaterialVar** ppParams, IShaderShadow* pSh
 			pContextData->m_bEnvMapFresnel = GetBool(EnvMapFresnel); // This is a float, not a bool..
 		}
 
+		// Special Scenario:
+		// You can have $Phong without $BumpMap, BUT the StandardTexture for this does not have Alpha?
+
 		// These Caveats are exclusive to $NormalMapAlphaEnvMapMask
 		bool bBaseAlphaEnvMapMask = HasFlag(MATERIAL_VAR_BASEALPHAENVMAPMASK);
 		bool bNormalMapAlphaEnvMapMask = HasFlag(MATERIAL_VAR_NORMALMAPALPHAENVMAPMASK);
@@ -1435,7 +1472,9 @@ void LuxVertexLitGeneric_Shader_Draw(IMaterialVar** ppParams, IShaderShadow* pSh
 		{
 			// LightWarp forces this without a BumpMap, $LightWarpNoBump allows using Vertex Lighting.
 			if (bHasLightWarpTexture && !bHasLightWarpNoBump)
+			{
 				SemiStaticCmds.BindTexture(SAMPLER_NORMALMAP, TEXTURE_NORMALMAP_FLAT);
+			}
 
 			// This is allowed but we still use the Normal Map Sampler.
 			else if (bHasBaseMapAlphaPhongMask)
@@ -1571,6 +1610,12 @@ void LuxVertexLitGeneric_Shader_Draw(IMaterialVar** ppParams, IShaderShadow* pSh
 			f4SelfIllumTint_Scale.rgb = GetFloat3(SelfIllumTint);
 			f4SelfIllumTint_Scale.a = bHasSelfIllumMask ? GetFloat(SelfIllumMaskScale) : 0.0f;
 
+#ifdef ASWSDK
+			// In ASW the untinted BaseTexture is used for SelfIllum, that is not the case in TF2
+			// I try to hack it back in here by multiplying the SelfIllumTint with the actual Tint
+			if (GetBool(TF2Compatability))
+				f4SelfIllumTint_Scale.rgb *= f4BaseTextureTint.rgb;
+#endif
 			float4 f4SelfIllumFresnelTerms = 0.0f;
 			if(GetBool(SelfIllumFresnel))
 			{

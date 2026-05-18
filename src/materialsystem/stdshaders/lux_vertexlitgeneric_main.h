@@ -304,6 +304,14 @@ float4 main(PS_INPUT i) : COLOR
 		f4BaseTexture = TextureCombine(f4BaseTexture, f4DetailTexture, nDetailBlendMode);
 	#endif
 
+	// Stock-Consistency: Apply Tint after Detail Texture
+#if defined(ASWSDK)
+	
+	// This is where the above consistency becomes important.
+	// Need this for SelfIllum and PhongAlbedoTint ( ASW Consistency )
+	float3 f3UntintedBase = f4BaseTexture.rgb;
+#endif
+
 	// $BlendTintByBaseAlpha and $DesatureWithBaseAlpha
     ComputeTintAndXByBaseAlpha(f4BaseTexture, g_f3DefaultTint, g_f1DefaultAlphaFactor, BLENDTINTBYBASEALPHA, DESATURATEWITHBASEALPHA);
 	
@@ -402,7 +410,11 @@ float4 main(PS_INPUT i) : COLOR
 		#endif
 
 		// Helper Function that sets up all our Phong Data
+		#if defined(ASWSDK)
+			SetupPhongData(PhongData, f3UntintedBase);
+		#else
 			SetupPhongData(PhongData, f4BaseTexture.rgb);
+		#endif
 		
 		// Diffuse + Specular. Perfect.
 		#if PROJTEX
@@ -504,7 +516,11 @@ float4 main(PS_INPUT i) : COLOR
 		float f1SelfIllumFresnel = ComputeSelfIllumFresnel(f1NdotV);
 
 		float3 f3UnlitColor;
+		#if defined(ASWSDK)
+			f3UnlitColor = f3UntintedBase;
+		#else
 			f3UnlitColor = f4BaseTexture.rgb;
+		#endif
 
 		#if SELFILLUM_ENVMAPMASK_ALPHA
 

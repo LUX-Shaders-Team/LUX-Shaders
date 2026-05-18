@@ -132,6 +132,13 @@ float3 ComputeDirectSpecular(Phong_Data_t ph, float3 f3WorldPos, float3 f3Normal
 	// PhongMask and PhongBoost applied only to Regular Lights
 	f3Specular *= ph.f1AlphaMask * g_f1PhongBoost;
 
+	// On the SDK $PhongTint ( and other Phong Modulations except $PhongBoost ) will nuke RimLighting
+	// On ASW this is NOT the case. Rimlights are standalone. So apply PhongTint before RimLight is added
+#if defined(ASWSDK)
+	// Tint / $PhongAlbedoTint / ..
+	f3Specular *= ph.f3PhongModulation;
+#endif
+
 	// Urgh, I wish this was a Static Combo..
 	if (g_bHasRimLight)
 	{
@@ -156,8 +163,11 @@ float3 ComputeDirectSpecular(Phong_Data_t ph, float3 f3WorldPos, float3 f3Normal
 		f3Specular += f3RimLightAmbient;
 	}
 
+	// Inverse of the above: $PhongTint affects RimLights
+#if !defined(ASWSDK)
 	// Tint / $PhongAlbedoTint / ..
 	f3Specular *= ph.f3PhongModulation;
+#endif
 
 	return f3Specular;
 }

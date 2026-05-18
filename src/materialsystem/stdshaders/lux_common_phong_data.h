@@ -118,7 +118,13 @@ void SetupPhongData(inout Phong_Data_t ph, float3 f3BaseTexture)
 	// Handle overrides for $PhongExponentTexture first
 	#if defined(PHONGEXPONENTTEXTURE)
 		// Override PhongExponent
-		ph.f1PhongExponent += ph.f4PhongExponentTexture.x * g_f1PhongExponentFactorParam;
+		ph.f1PhongExponent += ph.f4PhongExponentTexture.r * g_f1PhongExponentFactorParam;
+
+		// ASW does 1.0f - .r + r. * 150.0f
+		// We replicate the r*150 above but we still need to account for 1.0 - r
+		#if defined(ASWSDK)
+			ph.f1PhongExponent += 1.0f - ph.f4PhongExponentTexture.r;
+		#endif
 
 		// Presumably the Compiler will automatically optimise these
 		// In cases like the Teeth Shader where this would be, non-existant
@@ -134,7 +140,7 @@ void SetupPhongData(inout Phong_Data_t ph, float3 f3BaseTexture)
 		// Stock Consistency : Not happening under the Flashlight
 #if !PROJTEX
 		if(g_bHasRimLightMask)
-			ph.f1RimLightMask = ph.f4PhongExponentTexture.w;
+			ph.f1RimLightMask = ph.f4PhongExponentTexture.a;
 #endif
 
 		// If $PhongExponentTextureMask is set, use the blue channel as PhongMask so that Base and Normal can be used for other stuff.
@@ -150,7 +156,7 @@ void SetupPhongData(inout Phong_Data_t ph, float3 f3BaseTexture)
 
 	// This should be correct, no AlbedoTint at Low Values and Tint at High Values
 	if (g_bHasPhongAlbedoTint)
-		ph.f3PhongModulation *= lerp(1.0f, f3BaseTexture * g_f1AlbedoTintBoost, ph.f4PhongExponentTexture.y);
+		ph.f3PhongModulation *= lerp(1.0f, f3BaseTexture * g_f1AlbedoTintBoost, ph.f4PhongExponentTexture.g);
 
 	// $PhongAlbedoTint was already applied. We can still apply luminance though.
 	// BUGBUG: There used to be a Parameter Combination that allowed you to mask the EnvMap using BaseMap Luminance
