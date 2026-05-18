@@ -115,7 +115,11 @@ VS_OUTPUT main( const VS_INPUT v )
 
 	// TEXCOORD0
 	o.WorldPos_ProjPosZ.xyz = f3WorldPos;
-	o.WorldPos_ProjPosZ.w = dot(float4(f3WorldPos, 1), cViewProjZ);
+	#if defined(ASWSDK)
+		o.WorldPos_ProjPosZ.w = f4ProjPos.z;
+	#else
+		o.WorldPos_ProjPosZ.w = dot(float4(f3WorldPos, 1.0f), cViewProjZ);
+	#endif
 
 	// TEXCOORD1, TEXCOORD2, TEXCOORD3, TEXCOORD4, TEXCOORD5, TEXCOORD6, TEXCOORD7 
 	#if (TEXCOORDS > 0)

@@ -178,7 +178,11 @@ VS_OUTPUT main( const VS_INPUT v )
 	// For that, we give the Pixel Shader:
 	// Position ( For View Dir ) 
 	o.WorldPos_ProjPosZ.xyz = WorldPos;
-	o.WorldPos_ProjPosZ.w = dot(float4(WorldPos, 1), cViewProjZ);
+	#if defined(ASWSDK)
+		o.WorldPos_ProjPosZ.w = OutlineProjPos.z;
+	#else
+		o.WorldPos_ProjPosZ.w = dot(float4(OutlineWorldPos, 1.0f), cViewProjZ);
+	#endif
 
 	// Normal ( For NdotL )
 	o.WorldNormal = WorldNormal;

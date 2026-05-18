@@ -148,7 +148,11 @@ VS_OUTPUT main( const VS_INPUT v )
 	// TEXCOORD0
 	// Set WorldPos and compute Depth
 	o.WorldPos_ProjPosZ.xyz = f3WorldPos;
-	o.WorldPos_ProjPosZ.w = dot(float4(f3WorldPos, 1), cViewProjZ);
+	#if defined(ASWSDK)
+		o.WorldPos_ProjPosZ.w = f4ProjPos.z;
+	#else
+		o.WorldPos_ProjPosZ.w = dot(float4(f3WorldPos, 1.0f), cViewProjZ);
+	#endif
 
 	// Stock Code
     float f1IlluminationFactor = g_f1IllumFactor * saturate(dot(f3WorldNormal, g_f3LightForward));

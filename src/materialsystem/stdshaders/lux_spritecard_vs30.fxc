@@ -276,7 +276,11 @@ VS_OUTPUT main( const VS_INPUT v )
 	o.ARGB_Color = f4Tint;
 
     o.WorldPos_ProjPosZ.xyz = f3WorldPos;
-    o.WorldPos_ProjPosZ.w = dot(float4(f3WorldPos, 1.0f), cViewProjZ);
+	#if defined(ASWSDK)
+		o.WorldPos_ProjPosZ.w = ProjPos.z;
+	#else
+		o.WorldPos_ProjPosZ.w = dot(float4(f3WorldPos, 1.0f), cViewProjZ);
+	#endif
 
 	// "Map projected position to the refraction texture"
 	float2 f2ScreenPos;

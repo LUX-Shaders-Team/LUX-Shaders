@@ -131,7 +131,11 @@ VS_OUTPUT main( const VS_INPUT v )
 	// TEXCOORD0
 	// Set WorldPos and compute Depth
 	o.WorldPos_ProjPosZ.xyz = f3WorldPos;
-	o.WorldPos_ProjPosZ.w = dot(float4(f3WorldPos, 1.0f), cViewProjZ);
+	#if defined(ASWSDK)
+		o.WorldPos_ProjPosZ.w = f4ProjPos.z;
+	#else
+		o.WorldPos_ProjPosZ.w = dot(float4(f3WorldPos, 1.0f), cViewProjZ);
+	#endif
 
 	// Stuffing 1.0f into .zw so all Components of the TexCoord Transform influence the UV
 	float4 f4UnmodifiedTexCoord = float4(v.vTexCoord0.xy, 1.0f, 1.0f);

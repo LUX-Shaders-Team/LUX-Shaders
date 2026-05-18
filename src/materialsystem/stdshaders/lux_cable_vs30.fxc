@@ -55,7 +55,7 @@ struct VS_INPUT
 struct VS_OUTPUT
 {
     float4 ProjPosSetup			: POSITION; 
-	float4 f3WorldPos_ProjPosZ	: TEXCOORD0;
+	float4 WorldPos_ProjPosZ	: TEXCOORD0;
 	float4 TexCoords			: TEXCOORD1;
 	float4 VertexLighting		: TEXCOORD2;
 
@@ -85,8 +85,12 @@ VS_OUTPUT main( const VS_INPUT v )
 	o.ProjPosSetup = FixHPO(f4ProjPos); // Apply Half-Pixel Offset Fix
 	
 	// TEXCOORD0
-	o.f3WorldPos_ProjPosZ.xyz = f3WorldPos;
-	o.f3WorldPos_ProjPosZ.w = dot(float4(f3WorldPos, 1.0f), cViewProjZ);
+    o.WorldPos_ProjPosZ.xyz = f3WorldPos;
+	#if defined(ASWSDK)
+		o.WorldPos_ProjPosZ.w = f4ProjPos.z;
+	#else
+		o.WorldPos_ProjPosZ.w = dot(float4(f3WorldPos, 1.0f), cViewProjZ);
+	#endif
 
 	// IMPORTANT: TexCoord1 is for the $BaseTexture
 	// TexCoord0 is for the $BumpMap
