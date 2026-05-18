@@ -1,7 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	07.02.2023 DMY
-//	Last Change :	06.03.2026 DMY
+//	Last Change :	18.05.2026 DMY
 //
 //==========================================================================//
 
@@ -10,7 +10,7 @@
 
 // Version Number used to be based on amount of commits
 // Since v1.00 its arbitrary
-ConVar lux_version("lux_version", "1.80");
+ConVar lux_version("lux_version", "1.90d");
 ConVar lux_oldshaders("lux_oldshaders", "0", FCVAR_RELOAD_MATERIALS);
 
 //==========================================================================//
