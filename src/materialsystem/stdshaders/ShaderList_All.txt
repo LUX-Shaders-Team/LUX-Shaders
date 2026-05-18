@@ -69,6 +69,8 @@ lux_model_vs30.fxc
 lux_modulate_ps30.fxc
 lux_refract_ps30.fxc
 lux_refract_vs30.fxc
+lux_rimlightpass_ps30.fxc
+lux_rimlightpass_vs30.fxc
 lux_screenspace_ps30.fxc
 lux_screenspace_vs30.fxc
 lux_shatteredglass_ps30.fxc

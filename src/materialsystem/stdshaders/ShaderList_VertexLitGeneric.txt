@@ -36,6 +36,8 @@ lux_sheenpass_vs30.fxc
 lux_sheenpass_ps30.fxc
 lux_meshoutline_vs30.fxc
 lux_meshoutline_ps30.fxc
+lux_rimlightpass_ps30.fxc
+lux_rimlightpass_vs30.fxc
 
 // ASW
 lux_ssao_drawnormal_ps30.fxc

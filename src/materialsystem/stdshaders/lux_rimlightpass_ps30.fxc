@@ -1,0 +1,148 @@
+//===================== File of the LUX Shader Project =====================//
+//
+//	Initial D.	:	13.05.2026 DMY
+//	Last Change :	13.05.2026 DMY
+//
+//==========================================================================//
+
+//==========================================================================//
+//	Declare Static Combos
+//==========================================================================//
+// STATIC:	"NORMALMAP"					"0..1"
+// STATIC:	"USEAMBIENTCUBE"			"0..1"
+// STATIC:	"BASETEXTUREOPACITY"		"0..1"
+// STATIC:	"MASKED"					"0..1"
+
+//==========================================================================//
+//	Declare Dynamic Combos
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Skipping undesired Combos
+//	The Order of Static Combos and Skips has a drastic Impact on Compile Time!
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Unpack Combos
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Common Definitions
+//==========================================================================//
+
+//#define TONEMAP_SCALE_NONE
+#define TONEMAP_SCALE_LINEAR
+//#define TONEMAP_SCALE_GAMMA
+
+// Don't write literally anything to the alpha
+#define NO_DEPTHTODESTALPHA
+#define NO_WATERFOGTODESTALPHA
+
+//==========================================================================//
+//	Constants, Functions, Includes
+//==========================================================================//
+
+// Include for all Pixel Shaders
+#include "lux_common_ps_fxc.h"
+#include "lux_rimlightpass_registermap.h"
+
+//		Sampler_BaseTexture		: register(s0);
+sampler Sampler_RimMask			: register(s1);
+sampler Sampler_NormalMap		: register(s2);
+sampler Sampler_Cubemap			: register(s3);
+
+// c32
+const float3 g_f3RimTint		: register(LUX_PS_FLOAT_RIMLIGHTPASS_TINT);
+const float3 g_f3RimFresnel		: register(LUX_PS_FLOAT_RIMLIGHTPASS_FRESNELRANGES);
+const float3 cAmbientCube[6]	: register(LUX_PS_FLOAT_RIMLIGHTPASS_AMBIENTCUBE);
+
+// Taken from Stock common_vertexlitgeneric Header.
+// Now taken from lux_common_lighting
+float3 ComputeAmbientCube(const float3 worldNormal, const float3 cAmbientCube[6])
+{
+    float3 linearColor, nSquared = worldNormal * worldNormal;
+    float3 isNegative = (worldNormal >= 0.0) ? 0 : nSquared;
+    float3 isPositive = (worldNormal >= 0.0) ? nSquared : 0;
+    linearColor =	isPositive.x * cAmbientCube[0] + isNegative.x * cAmbientCube[1] +
+					isPositive.y * cAmbientCube[2] + isNegative.y * cAmbientCube[3] +
+					isPositive.z * cAmbientCube[4] + isNegative.z * cAmbientCube[5];
+    return linearColor;
+}
+
+//==========================================================================//
+//	PS Input
+//==========================================================================//
+struct PS_INPUT
+{
+	float4 WorldPos_ProjPosZ		: TEXCOORD0;
+	float4 TexCoords				: TEXCOORD1;
+
+#if NORMALMAP
+		float3 Tangent				: TANGENT;
+		float3 Binormal				: BINORMAL;
+#endif	
+		float3 Normal				: NORMAL;
+};
+ 
+//==========================================================================//
+//	PS Entry Point
+//==========================================================================//
+float4 main(PS_INPUT i) : COLOR
+{
+	#if (MASKED || BASETEXTUREOPACITY)
+		float2 f2BaseUV = i.TexCoords.xy;
+		float2 f2NormalMapUV = i.TexCoords.zw;
+	#else
+	  float2 f2NormalMapUV = i.TexCoords.xy;
+	#endif
+	
+    float3 f3NormalWS = i.Normal;
+	
+	#if NORMALMAP
+		float4 f4NormalTS = tex2D(Sampler_NormalMap, f2NormalMapUV);
+		float3 f3NormalTS = f4NormalTS.xyz * 2.0f - 1.0f;
+	
+		float3x3 xmTBN = float3x3(i.Tangent, i.Binormal, i.Normal);
+		f3NormalWS = normalize(mul(f3NormalTS, xmTBN));
+	#endif
+	
+    float3 f3ViewDir = ComputeViewDir(i.WorldPos_ProjPosZ.xyz);
+    float f1NdotV = dot(f3NormalWS, -f3ViewDir); // Unsaturated!!
+	
+	// Fresnel the Phong way
+    float f1Fresnel = saturate(1.0f - f1NdotV);
+    float FresnelRanges = f1Fresnel * f1Fresnel - 0.5f;
+    f1Fresnel = g_f3RimFresnel.y + (FresnelRanges >= 0.0f ? g_f3RimFresnel.z : g_f3RimFresnel.x) * FresnelRanges;
+	
+    float3 f3RimColor = 0.0f;
+	#if USEAMBIENTCUBE
+		f3RimColor = ComputeAmbientCube(f3NormalWS, cAmbientCube);
+	#else
+	    f3RimColor = texCUBE(Sampler_Cubemap, f3NormalWS).rgb;
+	#endif
+	
+	// Tint the Result and apply Fresnel
+    f3RimColor *= f1Fresnel;
+    f3RimColor *= g_f3RimTint;
+	
+	#if MASKED
+		f3RimColor *= tex2D(Sampler_RimMask, f2BaseUV).rgb;
+	#endif
+	
+	// Apply premultiplied Alpha
+	#if BASETEXTUREOPACITY
+		float4 f4BaseTexture = tex2D(Sampler_BaseTexture, i.TexCoords.xy);
+		float f1Opacity = f4BaseTexture.a * g_f1AlphaModulation;
+	
+		f3RimColor *= f1Opacity;
+	#endif
+	
+	// NOTE: MASKBYBASEOPACITY is a bit cursed in that we apply the Opacity to everything individually
+	// This must be done to replicate EmissiveBlend not being Translucent with the Base
+	// Instead of +++ then * by Opacity, I will sum after *
+	// That Way the more Glow you have the more Opaque that glow will become UNLESS Opacity is 0
+    return LUX_Finalise(float4(f3RimColor, 0.0f), i.WorldPos_ProjPosZ.xyz, i.WorldPos_ProjPosZ.w);
+}

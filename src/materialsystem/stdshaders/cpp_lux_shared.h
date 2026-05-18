@@ -708,4 +708,21 @@ SHADER_PARAM(SheenMapMaskScaleY,	SHADER_PARAM_TYPE_FLOAT,	"", "Y Scale for the $
 SHADER_PARAM(SheenMapMaskDirection, SHADER_PARAM_TYPE_INTEGER,	"", "Direction in which the $SheenMapMask should move.\n0 = ZY\n1 = ZX\n2 = YX")\
 SHADER_PARAM(SheenIndex,			SHADER_PARAM_TYPE_INTEGER,	"", "Not Functional.")
 
+#define Declare_RimLightPassParameters()\
+SHADER_PARAM(RimLightPass_Enabled,				SHADER_PARAM_TYPE_BOOL,		"", "Enables the RimLightPass")\
+SHADER_PARAM(RimLightPass_UseBumpMap,			SHADER_PARAM_TYPE_BOOL,		"", "Makes the RimLight Sample use the Normal Map for it's lookup Vector.")\
+SHADER_PARAM(RimLightPass_Tint,					SHADER_PARAM_TYPE_COLOR,	"", "Tints the Result of the RimLight.")\
+SHADER_PARAM(RimLightPass_Mask,					SHADER_PARAM_TYPE_TEXTURE,	"", "[RGB] Per-Texel Tint.\n[A] Nothing.")\
+SHADER_PARAM(RimLightPass_MaskFrame,			SHADER_PARAM_TYPE_INTEGER,	"", "Frame Number for $RimLightPass_Mask.")\
+SHADER_PARAM(RimLightPass_FresnelRanges,		SHADER_PARAM_TYPE_BOOL,		"", "Fresnel Ranges used on the RimLight Pass.")\
+SHADER_PARAM(RimLightPass_UseCustomAmbientCube,	SHADER_PARAM_TYPE_BOOL,		"", "Makes the RimLightPass use an Artist defined Ambient Cube instead of Ambient Cubes from the Map File.")\
+SHADER_PARAM(RimLightPass_CustomAmbientCubeXP,	SHADER_PARAM_TYPE_COLOR,	"", "Color in the X+ Direction of the Custom Ambient Cube.")\
+SHADER_PARAM(RimLightPass_CustomAmbientCubeXN,	SHADER_PARAM_TYPE_COLOR,	"", "Color in the X- Direction of the Custom Ambient Cube.")\
+SHADER_PARAM(RimLightPass_CustomAmbientCubeYP,	SHADER_PARAM_TYPE_COLOR,	"", "Color in the Y+ Direction of the Custom Ambient Cube.")\
+SHADER_PARAM(RimLightPass_CustomAmbientCubeYN,	SHADER_PARAM_TYPE_COLOR,	"", "Color in the Y- Direction of the Custom Ambient Cube.")\
+SHADER_PARAM(RimLightPass_CustomAmbientCubeZP,	SHADER_PARAM_TYPE_COLOR,	"", "Color in the Z+ Direction of the Custom Ambient Cube.")\
+SHADER_PARAM(RimLightPass_CustomAmbientCubeZN,	SHADER_PARAM_TYPE_COLOR,	"", "Color in the Z- Direction of the Custom Ambient Cube.")\
+SHADER_PARAM(RimLightPass_Cubemap,				SHADER_PARAM_TYPE_TEXTURE,	"", "[RGB] Cubemap Color Texture that replaces the RimLightPass Ambient Cube. ( More Expensive but also more Control ).\n[A] Nothing.")\
+SHADER_PARAM(RimLightPass_CubemapFrame,			SHADER_PARAM_TYPE_INTEGER,	"", "Frame Number for $RimLightPass_Cubemap.")
+
 #endif // CPP_LUX_SHARED_H

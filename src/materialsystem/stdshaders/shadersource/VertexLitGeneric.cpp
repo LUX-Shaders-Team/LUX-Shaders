@@ -22,6 +22,7 @@
 #include "renderpasses/EmissiveBlend.h"
 #include "renderpasses/FleshInterior.h"
 #include "renderpasses/MeshOutline.h"
+#include "renderpasses/RimLightPass.h"
 
 // Includes for Shaderfiles...
 #include "lux_model_simplified_vs30.inc"
@@ -197,6 +198,7 @@ BEGIN_SHADER_PARAMS
 	Declare_CloakParameters()
 	Declare_SheenPassParameters()
 	Declare_MeshOutlineParameters()
+	Declare_RimLightPassParameters()
 
 	// Treesway Implementation
 	Declare_TreeswayParameters()
@@ -263,6 +265,13 @@ void VLG_SetupEmissiveBlendVars(EmissiveBlend_Vars_t& EmissiveVars)
 void VLG_SetupSheenPassVars(SheenPass_Vars_t& SheenVars)
 {
 	SheenVars.InitVars(SheenPassEnabled, NormalTexture, BumpFrame, BumpTransform);
+}
+
+void VLG_SetupRimLightPassVars(RimLightPass_Vars_t& RimlightVars)
+{
+	RimlightVars.Base.InitVars(BaseTexture, Frame, BaseTextureTransform);
+	RimlightVars.Normal.InitVars(BumpMap);
+	RimlightVars.InitVars(RimLightPass_Enabled);
 }
 
 // IMPORTANT: Virtual Function Override.
@@ -575,6 +584,10 @@ SHADER_INIT_PARAMS()
 	VLG_SetupSheenPassVars(SheenVars);
 	SheenPass_Init_Params(this, SheenVars);
 
+	RimLightPass_Vars_t RimlightPassVars;
+	VLG_SetupRimLightPassVars(RimlightPassVars);
+	RimLightPass_Init_Params(this, RimlightPassVars);
+
 	// Always dealing with a Model!
 	SetFlag(MATERIAL_VAR_MODEL);
 
@@ -836,6 +849,10 @@ SHADER_INIT
 	SheenPass_Vars_t SheenVars;
 	VLG_SetupSheenPassVars(SheenVars);
 	SheenPass_Shader_Init(this, SheenVars);
+
+	RimLightPass_Vars_t RimlightPassVars;
+	VLG_SetupRimLightPassVars(RimlightPassVars);
+	RimLightPass_Shader_Init(this, RimlightPassVars);
 
 	// Always needed...
 	SetFlag(MATERIAL_VAR_MODEL);								// This has to be set here!!! Can't be set later
@@ -2291,6 +2308,15 @@ SHADER_DRAW
 		SheenPass_Shader_Draw(this, pShaderShadow, pShaderAPI, SheenVars);
 	}
 	else if (GetBool(SheenPassEnabled))
+		Draw(false);
+
+	if (pShaderShadow || bDrawBasePass)
+	{
+		RimLightPass_Vars_t RimlightPassVars;
+		VLG_SetupRimLightPassVars(RimlightPassVars);
+		RimLightPass_Shader_Draw(this, pShaderShadow, pShaderAPI, RimlightPassVars);
+	}
+	else if (GetBool(RimLightPass_Enabled))
 		Draw(false);
 
 	// Only draw Spy Cloak if it's enabled
