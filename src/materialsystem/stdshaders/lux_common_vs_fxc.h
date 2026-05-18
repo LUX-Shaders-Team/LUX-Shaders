@@ -97,7 +97,7 @@ const float4x4		cViewProj						: register(c8);
 //					cViewProj[2]					: register(c10); // 10
 //					cViewProj[3]					: register(c11);
 const float4		cModelViewProjZ					: register(c12); // "Used to compute projPosZ without skinning. Using cModelViewProj with FastClip generates incorrect results"
-#if defined(ASWSDK)
+#if (defined(ASWSDK) && !defined(SFM_COMPATIBILITY))
 const float4		cFlexScale						: register(c13); // Only cFlexScale.x used. Binary value for toggling addition of the flex delta stream.
 #else
 const float4		cViewProjZ						: register(c13); // "More constants working back from the top..."
@@ -166,6 +166,9 @@ const float4x3		cModel[53]						: register(c58);
 //
 //					LUX_VS_TEXTURETRANSFORM_02	c225
 //
+#if (defined(ASWSDK) && defined(SFM_COMPATIBILITY))
+const float4 cFlexScale : register(c225); // Only cFlexScale.x used. Binary value for toggling addition of the flex delta stream.
+#endif
 //					LUX_VS_TEXTURETRANSFORM_03	c227
 //
 //					LUX_VS_TEXTURETRANSFORM_04	c229
