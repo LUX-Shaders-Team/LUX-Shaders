@@ -548,14 +548,25 @@ SHADER_DRAW
 		if (!bWriteShadowDepth)
 			SetVertexShaderTextureTransform(LUX_VS_TEXTURETRANSFORM_01, BaseTextureTransform);
 
-		// Get viewport and render target dimensions and set shader constant to do a 2D mad
-		ShaderViewport_t CurrentViewport;
-		pShaderAPI->GetViewports(&CurrentViewport, 1);
-
 		float4 f4c7;
 		if (!g_pHardwareConfig->IsAAEnabled())
 		{
-			float flMinPixelDiameter = rope_min_pixel_diameter.GetFloat() / (float)CurrentViewport.m_nWidth;
+			// Get viewport and render target dimensions and set shader constant to do a 2D mad
+#ifdef ASWSDK
+			int nViewportX;
+			int nViewportY;
+			int nViewportWidth;
+			int nViewportHeight;
+			pShaderAPI->GetCurrentViewport(nViewportX, nViewportY, nViewportWidth, nViewportHeight);
+#else
+			ShaderViewport_t vp;
+			pShaderAPI->GetViewports(&vp, 1);
+//			int nViewportX = vp.m_nTopLeftX;
+//			int nViewportY = vp.m_nTopLeftY;
+			int nViewportWidth = vp.m_nWidth;
+//			int nViewportHeight = vp.m_nHeight;
+#endif
+			float flMinPixelDiameter = rope_min_pixel_diameter.GetFloat() / (float)nViewportWidth;
 			f4c7 = flMinPixelDiameter;
 		}
 		pShaderAPI->SetVertexShaderConstant(LUX_VS_FLOAT_SET1_7, f4c7);
