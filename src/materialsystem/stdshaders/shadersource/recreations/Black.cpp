@@ -9,7 +9,7 @@
 //	Luckily, it's incredibly simple. It's.. Black, with Fog on it.
 //
 //==========================================================================//
-
+#if 0
 // Commonly Shared Definitions, Defines and Data for all Shaders
 #include "../../cpp_lux_shared.h"
 
@@ -198,3 +198,4 @@ SHADER_DRAW
 	Draw();
 }
 END_SHADER
+#endif

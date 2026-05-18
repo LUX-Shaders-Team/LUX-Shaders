@@ -94,14 +94,11 @@ $Project
 				$File "$STDSHADERS/lux_custom_common_vs.h"
 				$File "$STDSHADERS/lux_worldvertextransition.h"
 				$File "$STDSHADERS/lux_triplanar_displacement.h"
-				$File "$STDSHADERS/lux_infected_ps30.h"
 
 				// Register Maps
-				$File "$STDSHADERS/lux_infected_registermap.h"
 				$File "$STDSHADERS/lux_unlitgeneric_registermap.h"			
 
 				// .fxc Files
-				$File "$STDSHADERS/lux_black_ps30.fxc"
 				$File "$STDSHADERS/lux_bloom_ps30.fxc"
 				$File "$STDSHADERS/lux_blurfilters_ps30.fxc"
 				$File "$STDSHADERS/lux_blurfilters_vs30.fxc"
@@ -141,8 +138,6 @@ $Project
 				$File "$STDSHADERS/lux_engine_post_ps30.fxc"
 				$File "$STDSHADERS/lux_eyes_ps30.fxc"
 				$File "$STDSHADERS/lux_eyes_vs30.fxc"
-				$File "$STDSHADERS/lux_infected_ps30.fxc"
-				$File "$STDSHADERS/lux_infected_vs30.fxc"
 				$File "$STDSHADERS/lux_lightmappedgeneric_bump_ps30.fxc"
 				$File "$STDSHADERS/lux_lightmappedgeneric_decal_ps30.fxc"
 				$File "$STDSHADERS/lux_lightmappedgeneric_flashlight_ps30.fxc"
@@ -230,12 +225,6 @@ $Project
 				$File "$SHADERSOURCE/renderpasses/MeshOutline.h"
 				$File "$SHADERSOURCE/renderpasses/SheenPass.cpp"
 				$File "$SHADERSOURCE/renderpasses/SheenPass.h"
-			}
-			
-			$Folder "Recreated Shaders"
-			{
-				$File "$SHADERSOURCE/recreations/Black.cpp"
-				$File "$SHADERSOURCE/recreations/Infected.cpp"
 			}
 
 			$File "$SHADERSOURCE/LightmappedGeneric.cpp"

@@ -13,7 +13,6 @@
 // All fxc Files that don't get a dedicated script
 //============================================
 
-lux_black_ps30.fxc
 lux_depthtodestalpha_ps30.fxc
 lux_eyes_vs30.fxc
 lux_eyes_ps30.fxc

@@ -13,7 +13,6 @@
 // Sorted by Compiletime
 //============================================
 
-lux_black_ps30.fxc
 lux_bloom_ps30.fxc
 lux_blurfilters_ps30.fxc
 lux_blurfilters_vs30.fxc
@@ -53,8 +52,6 @@ lux_emissive_vs30.fxc
 lux_engine_post_ps30.fxc
 lux_eyes_ps30.fxc
 lux_eyes_vs30.fxc
-lux_infected_ps30.fxc
-lux_infected_vs30.fxc
 lux_lightmappedgeneric_bump_ps30.fxc
 lux_lightmappedgeneric_decal_ps30.fxc
 lux_lightmappedgeneric_flashlight_ps30.fxc
