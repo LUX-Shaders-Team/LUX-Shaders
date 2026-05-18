@@ -1867,7 +1867,7 @@ void LuxVertexLitGeneric_Shader_Draw(IMaterialVar** ppParams, IShaderShadow* pSh
 					float f1CurrentTime = MAX(0, float(pShaderAPI->CurrentTime()) - pContextData->m_f1LerpStart - 2.0f);
 
 					// Gives us a nice 0..1 Factor
-					float f1TargetTime = saturate(f1CurrentTime / lux_envmap_lerptime.GetFloat());
+					float f1TargetTime = fxsaturate(f1CurrentTime / lux_envmap_lerptime.GetFloat());
 
 					// If we reached the new Cubemap, unlock and set the previous Cubemap as the current Cubemap
 					// Effectively reseting to the Start-Position of this System
@@ -1999,7 +1999,7 @@ void LuxVertexLitGeneric_Shader_Draw(IMaterialVar** ppParams, IShaderShadow* pSh
 		}
 
 		cSSAOControls.x *= GetFloat(AmbientOcclusion);
-		cSSAOControls.x = saturate(cSSAOControls.x); // Make sure this doesn't go out of Range
+		cSSAOControls.x = fxsaturate(cSSAOControls.x); // Make sure this doesn't go out of Range
 		pShaderAPI->SetPixelShaderConstant(LUX_PS_FLOAT_ASW_SSAOCONTROLS, cSSAOControls);
 #endif
 

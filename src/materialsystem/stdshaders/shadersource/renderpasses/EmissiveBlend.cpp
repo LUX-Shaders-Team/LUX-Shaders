@@ -305,7 +305,7 @@ void EmissiveBlend_Shader_Draw(CBaseVSShader* pShader, IShaderShadow* pShaderSha
 			//					And by stock Materials I mean the single one Material that even used this...
 			//					Vortigaunt_blue.vmt, where it's controlled by a Proxy
 			float	f1BlendStrength = pShader->GetFloat(info.m_nEmissiveBlendStrength);
-					f1BlendStrength = saturate(f1BlendStrength);
+					f1BlendStrength = fxsaturate(f1BlendStrength);
 			
 			// NOTE :	Stock Shader checks Param IsDefined() && > 0
 			//			If you have a Sinewave hooked to your Time and it reaches 0 it will just randomly jump to CurTime.

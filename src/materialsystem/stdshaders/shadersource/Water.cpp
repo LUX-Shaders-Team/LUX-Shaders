@@ -1220,7 +1220,7 @@ void DrawCheap(IShaderShadow* pShaderShadow, IShaderDynamicAPI* pShaderAPI, bool
 		float f1EndDistance = GetFloat(CheapWaterEndDistance);
 		float4 c56;
 		c56.x = bNoFresnel ? 0.0f : 1.0f;									// f1NoFresnelMul, set to 0 for no Fresnel
-		c56.y = bNoFresnel ? saturate(GetFloat(ReflectBlendFactor)) : 0.0f; // Forces Fresnel Values despite $NoFresnel
+		c56.y = bNoFresnel ? fxsaturate(GetFloat(ReflectBlendFactor)) : 0.0f; // Forces Fresnel Values despite $NoFresnel
 		c56.z = 1.0f / (f1EndDistance - f1StartDistance);					// f1DeltaRecip
 		c56.w = f1StartDistance / (f1EndDistance - f1StartDistance);		// f1StartDivDelta
 		pShaderAPI->SetPixelShaderConstant(REGISTER_FLOAT_056, c56);

@@ -173,7 +173,7 @@ void CloakBlend_Shader_Draw(CBaseVSShader* pShader, IShaderShadow* pShaderShadow
 			pShader->SetLuminanceGammaConstant(LUX_PS_FLOAT_LUMINANCE_GAMMA);
 
 		// Get all the values first
-		float f1CloakFactor = saturate(pShader->GetFloat(info.m_nCloakFactor));
+		float f1CloakFactor = fxsaturate(pShader->GetFloat(info.m_nCloakFactor));
 		float f1RefractFactor = pShader->GetFloat(info.m_nRefractAmount);
 
 		float4 f4CloakTint_Factor;
@@ -182,7 +182,7 @@ void CloakBlend_Shader_Draw(CBaseVSShader* pShader, IShaderShadow* pShaderShadow
 		// Precompute this
 		// fColorTintStrength = saturate( ( saturate( g_flCloakFactor ) - 0.75f ) * 4.0f );
 		// cRefract.rgb *= lerp( g_cCloakColorTint, 1.0f, fColorTintStrength );
-		float f1TintStrength = saturate((f1CloakFactor - 0.75f) * 4.0f);
+		float f1TintStrength = fxsaturate((f1CloakFactor - 0.75f) * 4.0f);
 		f4CloakTint_Factor.xyz = lerp(f4CloakTint_Factor.xyz, float3(1.0f, 1.0f, 1.0f), f1TintStrength);
 		f4CloakTint_Factor.w = f1CloakFactor;
 		pShaderAPI->SetPixelShaderConstant(REGISTER_FLOAT_032, f4CloakTint_Factor);
@@ -196,7 +196,7 @@ void CloakBlend_Shader_Draw(CBaseVSShader* pShader, IShaderShadow* pShaderShadow
 		float4 f4Controls;
 		f4Controls.x = f1CloakFactor * f1CloakFactor; // CloakFactor squared
 		f4Controls.y = lerp(f1RefractFactor, 0.0f, f1CloakFactor);
-		f4Controls.z = lerp(0.05f, 0.0f, saturate(f1CloakFactor));
+		f4Controls.z = lerp(0.05f, 0.0f, fxsaturate(f1CloakFactor));
 		f4Controls.w = 0.0f;	
 		pShaderAPI->SetPixelShaderConstant(REGISTER_FLOAT_033, f4Controls);
 
