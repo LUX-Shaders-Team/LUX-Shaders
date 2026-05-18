@@ -137,11 +137,25 @@
 	sampler Sampler_BumpStretch		: register(s10);
 #endif
 
+#if defined(ASWSDK)
+	const float4 cScreenSizes		: register(LUX_PS_FLOAT_ASW_SCREENSIZE);
+	#define g_f2ScreenTexelSize (cScreenSizes.xy)
+	#define g_f2ScreenHalfTexel (cScreenSizes.zw)
+
+	const float4 cSSAOControls		: register(LUX_PS_FLOAT_ASW_SSAOCONTROLS);
+	#define g_f1SSAOStrength (cSSAOControls.x)
+
+	sampler Sampler_SSAO			: register(s11);
+#endif
+
 //==========================================================================//
 //	PS Input
 //==========================================================================//
 struct PS_INPUT
 {
+#if defined(ASWSDK)
+	float2 ScreenPos				: VPOS;
+#endif
 
 	float4 WorldPos_ProjPosZ		: TEXCOORD0;
     float4 TexCoords1				: TEXCOORD1;
@@ -174,6 +188,11 @@ float4 main(PS_INPUT i) : COLOR
 {
 	//	Getting our PS_INPUT
 	//==========================================================================//
+
+	// VPOS
+	#if defined(ASWSDK)
+		float2 f2ScreenUV = i.ScreenPos * g_f2ScreenTexelSize + g_f2ScreenHalfTexel;
+	#endif
 
 	// TEXCOORD0
 	float3 f3WorldPos = i.WorldPos_ProjPosZ.xyz;
@@ -519,6 +538,15 @@ float4 main(PS_INPUT i) : COLOR
 	//==========================================================================//
 	//	SSAO ( in case of ASW )
 	//==========================================================================//
+
+#if defined(ASWSDK)
+	float f1SSAO = tex2Dlod(Sampler_SSAO, float4(f2ScreenUV, 0.0f, 0.0f)).r;
+
+	// Make it less strong if that is desired
+	f1SSAO = lerp(1.0f, f1SSAO, g_f1SSAOStrength);
+
+	f3CombinedTerms *= f1SSAO;
+#endif
 
 	float f1Alpha = f4BaseTexture.a; // Using $BaseTexture Alpha for transparency & translucency Effects
 	

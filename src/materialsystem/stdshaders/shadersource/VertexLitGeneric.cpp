@@ -203,6 +203,11 @@ BEGIN_SHADER_PARAMS
 
 	// We can't replicate this Parameter but we can at least make Materials from L4D1 not utterly broken
 	SHADER_PARAM(ShinyBlood, SHADER_PARAM_TYPE_BOOL, "", "(INTERNAL PARAMETER) Disables Phong to unbreak some L4D1 Materials.")
+
+	#ifdef ASWSDK
+		// Parameter Name predetermined by SFM, if this is supposed to look like stock VLG it must use this Name
+		SHADER_PARAM(AmbientOcclusion, SHADER_PARAM_TYPE_FLOAT, "", "Default 1.0f - The Strength of the AO Effect")
+	#endif
 END_SHADER_PARAMS
 
 #ifdef ASWSDK
@@ -754,6 +759,11 @@ SHADER_INIT_PARAMS()
 		SetFlag2(MATERIAL_VAR2_NEEDS_TANGENT_SPACES);
 		SetFlag2(MATERIAL_VAR2_DIFFUSE_BUMPMAPPED_MODEL);
 	}
+
+#ifdef ASWSDK
+
+	DefaultFloat(AmbientOcclusion, 1.0f);
+#endif
 }
 
 SHADER_FALLBACK
@@ -1226,6 +1236,8 @@ void LuxVertexLitGeneric_Shader_Draw(IMaterialVar** ppParams, IShaderShadow* pSh
 		// s11 - $Lightmap
 		if(!bHasPhong && !bHasNormalTexture)
 			EnableSampler(SAMPLER_LIGHTMAP, false); // bHasLightmapTexture, 
+#else
+		EnableSampler(SHADER_SAMPLER11, true); // Used for SSAO RT
 #endif
 
 
@@ -1745,6 +1757,12 @@ void LuxVertexLitGeneric_Shader_Draw(IMaterialVar** ppParams, IShaderShadow* pSh
 			else
 				BindTexture(SAMPLER_LIGHTMAP, TEXTURE_BLACK);
 		}
+#else
+		ITexture* pAOTexture = pShaderAPI->GetTextureRenderingParameter(TEXTURE_RENDERPARM_AMBIENT_OCCLUSION);
+		if (pAOTexture)
+			BindTexture(SHADER_SAMPLER11, pAOTexture);
+		else
+			pShaderAPI->BindStandardTexture(SHADER_SAMPLER11, TEXTURE_WHITE);
 #endif
 
 		// s14 - $EnvMap
@@ -1897,6 +1915,26 @@ void LuxVertexLitGeneric_Shader_Draw(IMaterialVar** ppParams, IShaderShadow* pSh
 		// Need Luminance Weights in this Scenario
 		if (bHasEnvMap || bDesaturateWithBaseAlpha || bHasLightmapTexture || bHasPhong && GetBool(BaseMapLuminancePhongMask))
 			SetLuminanceGammaConstant(LUX_PS_FLOAT_LUMINANCE_GAMMA);
+
+#ifdef ASWSDK
+		pShaderAPI->SetScreenSizeForVPOS(LUX_PS_FLOAT_ASW_SCREENSIZE);
+
+		float4 cSSAOControls = 1.0f;
+
+		// Some duplicate Code here, FlashlightState has an Ambient Occlusion Factor, so we have to get it
+		if(bProjTex)
+		{
+			ITexture* pFlashlightDepthTexture;
+			FlashlightState_t FlashlightState;
+			VMatrix xmWorldToTexture;
+			FlashlightState = pShaderAPI->GetFlashlightStateEx(xmWorldToTexture, &pFlashlightDepthTexture);
+			cSSAOControls.x *= FlashlightState.m_flAmbientOcclusion;
+		}
+
+		cSSAOControls.x *= GetFloat(AmbientOcclusion);
+		cSSAOControls.x = saturate(cSSAOControls.x); // Make sure this doesn't go out of Range
+		pShaderAPI->SetPixelShaderConstant(LUX_PS_FLOAT_ASW_SSAOCONTROLS, cSSAOControls);
+#endif
 
 		// Prepare boolean array, yes we need to use BOOL
 		BOOL BBools[REGISTER_BOOL_MAX] = { false };
