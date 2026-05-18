@@ -45,6 +45,7 @@ extern bool g_bWaterAlienSwarmFogFactor;
 //-----------------------------------------------------------------------------
 // Helper Function for dll loading
 //-----------------------------------------------------------------------------
+#ifndef ASWSDK
 template<typename T>
 inline T *LoadInterface( const char *module, const char *version, Sys_Flags flags = SYS_NOFLAGS )
 {
@@ -60,6 +61,7 @@ inline T *LoadInterface( const char *module, const char *version, Sys_Flags flag
 
     return nullptr;
 }
+#endif
 
 //-----------------------------------------------------------------------------
 // Forward declarations

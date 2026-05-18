@@ -1,7 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	21.09.2025 DMY
-//	Last Change :	 30.01.2026 DMY
+//	Last Change :	18.05.2026 DMY
 //
 //==========================================================================//
 
@@ -12,6 +12,9 @@
 #pragma once
 #endif
 
+// FIXME: Filesystem Support
+#include "../stdshaders/lux_common_defines.h"
+#ifndef ASWSDK
 #include <string>
 #include <vector>
 
@@ -105,5 +108,7 @@ public:
 extern bool g_bHotReloadEnabled;
 extern bool g_bHotReloadCacheEnabled;
 extern CShaderReload g_ShaderReload;
+
+#endif // !ASWSDK
 
 #endif // SHADERSPEW_H

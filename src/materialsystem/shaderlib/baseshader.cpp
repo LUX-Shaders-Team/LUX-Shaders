@@ -34,6 +34,7 @@ bool g_bSupressShaderWarnings = false;
 bool g_bHammerPlusPlus = false;
 bool g_bWaterAlienSwarmFogFactor = false;
 
+#ifndef ASWSDK
 #ifdef DEBUG
 bool g_bDebugSpew = false;
 bool g_bBreakPointShadow = false;
@@ -170,6 +171,7 @@ CON_COMMAND_F(lux_debug_breakpoint, "Forces an Assert in the BaseShader of the s
 		g_bBreakPointDynamic = false;
 	}
 }
+#endif
 #endif
 
 //-----------------------------------------------------------------------------
@@ -467,10 +469,12 @@ void CBaseShader::InitShaderParams(IMaterialVar** ppParams, const char *pMateria
 		SetBool(ReceiveProjectedTextures, true);
 
 	// lux_debug_..
+#ifndef ASWSDK
 	#ifdef DEBUG
 	if(g_bDebugSpew || g_bBreakPointShadow || g_bBreakPointDynamic)
 		SetBool(Debug_True, true);
 	#endif
+#endif
 
 	// Set $Alpha2 to 1.0f for all Shaders
 	// ( Defeault Value )
@@ -549,6 +553,8 @@ void CBaseShader::DrawElements( IMaterialVar **ppParams, int nModulationFlags,
 	m_ppInstanceDataPtr = (CPerInstanceContextData**)pInstanceDataPtr;
 	m_nCurrentPass = 0;
 #endif
+
+#ifndef ASWSDK
 #ifdef DEBUG
 	bool bDebug = GetBool(Debug_True);
 
@@ -570,6 +576,7 @@ void CBaseShader::DrawElements( IMaterialVar **ppParams, int nModulationFlags,
 	// Send the MaterialName towards the vcs Reload Class
 	if(g_bHotReloadEnabled)
 		g_ShaderReload.SetMaterialName(CurrentMaterialName());
+#endif
 
 	if (IsSnapshotting())
 	{
@@ -605,7 +612,7 @@ void CBaseShader::DrawElements( IMaterialVar **ppParams, int nModulationFlags,
 	m_ppInstanceDataPtr = NULL;
 	m_pCurrentInstanceCommandBuffer = NULL;
 	m_nCurrentPass = 0;
-#endif
+#else
 
 	// Reset the Proxies.
 	// Ensures that the next Draw() doesn't get dangling Pointers
@@ -614,7 +621,6 @@ void CBaseShader::DrawElements( IMaterialVar **ppParams, int nModulationFlags,
 		s_ProxyShaderShadow.ResetShaderShadow();
 		s_ProxyShaderAPI.ResetShaderAPI();	
 	}
-
 	
 #ifdef DEBUG
 	// End Point for ShaderSpew, this is where printing happens
@@ -627,6 +633,7 @@ void CBaseShader::DrawElements( IMaterialVar **ppParams, int nModulationFlags,
 		g_bDebugSpew = false;
 		s_ShaderSpew.AllowSpew(false);
 	}
+#endif
 #endif
 }
 
@@ -716,8 +723,10 @@ void CBaseShader::Draw( bool bMakeActualDrawCall )
 		}
 #endif
 
+#ifndef ASWSDK
 #ifdef DEBUG
 		s_ShaderSpew.LogDraw_ShadowState();
+#endif
 #endif
 	}
 	else
@@ -735,11 +744,13 @@ void CBaseShader::Draw( bool bMakeActualDrawCall )
 		GetShaderSystem()->DrawSnapshot(bActualDrawCall);
 #endif
 
+#ifndef ASWSDK
 #ifdef DEBUG
 		// We only go down the Snapshot or Dynamic Path
 		// In case of Dynamic State we also need to log the fake ShadowState
 		s_ShaderSpew.LogDraw_ShadowState();
 		s_ShaderSpew.LogDraw_DynamicState();
+#endif
 #endif
 	}
 

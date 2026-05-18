@@ -244,7 +244,9 @@ void CProxyShaderShadow::SetVertexShader(const char* pFileName, int nStaticVshIn
 		return;
 
 	const char* pShaderVCS = pFileName;
+#ifndef ASWSDK
 	pShaderVCS = g_ShaderReload.GetResolvedFileName(pFileName);
+#endif
 	m_pShaderShadow->SetVertexShader(pShaderVCS, nStaticVshIndex);
 }
 
@@ -254,7 +256,9 @@ void CProxyShaderShadow::SetPixelShader(const char* pFileName, int nStaticPshInd
 		return;
 
 	const char* pShaderVCS = pFileName;
+#ifndef ASWSDK
 	pShaderVCS = g_ShaderReload.GetResolvedFileName(pFileName);
+#endif
 	m_pShaderShadow->SetPixelShader(pShaderVCS, nStaticPshIndex);
 }
 

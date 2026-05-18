@@ -16,8 +16,11 @@
 #include "mathlib/mathlib.h"
 #include "tier1/tier1.h"
 #include "color.h"
+#include "../stdshaders/lux_common_defines.h"
+#ifndef ASWSDK
 #include "filesystem.h"
 #include <tier2/tier2.h>
+#endif
 #include <vector>
 #include <array>
 #include "tier0/icommandline.h"
@@ -195,6 +198,9 @@ void CShaderDLL::InsertShader( IShader *pShader )
 	m_ShaderList.AddToTail( pShader );
 }
 
+
+// Everything below only on the SDK due to FileSystem not being accounted for ( FIXME )
+#ifndef ASWSDK
 
 //-----------------------------------------------------------------------------
 //  When we find a "\n" we replace it with "  \n" for markdown formated strings 
@@ -779,5 +785,5 @@ CON_COMMAND_F(lux_generate_github_wiki, "Generates a wiki in markdown format. (m
 	Msg("Github Wiki file dump at: %s", szLuxDumpDir);
 }
 
-
+#endif // !ASWSDK
 #endif // NOLUX

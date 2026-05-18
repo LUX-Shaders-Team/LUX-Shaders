@@ -1,13 +1,16 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	21.09.2025 DMY
-//	Last Change :	19.03.2026 DMY
+//	Last Change :	18.05.2026 DMY
 //
 //==========================================================================//
 
 // BaseShader
 #include "BaseShader.h"
 #include "VCSHotReload.h"
+
+// FIXME: Filesystem Support
+#ifndef ASWSDK
 
 // Need this for String Mod Stuff
 #include "filesystem.h"
@@ -559,3 +562,4 @@ CON_COMMAND_F(lux_vcshotreloads_clear, "Debug ConCommand to read the List of VCS
 
 	g_ShaderReload.ClearReferenceList();
 }
+#endif
