@@ -81,6 +81,7 @@
 //#define TONEMAP_SCALE_NONE
 #define TONEMAP_SCALE_LINEAR
 //#define TONEMAP_SCALE_GAMMA
+
 //==========================================================================//
 //	Constants, Functions, Includes
 //==========================================================================//
