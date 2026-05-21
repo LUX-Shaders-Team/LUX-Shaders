@@ -1290,8 +1290,6 @@ SHADER_DRAW
 			if (lux_disablefast_lightwarp.GetBool())
 				bHasLightWarpTexture = false;
 #endif
-			if(bHasLightWarpTexture)
-				BBools[LUX_PS_BOOL_LIGHTWARPTEXTURE] = true;
 		}
 
 		// b4, b5, b6, b7, b8, b9, b10, b11

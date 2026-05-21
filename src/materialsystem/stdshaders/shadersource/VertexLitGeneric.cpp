@@ -2027,10 +2027,6 @@ void LuxVertexLitGeneric_Shader_Draw(IMaterialVar** ppParams, IShaderShadow* pSh
 		if(bBumpedShader && bHalfLambert)
 			BBools[LUX_PS_BOOL_HALFLAMBERT] = true;
 
-		// b1
-		if(bHasLightWarpTexture)
-			BBools[LUX_PS_BOOL_LIGHTWARPTEXTURE] = true;
-
 		// b4, b5, b6, b7, b8, b9, b10, b11
 		if (bHasPhong)
 		{

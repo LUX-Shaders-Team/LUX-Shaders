@@ -1054,10 +1054,6 @@ SHADER_DRAW
 		// Prepare boolean array, yes we need to use BOOL
 		BOOL BBools[REGISTER_BOOL_MAX] = { false };
 
-		// b1
-		if(bHasLightWarpTexture)
-			BBools[LUX_PS_BOOL_LIGHTWARPTEXTURE] = true;
-
 		// b4, b5, b6, b7, b8, b9, b10, b11
 		if (bHasPhong)
 		{
