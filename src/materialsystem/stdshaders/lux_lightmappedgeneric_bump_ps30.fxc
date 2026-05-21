@@ -13,6 +13,7 @@
 // STATIC:	"SELFILLUMMODE"				"0..2"
 // STATIC:	"XBYBASEALPHA"				"0..2"
 // STATIC:	"DETAILTEXTURE"				"0..1"
+// STATIC:	"LIGHTWARPTEXTURE"			"0..1"
 
 //==========================================================================//
 //	Declare Dynamic Combos

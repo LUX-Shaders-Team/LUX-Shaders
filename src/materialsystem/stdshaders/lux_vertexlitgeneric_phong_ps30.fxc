@@ -1,7 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	14.02.2023 DMY
-//	Last Change :	06.05.2026 DMY
+//	Last Change :	21.05.2026 DMY
 //
 //==========================================================================//
 
@@ -15,6 +15,7 @@
 // STATIC:	"EXPONENTTEXTURE"			"0..1"
 // STATIC:	"XBYBASEALPHA"				"0..2"
 // STATIC:	"DETAILTEXTURE"				"0..1"
+// STATIC:	"LIGHTWARPTEXTURE"			"0..1"
 
 //==========================================================================//
 //	Declare Dynamic Combos

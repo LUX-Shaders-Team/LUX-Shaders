@@ -77,10 +77,9 @@ float3 ComputeDirectDiffuseLight(float3 f3LightDir, float3 f3LightColor, float3 
 		f1NdL = saturate(f1NdL * 0.5f + 0.5f);
 
 		// Square Curve
-#if LIGHTWARPTEXTURE
-		if (!g_bLightWarpTexture)
+		#if LIGHTWARPTEXTURE
 			f1NdL *= f1NdL;
-#endif
+		#endif
 	}
 	else
 	{
@@ -91,8 +90,6 @@ float3 ComputeDirectDiffuseLight(float3 f3LightDir, float3 f3LightColor, float3 
 	float3 f3LightAttenuation;
 
 #if LIGHTWARPTEXTURE
-	if (g_bLightWarpTexture)
-	{
 		// Shirodkxtro2: This *must* be tex1Dlod, if we use the Integer Register for Lighting Loops.
 		// 
 		// If this was tex1Dlod, the Compiler would error with 'blabla gradient instruction are illegal in conditional statements'
@@ -103,12 +100,9 @@ float3 ComputeDirectDiffuseLight(float3 f3LightDir, float3 f3LightColor, float3 
 
 		// The 2.0f here could be precomputed into f3LightColor or f1Attenuation
 		// First one in the c++ Portion of the Code and the Second one on the Vertex Shader
-	}
-	else
-#endif
-	{
+#else
 		f3LightAttenuation = (float3)f1NdL;
-	}
+#endif
 
 	return f3LightAttenuation * f3LightColor;
 }
