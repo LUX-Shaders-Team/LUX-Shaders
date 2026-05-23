@@ -1,7 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	27.03.2025 DMY
-//	Last Change :	 30.01.2026 DMY
+//	Last Change :	22.05.2026 DMY
 //
 //==========================================================================//
 
@@ -32,6 +32,18 @@
 //==========================================================================//
 //	Unpack Combos
 //==========================================================================//
+#if (ENVMAPMODE > 0)
+    #define ENVMAP 1
+#else
+    #define ENVMAP 0
+#endif
+
+#if (ENVMAPMODE == 2)
+    #define ENVMAPMASK 1
+#else
+    #define ENVMAPMASK 0
+#endif
+
 #if (MODE_BUMP > 0)
 	#define BUMPMAPPING 1
 #else

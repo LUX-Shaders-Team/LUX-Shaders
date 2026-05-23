@@ -1,7 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	04.03.2023 DMY
-//	Last Change :	21.05.2026 DMY
+//	Last Change :	22.05.2026 DMY
 //
 //==========================================================================//
 
@@ -26,13 +26,34 @@
 //	Skipping undesired Combos
 //	The Order of Static Combos and Skips has a drastic Impact on Compile Time!
 //==========================================================================//
-// SKIP: ( ($ENVMAPMODE != 2 && $ENVMAPMODE != 4) && $SELFILLUMMODE == 2 )
+// SKIP: ( $ENVMAPMODE < 3 && $SELFILLUMMODE == 2 )
 // SKIP: ( $SELFILLUMMODE == 1 && $XBYBASEALPHA != 0)
 // SKIP: ( $DETAILTEXTURE != 0 && $BUMPMASK != 0 )
 // SKIP: ( $BUMPMASK != 0 && $SSBUMP != 0 )
 
 //==========================================================================//
-//	Unpack Combos
+//	Unpack Combos specific to this Shader
+//==========================================================================//
+#if (ENVMAPMODE > 0)
+    #define ENVMAP 1
+#else
+    #define ENVMAP 0
+#endif
+
+#if (ENVMAPMODE > 2)
+    #define ENVMAPMASK 1
+#else
+    #define ENVMAPMASK 0
+#endif
+
+#if (ENVMAPMODE == 2 || ENVMAPMODE == 4)
+    #define ENVMAPPARALLAXCORRECTION 1
+#else
+    #define ENVMAPPARALLAXCORRECTION 0
+#endif
+
+//==========================================================================//
+//	Call into Main Function
 //==========================================================================//
 
 #include "lux_worldvertextransition_main.h"

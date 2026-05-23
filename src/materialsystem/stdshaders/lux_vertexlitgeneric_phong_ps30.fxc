@@ -36,6 +36,17 @@
 //==========================================================================//
 //	Unpack Combos specific to this Shader
 //==========================================================================//
+#if (ENVMAPMODE > 0)
+    #define ENVMAP 1
+#else
+    #define ENVMAP 0
+#endif
+
+#if (ENVMAPMODE == 2)
+    #define ENVMAPMASK 1
+#else
+    #define ENVMAPMASK 0
+#endif
 
 // This is what actually enables Phong Exponent Texture Usage
 #if EXPONENTTEXTURE

@@ -1,7 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	20.01.2023 DMY
-//	Last Change :	18.05.2026 DMY
+//	Last Change :	23.05.2026 DMY
 //
 //==========================================================================//
 
@@ -453,7 +453,7 @@ SHADER_DRAW
 			}
 
 			int nDetailCombo = bHasDetailTexture + GetBool(DistanceAlphaFromDetail) + 2 * bSeparateDetailUV;
-			int nEnvMapMode = bHasEnvMap + bHasEnvMapMask + bPCC * 2;
+			int nEnvMapMode = bHasEnvMap + bPCC + bHasEnvMapMask * 2;
 			DECLARE_STATIC_PIXEL_SHADER(lux_unlitgeneric_ps30);
 			SET_STATIC_PIXEL_SHADER_COMBO(DETAILTEXTURE, nDetailCombo);
 			SET_STATIC_PIXEL_SHADER_COMBO(ENVMAPMODE, nEnvMapMode);

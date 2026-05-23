@@ -1,7 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	20.01.2023 DMY
-//	Last Change :	18.05.2026 DMY
+//	Last Change :	23.05.2026 DMY
 //
 //	Shader based on the Alien Swarm Version ( before TF2SDK was out )
 //
@@ -306,7 +306,7 @@ SHADER_DRAW
 		SET_STATIC_VERTEX_SHADER(lux_shatteredglass_vs30);
 
 		bool bHasVertexColors = HasFlag(MATERIAL_VAR_VERTEXCOLOR);
-		int nEnvMapMode = bPCC * 2 + bHasEnvMapMask + bHasEnvMap;
+		int nEnvMapMode = bHasEnvMap + bPCC + 2 * bHasEnvMapMask;
 		DECLARE_STATIC_PIXEL_SHADER(lux_shatteredglass_ps30);
 		SET_STATIC_PIXEL_SHADER_COMBO(DETAILTEXTURE, bHasDetailTexture);
 		SET_STATIC_PIXEL_SHADER_COMBO(ENVMAPMODE, nEnvMapMode);

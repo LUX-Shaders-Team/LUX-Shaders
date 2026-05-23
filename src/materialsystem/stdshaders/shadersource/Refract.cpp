@@ -1,7 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	20.01.2023 DMY
-//	Last Change :	18.05.2026 DMY
+//	Last Change :	23.05.2026 DMY
 //
 //==========================================================================//
 
@@ -297,10 +297,10 @@ SHADER_DRAW
 		// Purpose : Int to tell the Shader what Mask to use.
 		// 0 = Nothing
 		// 1 = $EnvMap - Mask determined through abs(0||1 - Mask)
-		// 2 = $EnvMap + $EnvMapMask
 		// 3 = $EnvMap + PCC
-		// 4 = $EnvMap + PCC + $EnvMapMask
-		int nEnvMapMode = bHasEnvMap + bHasEnvMapMask + 2 * bPCC;
+		// 2 = $EnvMap + $EnvMapMask
+		// 4 = $EnvMap + $EnvMapMask + PCC
+		int nEnvMapMode = bHasEnvMap + bPCC + 2 * bHasEnvMapMask;
 
 		//==========================================================================//
 		// General Rendering Setup

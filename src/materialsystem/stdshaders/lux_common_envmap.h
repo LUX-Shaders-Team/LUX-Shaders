@@ -13,14 +13,7 @@
 //==========================================================================//
 //	Constants found on all shaders with Environment Mapping.
 //==========================================================================//
-#if (ENVMAPMODE > 0)
-
-// For use in Shaders via #if
-#define ENVMAP 1
-
-#if (!ENVMAPSPHERE && ENVMAPMODE > 2)
-	#define ENVMAPPARALLAXCORRECTION 1
-#endif
+#if ENVMAP
 
 // by Defining this, it allows Shaders to move the Registers to something else
 #if !defined(MOVED_REGISTERS_ENVMAP)
@@ -43,24 +36,14 @@ const float4	cEnvMapFresnel					: register(LUX_PS_FLOAT_ENVMAP_FRESNEL);
 #define			g_f1EnvMapFresnelBias			(cEnvMapFresnel.y)
 #define			g_f1EnvMapFresnelExponent		(cEnvMapFresnel.z)
 
-// On brushes ENVMAPMODE > 2 is PCC
-// On models its envmap anisotropy ( exception unlitgeneric )
-#if (ENVMAPMODE > 2 && defined(BRUSH))
-const float3	g_f3CubeMapPos					: register(LUX_PS_FLOAT_ENVMAP_POSITION);
-const float4x3	g_f4x3CorrectionMatrix			: register(LUX_PS_FLOAT_ENVMAP_MATRIX);
-#endif // PCC
-
+	#if ENVMAPPARALLAXCORRECTION
+		const float3	g_f3CubeMapPos					: register(LUX_PS_FLOAT_ENVMAP_POSITION);
+		const float4x3	g_f4x3CorrectionMatrix			: register(LUX_PS_FLOAT_ENVMAP_MATRIX);
+	#endif
 
 #endif // !MOVED_REGISTERS_ENVMAP
 
-// On brushes ENVMAPMODE > 2 is PCC
-// On models its envmap anisotropy
-// To account for envmapmask we check for 4 too
-#if (ENVMAPMODE == 2 || ENVMAPMODE == 4)
-
-// For use in Shaders via #if
-#define ENVMAPMASK 1
-
+#if ENVMAPMASK
 #if !defined(MOVED_SAMPLERS_ENVMAP)
 sampler Sampler_EnvMapMask		: register(s5);
 #endif

@@ -1,7 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	30.03.2025 DMY
-//	Last Change :	 30.01.2026 DMY
+//	Last Change :	22.05.2026 DMY
 //
 //==========================================================================//
 
@@ -31,12 +31,29 @@
 // SKIP: ($MODE_BUMP == 0 && $SSBUMP != 0)
 
 // No EMM without Env
-// SKIP: ($ENVMAPMODE != 2 && $TRIPLANAR_ENVMAPMASK != 0)
-// SKIP: ($ENVMAPMODE != 4 && $TRIPLANAR_ENVMAPMASK != 0)
+// SKIP: ($ENVMAPMODE < 3 && $TRIPLANAR_ENVMAPMASK != 0)
 
 //==========================================================================//
 //	Unpack Combos
 //==========================================================================//
+#if (ENVMAPMODE > 0)
+    #define ENVMAP 1
+#else
+    #define ENVMAP 0
+#endif
+
+#if (ENVMAPMODE > 2)
+    #define ENVMAPMASK 1
+#else
+    #define ENVMAPMASK 0
+#endif
+
+#if (ENVMAPMODE == 2 || ENVMAPMODE == 4)
+    #define ENVMAPPARALLAXCORRECTION 1
+#else
+    #define ENVMAPPARALLAXCORRECTION 0
+#endif
+
 #if (MODE_BUMP > 0)
 	#define BUMPMAPPING 1
 #else

@@ -1,7 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	14.02.2023 DMY
-//	Last Change :	06.05.2026 DMY
+//	Last Change :	22.05.2026 DMY
 //
 //==========================================================================//
 
@@ -33,6 +33,17 @@
 //==========================================================================//
 //	Unpack Combos specific to this Shader
 //==========================================================================//
+#if (ENVMAPMODE > 0)
+    #define ENVMAP 1
+#else
+    #define ENVMAP 0
+#endif
+
+#if (ENVMAPMODE == 2)
+    #define ENVMAPMASK 1
+#else
+    #define ENVMAPMASK 0
+#endif
 
 // This is what actually enables Phong Exponent Texture Usage
 #if EXPONENTTEXTURE

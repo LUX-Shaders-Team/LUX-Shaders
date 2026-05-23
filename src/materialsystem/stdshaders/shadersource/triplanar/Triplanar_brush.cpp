@@ -2,7 +2,7 @@
 //
 //	Original D.	:	26.03.2025 DMY
 //	Initial D.	:	28.09.2025 DMY
-//	Last Change :	18.05.2026 DMY
+//	Last Change :	23.05.2026 DMY
 //
 //==========================================================================//
 
@@ -501,7 +501,7 @@ SHADER_DRAW
 		}
 		else
 		{
-			int nEnvMapMode = bHasEnvMap + bHasEnvMapMask + 2 * bPCC;
+			int nEnvMapMode = bHasEnvMap + bPCC + 2 * bHasEnvMapMask;
 			DECLARE_STATIC_PIXEL_SHADER(lux_triplanar_brush_ps30);
 			SET_STATIC_PIXEL_SHADER_COMBO(TRIPLANAR_BASE, bTriplanarBase);
 			SET_STATIC_PIXEL_SHADER_COMBO(MODE_BUMP, bHasNormalMap + bTriplanarBump);

@@ -1,7 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	31.07.2025 DMY
-//	Last Change :	21.05.2026 DMY
+//	Last Change :	22.05.2026 DMY
 //
 //==========================================================================//
 
@@ -27,12 +27,33 @@
 // NONE
 
 //==========================================================================//
-//	Unpack Combos
+//	Unpack Combos specific to this Shader
 //==========================================================================//
+#if (ENVMAPMODE > 0)
+    #define ENVMAP 1
+#else
+    #define ENVMAP 0
+#endif
+
+#if (ENVMAPMODE > 2)
+    #define ENVMAPMASK 1
+#else
+    #define ENVMAPMASK 0
+#endif
+
+#if (ENVMAPMODE == 2 || ENVMAPMODE == 4)
+    #define ENVMAPPARALLAXCORRECTION 1
+#else
+    #define ENVMAPPARALLAXCORRECTION 0
+#endif
 
 // Need this for Phong Data Header
 #if EXPONENTTEXTURE
 	#define PHONGEXPONENTTEXTURE
 #endif
+
+//==========================================================================//
+//	Call into Main Function
+//==========================================================================//
 
 #include "lux_worldvertextransition_main.h"

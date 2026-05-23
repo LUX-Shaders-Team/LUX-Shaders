@@ -351,7 +351,7 @@ SHADER_DRAW
 			DECLARE_STATIC_PIXEL_SHADER(lux_lightmappedreflective_ps30);
 			SET_STATIC_PIXEL_SHADER_COMBO(DIFFUSETEXTURE, bHasBaseTexture + bHasSSBump * bHasBaseTexture);
 			SET_STATIC_PIXEL_SHADER_COMBO(DETAILTEXTURE, bHasDetailTexture);
-			SET_STATIC_PIXEL_SHADER_COMBO(EMM, bHasEnvMapMask + bSelfIllumEMMAlpha);
+			SET_STATIC_PIXEL_SHADER_COMBO(ENVMAPMASKMODE, bHasEnvMapMask + bSelfIllumEMMAlpha);
 			SET_STATIC_PIXEL_SHADER_COMBO(EFFECTMODE, bHasReflectTexture + bHasRefractTexture * 2); // Reflect, Refract, Both
 			// Duplicate SSBump Scenario, DiffuseTexture(2) would be SSBump already here, so we skip ReflectionLightScale(2) which is also SSBump
 			SET_STATIC_PIXEL_SHADER_COMBO(REFLECTIONLIGHTSCALE, bReflectLightScale + bHasSSBump * bReflectLightScale * !bHasBaseTexture);

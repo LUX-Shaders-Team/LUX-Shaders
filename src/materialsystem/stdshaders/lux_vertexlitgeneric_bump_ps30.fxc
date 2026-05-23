@@ -32,6 +32,21 @@
 // @SKIP: ( $SELFILLUMMODE == 1 && $XBYBASEALPHA != 0)
 
 //==========================================================================//
+//	Unpack Combos specific to this Shader
+//==========================================================================//
+#if (ENVMAPMODE > 0)
+    #define ENVMAP 1
+#else
+    #define ENVMAP 0
+#endif
+
+#if (ENVMAPMODE == 2)
+    #define ENVMAPMASK 1
+#else
+    #define ENVMAPMASK 0
+#endif
+
+//==========================================================================//
 //	Call into Main Function
 //==========================================================================//
 

@@ -1,7 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	07.02.2023 DMY
-//	Last Change :	06.05.2026 DMY
+//	Last Change :	22.05.2026 DMY
 //
 //==========================================================================//
 
@@ -9,7 +9,7 @@
 //	Declare Static Combos
 //==========================================================================//
 // 0 No Cubemap, 1 Cubemap, 2 $EnvMapMask, 3 $SphereMap, $SphereMap + $EnvMapMask
-// STATIC:	"ENVMAPMODE"				"0..4"
+// STATIC:	"ENVMAPMODE"				"0..2"
 // STATIC:	"SELFILLUMMODE"				"0..2"
 // STATIC:	"XBYBASEALPHA"				"0..2"
 // STATIC:	"DETAILTEXTURE"				"0..1"
@@ -24,7 +24,6 @@
 //	The Order of Static Combos and Skips has a drastic Impact on Compile Time!
 //==========================================================================//
 // SKIP: ( $ENVMAPMODE != 2 && $SELFILLUMMODE == 2 )
-// SKIP: ( $ENVMAPMODE != 4 && $SELFILLUMMODE == 2 )
 
 // I found several Community VMT's in SFM that utilize $SelfIllumMask with $BlendTintByBaseAlpha
 // Well, it's technically the correct approach, it will no longer use the $BaseTexture's Alpha Channel
@@ -33,10 +32,16 @@
 //==========================================================================//
 //	Unpack Combos specific to this Shader
 //==========================================================================//
-#if (ENVMAPMODE > 2)
-	#define ENVMAPSPHERE 1
+#if (ENVMAPMODE > 0)
+    #define ENVMAP 1
 #else
-	#define ENVMAPSPHERE 0
+    #define ENVMAP 0
+#endif
+
+#if (ENVMAPMODE == 2)
+    #define ENVMAPMASK 1
+#else
+    #define ENVMAPMASK 0
 #endif
 
 //==========================================================================//

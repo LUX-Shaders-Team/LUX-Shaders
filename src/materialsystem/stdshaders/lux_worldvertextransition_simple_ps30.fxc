@@ -24,13 +24,34 @@
 //	Skipping undesired Combos
 //	The Order of Static Combos and Skips has a drastic Impact on Compile Time!
 //==========================================================================//
-// SKIP: ( ($ENVMAPMODE != 2 && $ENVMAPMODE != 4) && $SELFILLUMMODE == 2 )
+// SKIP: ( $ENVMAPMODE < 3 && $SELFILLUMMODE == 2 )
 // SKIP: ( $SELFILLUMMODE == 1 && $XBYBASEALPHA != 0)
 
 //==========================================================================//
-//	Unpack Combos
+//	Unpack Combos specific to this Shader
 //==========================================================================//
+#if (ENVMAPMODE > 0)
+    #define ENVMAP 1
+#else
+    #define ENVMAP 0
+#endif
+
+#if (ENVMAPMODE > 2)
+    #define ENVMAPMASK 1
+#else
+    #define ENVMAPMASK 0
+#endif
+
+#if (ENVMAPMODE == 2 || ENVMAPMODE == 4)
+    #define ENVMAPPARALLAXCORRECTION 1
+#else
+    #define ENVMAPPARALLAXCORRECTION 0
+#endif
 
 #define WVT_SIMPLE 1
+
+//==========================================================================//
+//	Call into Main Function
+//==========================================================================//
 
 #include "lux_worldvertextransition_main.h"

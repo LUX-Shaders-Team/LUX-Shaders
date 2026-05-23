@@ -23,7 +23,7 @@
 //	Skipping undesired Combos
 //	The Order of Static Combos and Skips has a drastic Impact on Compile Time!
 //==========================================================================//
-// SKIP: ( ($ENVMAPMODE != 2 && $ENVMAPMODE != 4) && $SELFILLUMMODE == 2 )
+// SKIP: ( ($ENVMAPMODE < 3) && $SELFILLUMMODE == 2 )
 
 // I found several Community VMT's in SFM that utilize $SelfIllumMask with $BlendTintByBaseAlpha
 // Well, it's technically the correct approach, it will no longer use the $BaseTexture's Alpha Channel
@@ -32,6 +32,23 @@
 //==========================================================================//
 //	Unpack Combos specific to this Shader
 //==========================================================================//
+#if (ENVMAPMODE > 0)
+    #define ENVMAP 1
+#else
+    #define ENVMAP 0
+#endif
+
+#if (ENVMAPMODE > 2)
+    #define ENVMAPMASK 1
+#else
+    #define ENVMAPMASK 0
+#endif
+
+#if (ENVMAPMODE == 2 || ENVMAPMODE == 4)
+    #define ENVMAPPARALLAXCORRECTION 1
+#else
+    #define ENVMAPPARALLAXCORRECTION 0
+#endif
 
 #define LMG_SIMPLE 1
 

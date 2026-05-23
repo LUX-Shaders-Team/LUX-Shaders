@@ -1,7 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	20.01.2023 DMY
-//	Last Change :	18.05.2026 DMY
+//	Last Change :	23.05.2026 DMY
 //
 //==========================================================================//
 
@@ -558,7 +558,7 @@ SHADER_DRAW
 		//	2 = $EnvMap + $EnvMapMask
 		//  3 = Same as 1 + PCC
 		//  4 = Same as 2 + PCC
-		int nEnvMapMode = bHasEnvMap + bAnyEnvMapMask + 2 * bPCC;
+		int nEnvMapMode = bHasEnvMap + bPCC + 2 * bAnyEnvMapMask;
 
 		// 1 = SelfIllum + SelfIllumMask
 		// 2 = $SelfIllum_EnvMapMask_Alpha

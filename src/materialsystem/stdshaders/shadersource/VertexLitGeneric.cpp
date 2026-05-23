@@ -1,7 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	20.01.2023 DMY
-//	Last Change :	18.05.2026 DMY
+//	Last Change :	23.05.2026 DMY
 //
 //==========================================================================//
 
@@ -1083,7 +1083,25 @@ void LuxVertexLitGeneric_Shader_Draw(IMaterialVar** ppParams, IShaderShadow* pSh
 	{
 		pContextData->m_nBlendType = ComputeBlendType(BaseTexture, true, Detail, GetInt(DetailBlendMode));
 		pContextData->m_bIsFullyOpaque = IsFullyOpaque(pContextData->m_nBlendType);
-		pContextData->m_nEnvMapMode = bHasEnvMap + bHasEnvMapMask;
+
+		#if defined(ASWSDK)
+			// No $EnvMapSphere support on ASW
+			pContextData->m_nEnvMapMode = bHasEnvMap + bHasEnvMapMask;
+		#else
+		if(!bBumpedShader)
+		{
+			// > 2 means $EnvMapMask
+			// 1 = $EnvMap ( BaseAlpha or NormalMapAlpha )
+			// 2 = $EnvMapSphere
+			// 3 = $EnvMapMask
+			// 4 = $EnvMapMask + $EnvMapSphere
+			pContextData->m_nEnvMapMode = bHasEnvMap + bEnvMapSphere + 2 * bHasEnvMapMask;
+		}
+		else
+		{
+			pContextData->m_nEnvMapMode = bHasEnvMap + bHasEnvMapMask;
+		}
+		#endif
 
 		// Evaluate the entire Phong Shenanigans and store it in the ContextData
 		// ( Lots of branching )
@@ -1415,14 +1433,14 @@ void LuxVertexLitGeneric_Shader_Draw(IMaterialVar** ppParams, IShaderShadow* pSh
 		{
 #ifdef ASWSDK
 			DECLARE_STATIC_PIXEL_SHADER(lux_vertexlitgeneric_asw_simple_ps30);
-			SET_STATIC_PIXEL_SHADER_COMBO(ENVMAPMODE, pContextData->m_nEnvMapMode + 2 * bEnvMapSphere);
+			SET_STATIC_PIXEL_SHADER_COMBO(ENVMAPMODE, pContextData->m_nEnvMapMode);
 			SET_STATIC_PIXEL_SHADER_COMBO(DETAILTEXTURE, bHasDetailTexture);
 			SET_STATIC_PIXEL_SHADER_COMBO(SELFILLUMMODE, nSelfIllumMode);
 			SET_STATIC_PIXEL_SHADER_COMBO(XBYBASEALPHA, bBlendTintByBaseAlpha + 2 * bDesaturateWithBaseAlpha);
 			SET_STATIC_PIXEL_SHADER(lux_vertexlitgeneric_asw_simple_ps30);
 #else
 			DECLARE_STATIC_PIXEL_SHADER(lux_vertexlitgeneric_simple_ps30);
-			SET_STATIC_PIXEL_SHADER_COMBO(ENVMAPMODE, pContextData->m_nEnvMapMode + 2 * bEnvMapSphere);
+			SET_STATIC_PIXEL_SHADER_COMBO(ENVMAPMODE, pContextData->m_nEnvMapMode);
 			SET_STATIC_PIXEL_SHADER_COMBO(ENVMAPLERP, bHasEnvMap && GetBool(EnvMapLerp));
 			SET_STATIC_PIXEL_SHADER_COMBO(DETAILTEXTURE, bHasDetailTexture);
 			SET_STATIC_PIXEL_SHADER_COMBO(SELFILLUMMODE, nSelfIllumMode);

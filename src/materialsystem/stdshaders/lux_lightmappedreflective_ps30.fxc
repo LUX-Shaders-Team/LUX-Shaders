@@ -1,7 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	03.12.2024 DMY
-//	Last Change :	 30.01.2026 DMY
+//	Last Change :	22.05.2026 DMY
 //
 //==========================================================================//
 
@@ -12,7 +12,7 @@
 // STATIC:	"REFLECTIONLIGHTSCALE"		"0..2" // SSBump Path Included
 // STATIC:	"DIFFUSETEXTURE"			"0..2" // Basetexture + Bumped Lightmap, SSBump
 // STATIC:	"DETAILTEXTURE"				"0..1"
-// STATIC:	"EMM"						"0..2"
+// STATIC:	"ENVMAPMASKMODE"			"0..2"
 
 //==========================================================================//
 //	Declare Dynamic Combos
@@ -30,31 +30,32 @@
 // SKIP: ( $REFLECTIONLIGHTSCALE == 2 && $DIFFUSETEXTURE == 2)
 // No BaseTexture, no DetailTexture, No LightScale
 // SKIP: ( $DIFFUSETEXTURE == 0 && $DETAILTEXTURE == 1)
+
 //==========================================================================//
 //	Unpack Combos
 //==========================================================================//
 
-// We want an 'EnvMapMask', 2 will enable all the EnvMap Related Parameter Constants
-// in lux_common_envmap.h
-#if (EMM > 0)
-#define ENVMAPMODE 2
-#else
-#define ENVMAPMODE 1
-#endif
-
 // SSBumping on these cases
 #if (DIFFUSETEXTURE > 1 || REFLECTIONLIGHTSCALE == 2)
-#define SSBUMP 1
+	#define SSBUMP 1
 #endif
 
-// EnvMapMask + SelfIllum
-#if (EMM == 2)
-#define SELFILLUM_ENVMAPMASK_ALPHA 1
-#define SELFILLUM 1
+#if (ENVMAPMASKMODE > 0)
+	#define ENVMAPMASK 1
 #else
-#define SELFILLUM_ENVMAPMASK_ALPHA 0
-#define SELFILLUM 0
+	#define ENVMAPMASK 0
 #endif
+
+#if (ENVMAPMASKMODE == 2)
+	#define SELFILLUM 1
+	#define SELFILLUM_ENVMAPMASK_ALPHA 1
+#else
+	#define SELFILLUM 0
+	#define SELFILLUM_ENVMAPMASK_ALPHA 0
+#endif
+
+// Always need this for Constants in the Header
+#define ENVMAP 1
 
 //==========================================================================//
 //	Common Definitions
@@ -72,17 +73,9 @@
 // Include for all Pixel Shaders
 #include "lux_common_ps_fxc.h"
 
-#if DETAILTEXTURE
 #include "lux_common_detailtexture.h"
-#endif
-
-// Lightmapping related functions
 #include "lux_common_lightmapped.h"
-
-// SelfIllum Data
 #include "lux_common_selfillum.h"
-
-// EnvMapping Data
 #include "lux_common_envmap.h"
 
 sampler Sampler_ReflectTexture : register(s1);
@@ -137,7 +130,7 @@ float4 main(PS_INPUT i) : COLOR
 	// TEXCOORD2
 	// Detail is on .zw when we have an EMM
 	float2 f2EnvMapMaskUV = i.TexCoords2.xy;
-	#if (EMM > 0 && DETAILTEXTURE)
+	#if (ENVMAPMASK > 0 && DETAILTEXTURE)
 		float2 f2DetailTextureUV = i.TexCoords2.zw;
 	#else
 		float2 f2DetailTextureUV = i.TexCoords2.xy;
@@ -172,7 +165,7 @@ float4 main(PS_INPUT i) : COLOR
 	#endif
 
 	// $EnvMapMask
-	#if (EMM > 0)
+	#if (ENVMAPMASK > 0)
 		float4 f4EnvMapMask = tex2D(Sampler_EnvMapMask, f2EnvMapMaskUV);
 	#endif
 
@@ -273,7 +266,7 @@ float4 main(PS_INPUT i) : COLOR
 		f3Reflection *= f3ReflectTint;
 		f3Reflection *= f1Fresnel;
 
-		#if (EMM > 0)
+		#if (ENVMAPMASK > 0)
 			f3Reflection *= f4EnvMapMask.rgb;
 		#endif
 
@@ -287,7 +280,7 @@ float4 main(PS_INPUT i) : COLOR
 
 	// Apply $BaseTexture Results
 	#if (DIFFUSETEXTURE > 0 && EFFECTMODE != 0)
-		#if (EMM > 0)
+		#if (ENVMAPMASK > 0)
 			f3Result += lerp(f3LitSurface, f3LitSurface * (1.0f - f1Fresnel), f4EnvMapMask.rgb);
 		#else
 			// ShiroDkxtro2: Above we are replicating Stock Behaviour

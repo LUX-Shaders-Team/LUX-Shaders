@@ -48,15 +48,6 @@
 	#define DETAILTEXTURE 0
 #endif
 
-// #if !defined(LIGHTWARPTEXTURE)
-// 	#define LIGHTWARPTEXTURE 0
-// #endif
-
-#if !defined(ENVMAPMODE)
-	#define ENVMAP 0
-	#define ENVMAPMASK 0
-#endif
-
 //==========================================================================//
 //	Unpack Combos
 //==========================================================================//
@@ -195,8 +186,6 @@ float4 main(PS_INPUT i) : COLOR
 	float2 f2BaseUV = i.TexCoords1.xy;
 	#if LMG_SIMPLE
 
-		// FIXME: Decompress ENVMAPMASK from ENVMAPMODE on the .fxc instead of the Header
-		// So we can #define ENVMAPMASK 0 above for this Check
 		// $EnvMapMask TexCoord is on .zw unless proj. Tex. Pass which doesn't compute $EnvMap
 		#if ENVMAPMASK
 			float2 f2EnvMapMaskUV = i.TexCoords1.zw;

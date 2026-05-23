@@ -1,7 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	13.07.2025 DMY
-//	Last Change :	 30.01.2026 DMY
+//	Last Change :	22.05.2026 DMY
 //
 //	Note:	Cheap Water is Alpha Blended onto the Background Expensive Water
 //			This Shader only handles Specularity.
@@ -19,7 +19,7 @@
 // STATIC:	"BASETEXTURELAYER"			"0..2"
 // STATIC:	"LIGHTMAPWATERFOG"			"0..1"
 // STATIC:	"BLEND"						"0..2" // 2 = Refract Alpha
-// STATIC:  "PARALLAXCORRECT"			"0..1"
+// STATIC:  "ENVMAPPARALLAXCORRECTION"	"0..1"
 // STATIC:	"PRETTYHAMMER"				"0..1"
 
 //==========================================================================//
@@ -38,21 +38,9 @@
 // SKIP: ( $FLOWMAPPING > 0 && $MULTITEXTURE == 1 )
 
 //==========================================================================//
-//	Common Definitions
+//	Unpack Combos
 //==========================================================================//
-
-// Needed for PCC
-#define BRUSH
-
-// This is NOT a Shader used on MODELS
-//#define MODEL
-
-// EnvMapping behaviours
-#if PARALLAXCORRECT
-	#define ENVMAPMODE 3
-#else
-	#define ENVMAPMODE 1
-#endif
+#define ENVMAP 1
 
 // Don't want this, we handle that ourselves on this Shader
 #define NO_ENVMAPFRESNEL
