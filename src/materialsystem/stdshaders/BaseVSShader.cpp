@@ -1043,7 +1043,7 @@ bool CBaseVSShader::SetupFlashlight()
 	// existance of a depthtexture means we are doing shadows ( shadows can be disabled on the entity )
 	// Investigate: Why does this not consider g_pConfig->ShadowDepthTexture()?
 	// is g_pConfig->ShadowDepthTexture() linked to the flashlight_depth convar?
-	bool bProjTexShadows = ProjTexState.m_bEnableShadows && g_pConfig->ShadowDepthTexture();
+	bool bProjTexShadows = ProjTexState.m_bEnableShadows && g_pConfig->ShadowDepthTexture() && GetBool(ReceiveProjectedTextureShadows);
 	
 	// Adapted from Mapbase, I noticed some Decals not having Depth Textures, maybe this will help them?
 	// If there is no DepthTexture but Shadows are enabled, find the Texture in the Fallback List!

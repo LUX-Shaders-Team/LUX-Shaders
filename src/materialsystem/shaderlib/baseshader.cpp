@@ -342,6 +342,15 @@ static ShaderParamInfo_t s_StandardParams[NUM_SHADER_MATERIAL_VARS] =
 		0
 	},
 
+	// Disables Shadow Mapping from Depth Textures
+	{
+		"$ReceiveProjectedTextureShadows",
+		"Whether or not the Material is allowed to receive Shadows from projected Textures.\nMaterials will still cast Shadows!",
+		SHADER_PARAM_TYPE_BOOL,
+		"1",
+		0
+	},
+
 	// Allows for an unfinished Stock Feature where N.L is not considered
 	{
 		"$ProjectedTextureNoLambert",
@@ -467,6 +476,9 @@ void CBaseShader::InitShaderParams(IMaterialVar** ppParams, const char *pMateria
 	// Projected Textures can be received unless $ReceiveProjectedTextures is set to 0
 	if (!IsDefined(ReceiveProjectedTextures))
 		SetBool(ReceiveProjectedTextures, true);
+
+	if (!IsDefined(ReceiveProjectedTextureShadows))
+		SetBool(ReceiveProjectedTextureShadows, true);
 
 	// lux_debug_..
 #ifndef ASWSDK

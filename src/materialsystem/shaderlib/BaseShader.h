@@ -90,6 +90,7 @@ enum ShaderMaterialVars_t
 	Alpha2,
 	AlphaTestReference,
 	ReceiveProjectedTextures,
+	ReceiveProjectedTextureShadows,
 	ProjectedTextureNoLambert,
 	AllowDiffuseModulation,
 	NoTint,
