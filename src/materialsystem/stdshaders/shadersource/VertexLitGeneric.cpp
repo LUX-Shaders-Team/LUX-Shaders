@@ -808,7 +808,6 @@ SHADER_INIT_PARAMS()
 	}
 
 #ifdef ASWSDK
-
 	DefaultFloat(AmbientOcclusion, 1.0f);
 #endif
 }
@@ -1306,7 +1305,7 @@ void LuxVertexLitGeneric_Shader_Draw(IMaterialVar** ppParams, IShaderShadow* pSh
 
 #ifndef ASWSDK
 		// s11 - $Lightmap
-		if(!bHasPhong && !bHasNormalTexture)
+		if(!bBumpedShader)
 			EnableSampler(SAMPLER_LIGHTMAP, false); // bHasLightmapTexture, 
 #else
 		EnableSampler(SHADER_SAMPLER11, true); // Used for SSAO RT
@@ -1833,7 +1832,7 @@ void LuxVertexLitGeneric_Shader_Draw(IMaterialVar** ppParams, IShaderShadow* pSh
 		// This is entirely Dynamic, so the Sampler is always enabled without bump and phong.
 		// We MUST bind SOMETHING to it.
 #ifndef ASWSDK
-		if (!bHasPhong && !bHasNormalTexture)
+		if (!bBumpedShader)
 		{
 			if (bHasLightmapTexture)
 				BindTexture(SAMPLER_LIGHTMAP, Lightmap);
