@@ -1,7 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	20.01.2023 DMY
-//	Last Change :	23.05.2026 DMY
+//	Last Change :	24.05.2026 DMY
 //
 //==========================================================================//
 
@@ -1034,8 +1034,12 @@ void LuxVertexLitGeneric_Shader_Draw(IMaterialVar** ppParams, IShaderShadow* pSh
 	bool bHasSelfIllumMask = bSelfIllum && IsTextureLoaded(SelfIllumMask);
 	bool bHasSelfIllumFresnel = bSelfIllum && GetBool(SelfIllumFresnel);
 
-	// LightWarpTexture
+	// LightWarpTexture allowed with proj. Texture in ASW/SFM
+	#ifdef ASWSDK
+	bool bHasLightWarpTexture = IsTextureLoaded(LightWarpTexture);
+	#else
 	bool bHasLightWarpTexture = !bProjTex && IsTextureLoaded(LightWarpTexture); // No Lightwarp under the flashlight
+	#endif
 	bool bHasLightWarpNoBump = bHasLightWarpTexture && GetBool(LightWarpNoBump);
 	
 	// Phong Variables, needed before EnvMap because of EnvMapSphere
@@ -1374,6 +1378,7 @@ void LuxVertexLitGeneric_Shader_Draw(IMaterialVar** ppParams, IShaderShadow* pSh
 			SET_STATIC_PIXEL_SHADER_COMBO(WRINKLEMAPS, bAnyWrinkleMapping);
 			SET_STATIC_PIXEL_SHADER_COMBO(XBYBASEALPHA, bBlendTintByBaseAlpha + 2 * bDesaturateWithBaseAlpha);
 			SET_STATIC_PIXEL_SHADER_COMBO(DETAILTEXTURE, bHasDetailTexture);
+			SET_STATIC_PIXEL_SHADER_COMBO(LIGHTWARPTEXTURE, bHasLightWarpTexture);
 			SET_STATIC_PIXEL_SHADER(lux_vertexlitgeneric_asw_flashlight_ps30);
 #else
 			DECLARE_STATIC_PIXEL_SHADER(lux_vertexlitgeneric_flashlight_ps30);
@@ -1394,6 +1399,7 @@ void LuxVertexLitGeneric_Shader_Draw(IMaterialVar** ppParams, IShaderShadow* pSh
 			SET_STATIC_PIXEL_SHADER_COMBO(XBYBASEALPHA, bBlendTintByBaseAlpha + 2 * bDesaturateWithBaseAlpha);
 			SET_STATIC_PIXEL_SHADER_COMBO(EXPONENTTEXTURE, bHasPhongExponentTexture);
 			SET_STATIC_PIXEL_SHADER_COMBO(WRINKLEMAPS, bAnyWrinkleMapping);
+			SET_STATIC_PIXEL_SHADER_COMBO(LIGHTWARPTEXTURE, bHasLightWarpTexture);
 			SET_STATIC_PIXEL_SHADER(lux_vertexlitgeneric_asw_phong_ps30);
 #else
 			DECLARE_STATIC_PIXEL_SHADER(lux_vertexlitgeneric_phong_ps30);
@@ -1416,6 +1422,7 @@ void LuxVertexLitGeneric_Shader_Draw(IMaterialVar** ppParams, IShaderShadow* pSh
 			SET_STATIC_PIXEL_SHADER_COMBO(DETAILTEXTURE, bHasDetailTexture);
 			SET_STATIC_PIXEL_SHADER_COMBO(SELFILLUMMODE, nSelfIllumMode);
 			SET_STATIC_PIXEL_SHADER_COMBO(XBYBASEALPHA, bBlendTintByBaseAlpha + 2 * bDesaturateWithBaseAlpha);
+			SET_STATIC_PIXEL_SHADER_COMBO(LIGHTWARPTEXTURE, bHasLightWarpTexture);
 			SET_STATIC_PIXEL_SHADER(lux_vertexlitgeneric_asw_bump_ps30);
 #else
 			DECLARE_STATIC_PIXEL_SHADER(lux_vertexlitgeneric_bump_ps30);
@@ -1436,6 +1443,7 @@ void LuxVertexLitGeneric_Shader_Draw(IMaterialVar** ppParams, IShaderShadow* pSh
 			SET_STATIC_PIXEL_SHADER_COMBO(DETAILTEXTURE, bHasDetailTexture);
 			SET_STATIC_PIXEL_SHADER_COMBO(SELFILLUMMODE, nSelfIllumMode);
 			SET_STATIC_PIXEL_SHADER_COMBO(XBYBASEALPHA, bBlendTintByBaseAlpha + 2 * bDesaturateWithBaseAlpha);
+			SET_STATIC_PIXEL_SHADER_COMBO(LIGHTWARPTEXTURE, bHasLightWarpTexture);
 			SET_STATIC_PIXEL_SHADER(lux_vertexlitgeneric_asw_simple_ps30);
 #else
 			DECLARE_STATIC_PIXEL_SHADER(lux_vertexlitgeneric_simple_ps30);

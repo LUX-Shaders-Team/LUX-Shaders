@@ -1,7 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	14.02.2023 DMY
-//	Last Change :	22.05.2026 DMY
+//	Last Change :	24.05.2026 DMY
 //
 //==========================================================================//
 
@@ -12,6 +12,7 @@
 // STATIC:	"SELFILLUMMODE"				"0..2"
 // STATIC:	"XBYBASEALPHA"				"0..2"
 // STATIC:	"DETAILTEXTURE"				"0..1"
+// STATIC:  "LIGHTWARPTEXTURE"          "0..1"
 
 //==========================================================================//
 //	Declare Dynamic Combos

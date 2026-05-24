@@ -1,12 +1,16 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	24.01.2023 DMY
-//	Last Change :	06.05.2026 DMY
+//	Last Change :	24.05.2026 DMY
 //
 //==========================================================================//
 
 #ifndef LUX_COMMON_FLASHLIGHT_H_
 #define LUX_COMMON_FLASHLIGHT_H_
+
+#if (defined(ASWSDK) && LIGHTWARPTEXTURE)
+	#include "lux_common_lightwarp.h"
+#endif
 
 #include "lux_common_uberlight.h"
 
@@ -400,14 +404,31 @@ float3 ComputeProjectedTextureDiffuse(float3 f3WorldPos, float3 f3NormalWS, cons
 #endif
 
 	float3 f3DirectDiffuseLighting = f3ProjTexColor;
-		// NoLambertValue is either 0 or 2
-		// The dot could be -1 so it has to be +2 not +1 in order to force No-Lambert Lighting
-		// NOTE: Incident Light Vector so flip it
-		float f1NdL = saturate(dot(-f3LightDir.xyz, f3NormalWS) + g_f1ProjTexNoLambertValue);
-		f3DirectDiffuseLighting *= f1NdL;
-		f3DirectDiffuseLighting *= f1Attenuation;
-		f3DirectDiffuseLighting *= f3Shadow;
-		f3DirectDiffuseLighting *= f1EndFalloffFactor;
+
+	// NoLambertValue is either 0 or 2
+	// The dot could be -1 so it has to be +2 not +1 in order to force No-Lambert Lighting
+	// NOTE: Incident Light Vector so flip it
+	float f1NdL = dot(-f3LightDir.xyz, f3NormalWS);
+	#if (defined(ASWSDK) && LIGHTWARPTEXTURE)
+
+		// When N.L < 0, make the Shadow 1.0f, LightwarpTexture will take Control there
+		float f1Occluded = saturate(sign(f1NdL));
+		f3Shadow = lerp(1.0f, f3Shadow, f1Occluded);
+
+		// 0..1 Range
+		float f1LightwarpTexCoord = f1NdL * 0.5f + 0.5f;
+
+		// Note: No mod2x otherwise too bright
+		float3 f3LightWarpColor = tex1Dlod(Sampler_LightWarpTexture, float4(f1LightwarpTexCoord, 0.0f, 0.0f, 0.0f)).rgb;
+		f3Shadow *= f3LightWarpColor;
+	#else
+		f1NdL = saturate(f1NdL + g_f1ProjTexNoLambertValue);
+		f3Shadow *= f1NdL;
+	#endif
+	
+	f3DirectDiffuseLighting *= f1Attenuation;
+	f3DirectDiffuseLighting *= f3Shadow;
+	f3DirectDiffuseLighting *= f1EndFalloffFactor;
 	
 	return f3DirectDiffuseLighting;
 }
