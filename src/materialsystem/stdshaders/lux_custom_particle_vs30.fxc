@@ -211,8 +211,11 @@ VS_OUTPUT main( const VS_INPUT v )
 	// Always need to set this
 	o.ProjPosSetup = f4ProjPos;
 
-	// Better Depth than ProjPos.z
-	float f1Depth = dot(float4(f3Position, 1.0f), cViewProjZ);;
+	#if defined(ASWSDK)
+		float f1Depth = f4ProjPos.z;
+	#else
+		float f1Depth = dot(float4(f4PosRad.xyz, 1.0f), cViewProjZ);
+	#endif
 
 	// Always 
 	o.WorldPos_ProjPosZ.xyz = f3Position;
@@ -481,8 +484,11 @@ VS_OUTPUT main( const VS_INPUT v )
 	// Always need to set this
 	o.ProjPosSetup = f4ProjPos;
 
-	// Better Depth than ProjPos.z
-	float f1Depth = dot(float4(f3Position, 1.0f), cViewProjZ);;
+	#if defined(ASWSDK)
+		float f1Depth = f4ProjPos.z;
+	#else
+		float f1Depth = dot(float4(f3Position, 1.0f), cViewProjZ);
+	#endif
 
 	// Always 
 	o.WorldPos_ProjPosZ.xyz = f3Position;

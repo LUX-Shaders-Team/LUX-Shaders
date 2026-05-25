@@ -1,9 +1,8 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	20.01.2023 DMY
-//	Last Change :	 30.01.2026 DMY
+//	Last Change :	18.05.2026 DMY
 //
-//	Purpose of this File :	Cable Shaders
 //	TODO: Figure out if using the Lightstate works for this Shader
 //
 //==========================================================================//
@@ -39,7 +38,9 @@ DEFINE_FALLBACK_SHADER(LUX_Cable_DX9, LUX_Rope_Router)
 // L4D Uses this specific Shader Name for Spline Ropes
 // Since we don't have it on the SDK, this is a safe replace
 // Note that we send it to the router, so if you don't have splineropes it will use regular ones. 
+#ifndef SFM_COMPATIBILITY
 DEFINE_FALLBACK_SHADER(SplineRope, LUX_Rope_Router)
+#endif
 
 //==========================================================================//
 // Fallback Shader to control what variant we should actually be using
@@ -160,6 +161,13 @@ SHADER_INIT
 
 SHADER_DRAW
 {
+	// This Shader doesn't get SSAO.. Would be nice though for Attachment Points on a Wall.
+	// Raises some Questions again, ASW doesn't need this Shader it uses Splineropes so pointless here
+#ifdef ASWSDK
+	if (ShouldDrawNormalsForSSAO())
+		return;
+#endif
+
 	bool bHasBaseTexture = IsTextureLoaded(BaseTexture);
 	bool bHasBaseTextureTransform = HasTransform(bHasBaseTexture, BaseTextureTransform);
 	bool bIgnoreLightDirInfluence = GetBool(NoLightDirInfluence);
@@ -243,7 +251,7 @@ SHADER_DRAW
 		//==========================================================================//
 		// if mat_fullbright 2. Bind a standard white Texture...
 #ifdef DEBUG_FULLBRIGHT2 
-		if (mat_fullbright.GetInt() == 2 && !HasFlag(MATERIAL_VAR_NO_DEBUG_OVERRIDE))
+		if (mat_fullbright() == 2 && !HasFlag(MATERIAL_VAR_NO_DEBUG_OVERRIDE))
 		BindTexture(SAMPLER_BASETEXTURE, TEXTURE_GREY);
 		else
 #endif
@@ -315,8 +323,6 @@ END_SHADER
 //==========================================================================//
 // SplineRope Shader Start
 //==========================================================================//
-// FIXME PRE-RELEASE: Move to ConVars c++
-static ConVar rope_min_pixel_diameter("rope_min_pixel_diameter", "2.0", FCVAR_CHEAT);
 
 BEGIN_VS_SHADER(LUX_Cable_Spline, "A Shader used for Ropes and Cables made using keyframe_rope/move_rope Entities. (Note: Use LUX_Rope_Router instead)." )
 SHADER_INFO_GEOMETRY	("See LUX_Rope_Router for more Information.")
@@ -369,6 +375,16 @@ SHADER_INIT
 
 SHADER_DRAW
 {
+	// This Shader doesn't get SSAO.. Would be nice though for Attachment Points on a Wall.
+	// Raises some Questions:
+	// - Is the Normal Map strong enough to have an impact on SSAO? Cables are usually very thin and don't take up much Space on the Screen
+	// - Will anyone even notice?
+	// - Will it negatively impact the Surfaces behind the Shader?
+#ifdef ASWSDK
+	if (ShouldDrawNormalsForSSAO())
+		return;
+#endif
+
 	bool bHasBaseTexture = IsTextureLoaded(BaseTexture);
 	bool bIgnoreLightDirInfluence = GetBool(NoLightDirInfluence);
 	bool bHasNormalTexture = IsTextureLoaded(BumpMap);
@@ -475,7 +491,7 @@ SHADER_DRAW
 			//==========================================================================//
 			// if mat_fullbright 2. Bind a standard white Texture...
 #ifdef DEBUG_FULLBRIGHT2 
-			if (mat_fullbright.GetInt() == 2 && !HasFlag(MATERIAL_VAR_NO_DEBUG_OVERRIDE))
+			if (mat_fullbright() == 2 && !HasFlag(MATERIAL_VAR_NO_DEBUG_OVERRIDE))
 				BindTexture(SAMPLER_BASETEXTURE, TEXTURE_GREY);
 			else
 #endif
@@ -534,14 +550,25 @@ SHADER_DRAW
 		if (!bWriteShadowDepth)
 			SetVertexShaderTextureTransform(LUX_VS_TEXTURETRANSFORM_01, BaseTextureTransform);
 
-		// Get viewport and render target dimensions and set shader constant to do a 2D mad
-		ShaderViewport_t CurrentViewport;
-		pShaderAPI->GetViewports(&CurrentViewport, 1);
-
 		float4 f4c7;
 		if (!g_pHardwareConfig->IsAAEnabled())
 		{
-			float flMinPixelDiameter = rope_min_pixel_diameter.GetFloat() / (float)CurrentViewport.m_nWidth;
+			// Get viewport and render target dimensions and set shader constant to do a 2D mad
+#ifdef ASWSDK
+			int nViewportX;
+			int nViewportY;
+			int nViewportWidth;
+			int nViewportHeight;
+			pShaderAPI->GetCurrentViewport(nViewportX, nViewportY, nViewportWidth, nViewportHeight);
+#else
+			ShaderViewport_t vp;
+			pShaderAPI->GetViewports(&vp, 1);
+//			int nViewportX = vp.m_nTopLeftX;
+//			int nViewportY = vp.m_nTopLeftY;
+			int nViewportWidth = vp.m_nWidth;
+//			int nViewportHeight = vp.m_nHeight;
+#endif
+			float flMinPixelDiameter = rope_min_pixel_diameter.GetFloat() / (float)nViewportWidth;
 			f4c7 = flMinPixelDiameter;
 		}
 		pShaderAPI->SetVertexShaderConstant(LUX_VS_FLOAT_SET1_7, f4c7);

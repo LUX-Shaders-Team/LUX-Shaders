@@ -1,14 +1,16 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	25.11.2024 DMY
-//	Last Change :	 30.01.2026 DMY
-//
-//	Purpose of this File :	LUX_LightmappedReflective Shader for func_reflective_glass Entities
+//	Last Change :	18.05.2026 DMY
 //
 //==========================================================================//
 
 // Commonly Shared Definitions, Defines and Data for all Shaders
 #include "../cpp_lux_shared.h"
+
+#ifdef ASWSDK
+#include "renderpasses/SSAODrawNormalPass.h"
+#endif
 
 // Includes for Shaderfiles...
 #include "lux_brush_vs30.inc"
@@ -25,6 +27,21 @@ DEFINE_FALLBACK_SHADER(SDK_LightmappedReflective, LUX_LightmappedReflective)
 DEFINE_FALLBACK_SHADER(LightmappedReflective_DX90, LUX_LightmappedReflective)
 DEFINE_FALLBACK_SHADER(LightmappedReflective, LUX_LightmappedReflective)
 #endif
+
+//==========================================================================//
+// CommandBuffer Setup
+//==========================================================================//
+class LightmappedReflectiveContext : public LUXPerMaterialContextData
+{
+public:
+	float f1LightmapScaleFactor = 1.0f; // Only used on ASW
+
+	// Everything related to constants
+
+	LightmappedReflectiveContext(IMaterialVar** ppParams)
+	{
+	}
+};
 
 //==========================================================================//
 // Shader Start
@@ -65,6 +82,19 @@ BEGIN_SHADER_PARAMS
 
 	Declare_NoDiffuseBumpLighting()
 END_SHADER_PARAMS
+
+#ifdef ASWSDK
+void LMR_SetupSSAODrawNormalVars(SSAODrawNormalPass_Vars_t& SSAODrawNormalVars)
+{
+	SSAODrawNormalVars.m_bIsModel = false;
+	SSAODrawNormalVars.m_nBumpMap = NormalMap;
+	SSAODrawNormalVars.m_nBumpMapFrame = BumpFrame;
+	SSAODrawNormalVars.m_nBumpMapTransform = BumpTransform;
+
+	// Need this for $BaseTextureTransform
+	SSAODrawNormalVars.BaseVars.InitVars(BaseTexture, Frame, BaseTextureTransform);
+}
+#endif
 
 SHADER_INIT_PARAMS()
 {
@@ -155,8 +185,27 @@ SHADER_INIT
 	}
 }
 
+// Virtual Void Override for Context Data
+LightmappedReflectiveContext* CreateMaterialContextData() override
+{
+	return new LightmappedReflectiveContext(NULL);
+}
+
 SHADER_DRAW
 {
+#ifdef ASWSDK
+	if (ShouldDrawNormalsForSSAO())
+	{
+		SSAODrawNormalPass_Vars_t Vars;
+		LMR_SetupSSAODrawNormalVars(Vars);
+		SSAONormalPass_Shader_Draw(this, pShaderShadow, pShaderAPI, Vars);
+		return;
+	}
+#endif
+
+	// Get Context Data. BaseShader handles creation for us, using the CreateMaterialContextData() virtual
+	auto* pContextData = GetMaterialContextData<LightmappedReflectiveContext>(pContextDataPtr);
+
 	// NOTE: We already made sure we don't have conflicting flags on Shader Init ( see above )
 	bool bHasFlashlight = HasFlashlight();
 	
@@ -302,12 +351,19 @@ SHADER_DRAW
 			DECLARE_STATIC_PIXEL_SHADER(lux_lightmappedreflective_ps30);
 			SET_STATIC_PIXEL_SHADER_COMBO(DIFFUSETEXTURE, bHasBaseTexture + bHasSSBump * bHasBaseTexture);
 			SET_STATIC_PIXEL_SHADER_COMBO(DETAILTEXTURE, bHasDetailTexture);
-			SET_STATIC_PIXEL_SHADER_COMBO(EMM, bHasEnvMapMask + bSelfIllumEMMAlpha);
+			SET_STATIC_PIXEL_SHADER_COMBO(ENVMAPMASKMODE, bHasEnvMapMask + bSelfIllumEMMAlpha);
 			SET_STATIC_PIXEL_SHADER_COMBO(EFFECTMODE, bHasReflectTexture + bHasRefractTexture * 2); // Reflect, Refract, Both
 			// Duplicate SSBump Scenario, DiffuseTexture(2) would be SSBump already here, so we skip ReflectionLightScale(2) which is also SSBump
 			SET_STATIC_PIXEL_SHADER_COMBO(REFLECTIONLIGHTSCALE, bReflectLightScale + bHasSSBump * bReflectLightScale * !bHasBaseTexture);
 			SET_STATIC_PIXEL_SHADER(lux_lightmappedreflective_ps30);
 		}
+
+#ifdef ASWSDK
+		// LightmapScaleFactor is passed on via IShaderShadow instead of IShaderDynamicAPI
+		// The way LUX was designed, this is passed on with some other Control Data
+		// Store it so we can pack it together later
+		pContextData->f1LightmapScaleFactor = pShaderShadow->GetLightMapScaleFactor();
+#endif
 	}
 
 	//==========================================================================//
@@ -372,7 +428,7 @@ SHADER_DRAW
 
 		// c1 - Modulation Constant
 		// Function above, handles LightmapScaleFactor and Alpha Modulation
-		SetModulationConstant(bHasSSBump && GetBool(SSBumpMathFix));
+		SetModulationConstant(bHasSSBump && GetBool(SSBumpMathFix), pContextData->f1LightmapScaleFactor);
 			
 		// c3 - $ReflectTint & $Reflectance
 		// Stock-Consistency: GammaToLinear
@@ -472,7 +528,7 @@ SHADER_DRAW
 	if(IsDynamicState())
 	{
 #ifdef DEBUG_FULLBRIGHT2 
-		if (mat_fullbright.GetInt() == 2 && !HasFlag(MATERIAL_VAR_NO_DEBUG_OVERRIDE))
+		if (mat_fullbright() == 2 && !HasFlag(MATERIAL_VAR_NO_DEBUG_OVERRIDE))
 		{
 			BindTexture(bHasBaseTexture, SAMPLER_BASETEXTURE, TEXTURE_GREY);
 		}
@@ -498,7 +554,7 @@ SHADER_DRAW
 		#endif
 
 #ifdef DEBUG_LUXELS
-		if (bNeedsLightmap && mat_luxels.GetBool())
+		if (bNeedsLightmap && mat_luxels())
 		{
 			BindTexture(SAMPLER_LIGHTMAP, TEXTURE_DEBUG_LUXELS);
 		}

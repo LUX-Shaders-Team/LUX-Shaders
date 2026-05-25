@@ -1,7 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	17.09.2025 DMY
-//	Last Change :	 30.01.2026 DMY
+//	Last Change :	18.05.2026 DMY
 //
 //	Purpose of this File :	'Wrapper' for IShaderShadow
 //
@@ -61,6 +61,7 @@ void CProxyShaderShadow::EnablePolyOffset(PolygonOffsetMode_t nOffsetMode)
 	m_pShaderShadow->EnablePolyOffset(nOffsetMode);
 }
 
+#ifndef ASWSDK
 void CProxyShaderShadow::EnableStencil(bool bEnable)
 {
 	if (!m_bRealShaderShadow && m_bFakeShadowState)
@@ -125,6 +126,16 @@ void CProxyShaderShadow::StencilWriteMask(int nMask)
 
 	m_pShaderShadow->StencilWriteMask(nMask);
 }
+#endif
+
+#ifdef SFM_COMPATIBILITY
+// Same as EnableColorWrites but per-Channel
+// NOTE: Cannot be overloaded virtual Function, it will just crash the Game if you try that
+int CProxyShaderShadow::EnableColorWritesPerChannel(char r, char g, char b)
+{
+	return m_pShaderShadow->EnableColorWritesPerChannel(r, g, b);
+}
+#endif
 
 void CProxyShaderShadow::EnableColorWrites(bool bEnable)
 {
@@ -204,6 +215,7 @@ void CProxyShaderShadow::EnableCulling(bool bEnable)
 	m_pShaderShadow->EnableCulling(bEnable);
 }
 
+#ifndef ASWSDK
 void CProxyShaderShadow::EnableConstantColor(bool bEnable)
 {
 
@@ -213,6 +225,7 @@ void CProxyShaderShadow::EnableConstantColor(bool bEnable)
 
 	m_pShaderShadow->EnableConstantColor(bEnable);
 }
+#endif
 
 void CProxyShaderShadow::VertexShaderVertexFormat(unsigned int nFlags,
 	int nTexCoordCount, int* pTexCoordDimensions, int nUserDataSize)
@@ -231,7 +244,9 @@ void CProxyShaderShadow::SetVertexShader(const char* pFileName, int nStaticVshIn
 		return;
 
 	const char* pShaderVCS = pFileName;
+#ifndef ASWSDK
 	pShaderVCS = g_ShaderReload.GetResolvedFileName(pFileName);
+#endif
 	m_pShaderShadow->SetVertexShader(pShaderVCS, nStaticVshIndex);
 }
 
@@ -241,10 +256,13 @@ void CProxyShaderShadow::SetPixelShader(const char* pFileName, int nStaticPshInd
 		return;
 
 	const char* pShaderVCS = pFileName;
+#ifndef ASWSDK
 	pShaderVCS = g_ShaderReload.GetResolvedFileName(pFileName);
+#endif
 	m_pShaderShadow->SetPixelShader(pShaderVCS, nStaticPshIndex);
 }
 
+#ifndef ASWSDK
 void CProxyShaderShadow::EnableLighting(bool bEnable)
 {
 	if (!m_bRealShaderShadow && m_bFakeShadowState)
@@ -260,6 +278,7 @@ void CProxyShaderShadow::EnableSpecular(bool bEnable)
 
 	m_pShaderShadow->EnableSpecular(bEnable);
 }
+#endif
 
 void CProxyShaderShadow::EnableSRGBWrite(bool bEnable)
 {
@@ -278,6 +297,7 @@ void CProxyShaderShadow::EnableSRGBRead(Sampler_t sampler, bool bEnable)
 	m_pShaderShadow->EnableSRGBRead(sampler, bEnable);
 }
 
+#ifndef ASWSDK
 void CProxyShaderShadow::EnableVertexBlend(bool bEnable)
 {
 	if (!m_bRealShaderShadow && m_bFakeShadowState)
@@ -293,6 +313,7 @@ void CProxyShaderShadow::OverbrightValue(TextureStage_t stage, float value)
 
 	m_pShaderShadow->OverbrightValue(stage, value);
 }
+#endif
 
 void CProxyShaderShadow::EnableTexture(Sampler_t sampler, bool bEnable)
 {
@@ -304,6 +325,7 @@ void CProxyShaderShadow::EnableTexture(Sampler_t sampler, bool bEnable)
 	m_pShaderShadow->EnableTexture(sampler, bEnable);
 }
 
+#ifndef ASWSDK
 void CProxyShaderShadow::EnableTexGen(TextureStage_t stage, bool bEnable)
 {
 	if (!m_bRealShaderShadow && m_bFakeShadowState)
@@ -385,6 +407,7 @@ void CProxyShaderShadow::EnableTextureAlpha(TextureStage_t stage, bool bEnable)
 
 	m_pShaderShadow->EnableTextureAlpha(stage, bEnable);
 }
+#endif
 
 void CProxyShaderShadow::EnableBlendingSeparateAlpha(bool bEnable)
 {
@@ -402,6 +425,7 @@ void CProxyShaderShadow::BlendFuncSeparateAlpha(ShaderBlendFactor_t srcFactor, S
 	m_pShaderShadow->BlendFuncSeparateAlpha(srcFactor, dstFactor);
 }
 
+#ifndef ASWSDK
 void CProxyShaderShadow::FogMode(ShaderFogMode_t fogMode)
 {
 	if (!m_bRealShaderShadow && m_bFakeShadowState)
@@ -425,6 +449,12 @@ void CProxyShaderShadow::SetMorphFormat(MorphFormat_t flags)
 
 	m_pShaderShadow->SetMorphFormat(flags);
 }
+#else
+void CProxyShaderShadow::FogMode(ShaderFogMode_t fogMode, bool bVertexFog)
+{
+	m_pShaderShadow->FogMode(fogMode, bVertexFog);
+}
+#endif
 
 void CProxyShaderShadow::DisableFogGammaCorrection(bool bDisable)
 {
@@ -451,6 +481,14 @@ void CProxyShaderShadow::SetShadowDepthFiltering(Sampler_t stage)
 	m_pShaderShadow->SetShadowDepthFiltering(stage);
 }
 
+#ifdef ASWSDK
+// Per vertex texture unit stuff
+void CProxyShaderShadow::EnableVertexTexture(VertexTextureSampler_t sampler, bool bEnable)
+{
+	m_pShaderShadow->EnableVertexTexture(sampler, bEnable);
+}
+#endif
+
 void CProxyShaderShadow::BlendOp(ShaderBlendOp_t blendOp)
 {
 	if (!m_bRealShaderShadow && m_bFakeShadowState)
@@ -465,3 +503,10 @@ void CProxyShaderShadow::BlendOpSeparateAlpha(ShaderBlendOp_t blendOp)
 
 	m_pShaderShadow->BlendOpSeparateAlpha(blendOp);
 }
+
+#ifdef ASWSDK
+float CProxyShaderShadow::GetLightMapScaleFactor(void) const
+{
+	return m_pShaderShadow->GetLightMapScaleFactor();
+}
+#endif

@@ -13,14 +13,7 @@
 //==========================================================================//
 //	Constants found on all shaders with Environment Mapping.
 //==========================================================================//
-#if (ENVMAPMODE > 0)
-
-// For use in Shaders via #if
-#define ENVMAP 1
-
-#if (!ENVMAPSPHERE && ENVMAPMODE > 2)
-	#define ENVMAPPARALLAXCORRECTION 1
-#endif
+#if ENVMAP
 
 // by Defining this, it allows Shaders to move the Registers to something else
 #if !defined(MOVED_REGISTERS_ENVMAP)
@@ -43,24 +36,14 @@ const float4	cEnvMapFresnel					: register(LUX_PS_FLOAT_ENVMAP_FRESNEL);
 #define			g_f1EnvMapFresnelBias			(cEnvMapFresnel.y)
 #define			g_f1EnvMapFresnelExponent		(cEnvMapFresnel.z)
 
-// On brushes ENVMAPMODE > 2 is PCC
-// On models its envmap anisotropy ( exception unlitgeneric )
-#if (ENVMAPMODE > 2 && defined(BRUSH))
-const float3	g_f3CubeMapPos					: register(LUX_PS_FLOAT_ENVMAP_POSITION);
-const float4x3	g_f4x3CorrectionMatrix			: register(LUX_PS_FLOAT_ENVMAP_MATRIX);
-#endif // PCC
-
+	#if ENVMAPPARALLAXCORRECTION
+		const float3	g_f3CubeMapPos					: register(LUX_PS_FLOAT_ENVMAP_POSITION);
+		const float4x3	g_f4x3CorrectionMatrix			: register(LUX_PS_FLOAT_ENVMAP_MATRIX);
+	#endif
 
 #endif // !MOVED_REGISTERS_ENVMAP
 
-// On brushes ENVMAPMODE > 2 is PCC
-// On models its envmap anisotropy
-// To account for envmapmask we check for 4 too
-#if (ENVMAPMODE == 2 || ENVMAPMODE == 4)
-
-// For use in Shaders via #if
-#define ENVMAPMASK 1
-
+#if ENVMAPMASK
 #if !defined(MOVED_SAMPLERS_ENVMAP)
 sampler Sampler_EnvMapMask		: register(s5);
 #endif
@@ -225,10 +208,34 @@ float3 EnvMapFresnel(float3 f3SpecularLookup, float f1NdotV)
 	// ADD, MUL, MAD
 	// Allow override of Fresnel for Phong
 #if !defined(NO_ENVMAPFRESNEL)
-	// Stock-Consistency: Squared Fresnel
+
 	float f1Fresnel = 1.0f - f1NdotV;
-	f1Fresnel *= f1Fresnel; // Squared
-	f3SpecularLookup *= saturate(g_f1EnvMapFresnelScale * pow(f1Fresnel, g_f1EnvMapFresnelExponent) + g_f1EnvMapFresnelBias);
+
+	// !defined(ASWSDK)
+	// NOTE: I entirely replicate the ASW Code now because the SDK does not have an Equivalent
+	// The squaring was replicated to be consistent with Phong Fresnel, but ASW doesn't do it.
+	// Too bad your Fresnel is now inconsistent with other Fresnels!
+	#if 0
+		f1Fresnel *= f1Fresnel; // Squared
+		f3SpecularLookup *= saturate(g_f1EnvMapFresnelScale * pow(f1Fresnel, g_f1EnvMapFresnelExponent) + g_f1EnvMapFresnelBias);
+	#else
+		// The square above forces positive Values
+		// We max(0, ) outside of this Function but the Shadercompiler still complains,
+		// presumably because this is it's own standalone Function and you might call it with a bogus NdotV at some point
+		// max(0, ) it again and hope the Shadercompiler actually notices that too and strips it.
+		f1Fresnel = max(0.0f, f1Fresnel);
+
+		// ASW-Consistency: Scale is now Bias and Bias is now Scale
+		// I'm not doing this switcheroo in C++ because we would have to store a temporary Result somewhere
+		// Just reinterpret the constants here. FIXME: Do it at the top of the File
+		float f1FresnelScale = g_f1EnvMapFresnelBias;
+		float f1FresnelBias = g_f1EnvMapFresnelScale;
+		float f1FresnelExp = g_f1EnvMapFresnelExponent;
+
+		// ASW doesn't square, it switches around the constants and it also doesn't saturate the Results
+		// From all the Things it does correctly, this is not it.
+		f3SpecularLookup *= f1FresnelScale * pow(f1Fresnel, f1FresnelExp) + f1FresnelBias;
+	#endif
 #endif
 	return f3SpecularLookup;
 }

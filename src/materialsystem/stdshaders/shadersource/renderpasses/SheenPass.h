@@ -44,16 +44,16 @@ struct SheenPass_Vars_t
 	void InitVars(int SheenPassEnabled, int BumpMap, int BumpFrame, int BumpTransform)
 	{
 		m_nSheenPassEnabled = SheenPassEnabled;
-		m_nSheenMap = SheenPassEnabled;
-		m_nSheenMapMask = SheenPassEnabled + 1;
-		m_nSheenMapMaskFrame = SheenPassEnabled + 2;
-		m_nSheenMapTint = SheenPassEnabled + 3;
-		m_nSheenMapMaskOffsetX = SheenPassEnabled + 4;
-		m_nSheenMapMaskOffsetY = SheenPassEnabled + 5;
-		m_nSheenMapMaskScaleX = SheenPassEnabled + 6;
-		m_nSheenMapMaskScaleY = SheenPassEnabled + 7;
-		m_nSheenMapMaskDirection = SheenPassEnabled + 8;
-		m_nSheenIndex = SheenPassEnabled + 9;
+		m_nSheenMap = SheenPassEnabled + 1;
+		m_nSheenMapMask = SheenPassEnabled + 2;
+		m_nSheenMapMaskFrame = SheenPassEnabled + 3;
+		m_nSheenMapTint = SheenPassEnabled + 4;
+		m_nSheenMapMaskOffsetX = SheenPassEnabled + 5;
+		m_nSheenMapMaskOffsetY = SheenPassEnabled + 6;
+		m_nSheenMapMaskScaleX = SheenPassEnabled + 7;
+		m_nSheenMapMaskScaleY = SheenPassEnabled + 8;
+		m_nSheenMapMaskDirection = SheenPassEnabled + 9;
+		m_nSheenIndex = SheenPassEnabled + 10;
 
 		m_nBumpMap = BumpMap;
 		m_nBumpFrame = BumpFrame;

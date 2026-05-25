@@ -20,7 +20,7 @@
 //void LuxFleshInterior_Link_Params(FleshInterior_Vars_t &info);
 void LuxFleshInterior_Init_Params(CBaseVSShader* pShader, FleshInterior_Vars_t& info);
 void LuxFleshInterior_Shader_Init(CBaseVSShader* pShader, FleshInterior_Vars_t& info);
-void LuxFleshInterior_Shader_Draw(CBaseVSShader* pShader, CProxyShaderShadow* pShaderShadow, CProxyShaderDynamicAPI* pShaderAPI, FleshInterior_Vars_t& info);
+void LuxFleshInterior_Shader_Draw(CBaseVSShader* pShader, IShaderShadow* pShaderShadow, CProxyShaderDynamicAPI* pShaderAPI, FleshInterior_Vars_t& info);
 
 #endif // FLESHINTERIOR_H
 

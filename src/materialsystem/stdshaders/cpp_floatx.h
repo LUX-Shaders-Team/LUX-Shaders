@@ -407,21 +407,14 @@ auto lerp(const A& a, const B& b, float t) -> decltype(to_vec(a) + t * (to_vec(b
 }
 
 // Template Clamp
-template<typename A, typename B, typename C>
-auto clamp(const A& x, const B& minVal, const C& maxVal) -> decltype(to_vec(x))
+inline float fxclamp(float value, float minVal, float maxVal)
 {
-    auto vx = to_vec(x);
-    auto vmin = to_vec(minVal);
-    auto vmax = to_vec(maxVal);
-
-    return vx < vmin ? vmin : (vx > vmax ? vmax : vx);
+    return value < minVal ? minVal : (value > maxVal ? maxVal : value);
 }
 
-// Saturate
-template<typename A>
-auto saturate(const A& x) -> decltype(clamp(x, 0.0f, 1.0f))
+inline float fxsaturate(float value)
 {
-    return clamp(x, 0.0f, 1.0f);
+    return fxclamp(value, 0.0f, 1.0f);
 }
 
 // abs has some existing functions..
@@ -500,7 +493,7 @@ inline float4 sign(const float4& v)
 inline float smoothstep(float edge0, float edge1, float x)
 {
 	// Scale, Bias, Saturate x
-	x = saturate((x - edge0) / (edge1 - edge0));
+	x = fxsaturate((x - edge0) / (edge1 - edge0));
 
 	// Evaluate polynomial
 	return x * x * (3 - 2 * x);

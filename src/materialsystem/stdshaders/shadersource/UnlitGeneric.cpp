@@ -1,12 +1,16 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	20.01.2023 DMY
-//	Last Change :	 30.01.2026 DMY
+//	Last Change :	23.05.2026 DMY
 //
 //==========================================================================//
 
 // Commonly Shared Definitions, Defines and Data for all Shaders
 #include "../cpp_lux_shared.h"
+
+#ifdef ASWSDK
+#include "renderpasses/SSAODrawNormalPass.h"
+#endif
 
 // Includes for Shaderfiles...
 #include "lux_model_vs30.inc"
@@ -42,9 +46,9 @@ public:
 	BlendType_t m_nBlendType = BT_NONE;
 	bool m_bIsFullyOpaque = false;
 
-	UnlitGenericContext(CBaseShader* pShader)
-		: m_SemiStaticCmds(pShader),
-		m_StaticCmds(pShader)
+	UnlitGenericContext(IMaterialVar** ppParams)
+		: m_SemiStaticCmds(ppParams),
+		m_StaticCmds(ppParams)
 	{
 	}
 };
@@ -85,6 +89,16 @@ BEGIN_SHADER_PARAMS
 	// FIXME: Not implemented yet
 	SHADER_PARAM(DepthBlend, SHADER_PARAM_TYPE_INTEGER, "", "(FALLBACK) This Parameter will cause the Shader to fallback to LUX_DepthBlendGeneric.")
 END_SHADER_PARAMS
+
+#ifdef ASWSDK
+void UG_SetupSSAODrawNormalVars(SSAODrawNormalPass_Vars_t& SSAODrawNormalVars)
+{
+	// Treat as a Model? Entirely relying on HasVertexCompression() for this one
+	SSAODrawNormalVars.m_bIsModel = true;
+
+	// None of the other Stuff is supported on this Shader
+}
+#endif
 
 SHADER_INIT_PARAMS()
 {
@@ -138,7 +152,7 @@ SHADER_INIT_PARAMS()
 	DefaultFloat(EdgeSoftnessEnd, 0.5);
 	DefaultFloat(OutlineAlpha, 1.0);
 
-	if (CVarDeveloper.GetInt() > 0)
+	if (CVarDeveloper() > 0)
 	{
 		if (GetBool(DistanceAlpha) && !IsDefined(BaseTexture) && !GetBool(DistanceAlphaFromDetail))
 		{
@@ -170,6 +184,10 @@ SHADER_INIT_PARAMS()
 	DefaultFloat(TreeSwaySpeedLerpStart, 3.0f);
 	DefaultFloat(TreeSwaySpeedLerpEnd, 6.0f);
 	DefaultFloat2(TreeSwayStaticValues, 0.5f, 0.5f);
+
+	// There are some Materials that set $SelfIllum on UnlitGeneric
+	// We need to clear this Flag at all Times, to ensure ComputeBlendType works correctly.
+	ClearFlag(MATERIAL_VAR_SELFILLUM);
 }
 
 SHADER_FALLBACK
@@ -262,6 +280,16 @@ UnlitGenericContext* CreateMaterialContextData() override
 
 SHADER_DRAW
 {
+#ifdef ASWSDK
+	if (ShouldDrawNormalsForSSAO())
+	{
+		SSAODrawNormalPass_Vars_t Vars;
+		UG_SetupSSAODrawNormalVars(Vars);
+		SSAONormalPass_Shader_Draw(this, pShaderShadow, pShaderAPI, Vars);
+		return;
+	}
+#endif
+
 #if FIXED_COMMANDBUFFER
 	// Get Context Data. BaseShader handles creation for us, using the CreateMaterialContextData() virtual
 	auto* pContextData = GetMaterialContextData<UnlitGenericContext>(pContextDataPtr);
@@ -425,7 +453,7 @@ SHADER_DRAW
 			}
 
 			int nDetailCombo = bHasDetailTexture + GetBool(DistanceAlphaFromDetail) + 2 * bSeparateDetailUV;
-			int nEnvMapMode = bHasEnvMap + bHasEnvMapMask + bPCC * 2;
+			int nEnvMapMode = bHasEnvMap + bPCC + bHasEnvMapMask * 2;
 			DECLARE_STATIC_PIXEL_SHADER(lux_unlitgeneric_ps30);
 			SET_STATIC_PIXEL_SHADER_COMBO(DETAILTEXTURE, nDetailCombo);
 			SET_STATIC_PIXEL_SHADER_COMBO(ENVMAPMODE, nEnvMapMode);
@@ -448,7 +476,7 @@ SHADER_DRAW
 //		StaticCmds.End();
 
 		// Set the Buffer back to its original ( Empty ) State
-		SemiStaticCmds.Reset(this);
+		SemiStaticCmds.Reset(params);
 
 		// Instruct the Buffer to set an End Point
 		SemiStaticCmds.End();
@@ -462,7 +490,7 @@ SHADER_DRAW
 	if(MaterialVarsChanged())
 	{
 		// Set the Buffer back to its original ( Empty ) State
-		SemiStaticCmds.Reset(this);
+		SemiStaticCmds.Reset(params);
 
 		//==========================================================================//
 		// Bind Textures
@@ -629,7 +657,7 @@ SHADER_DRAW
 
 				// ..1: Up these resolutions, find a dynamic approach for these constants?
 				// ..2: (float), those are integers right now
-				float f1ResScale = max(0.5f, max(1024.0f / nWidth, 768.0f / nHeight));
+				float f1ResScale = MAX(0.5f, MAX(1024.0f / nWidth, 768.0f / nHeight));
 
 				if (bScaleEdges)
 				{
@@ -866,7 +894,7 @@ SHADER_DRAW
 
 				// ..1: Up these resolutions, find a dynamic approach for these constants?
 				// ..2: (float), those are integers right now
-				float f1ResScale = max(0.5f, max(1024.0f / nWidth, 768.0f / nHeight));
+				float f1ResScale = MAX(0.5f, MAX(1024.0f / nWidth, 768.0f / nHeight));
 
 				if (bScaleEdges)
 				{

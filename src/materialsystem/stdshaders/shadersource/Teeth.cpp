@@ -1,12 +1,16 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	20.01.2023 DMY
-//	Last Change :	 30.01.2026 DMY
+//	Last Change :	18.05.2026 DMY
 //
 //==========================================================================//
 
 // Commonly Shared Definitions, Defines and Data for all Shaders
 #include "../cpp_lux_shared.h"
+
+#ifdef ASWSDK
+#include "renderpasses/SSAODrawNormalPass.h"
+#endif
 
 // Includes for Shaderfiles...
 #include "lux_teeth_vs30.inc"
@@ -59,9 +63,9 @@ public:
 	bool m_bPhong_InvertPhongMask = false;
 	bool m_bPhong_PhongExponentTextureMask = false;
 
-	TeethContext(CBaseShader* pShader)
-		: m_SemiStaticCmds(pShader),
-		m_StaticCmds(pShader)
+	TeethContext(IMaterialVar** ppParams)
+		: m_SemiStaticCmds(ppParams),
+		m_StaticCmds(ppParams)
 	{
 	}
 };
@@ -93,6 +97,19 @@ BEGIN_SHADER_PARAMS
 	SHADER_PARAM(EntityOrigin,	SHADER_PARAM_TYPE_VEC3,	 "", "Requires $Intro 1. World-space location of the entity, required to correctly animate the Warp.");
 	SHADER_PARAM(WarpParam,		SHADER_PARAM_TYPE_FLOAT, "", "Requires $Intro 1. How far into the Warp Animation we are.\nAnimation Parameter with a Range of 0 to 1.");
 END_SHADER_PARAMS
+
+#ifdef ASWSDK
+void Teeth_SetupSSAODrawNormalVars(SSAODrawNormalPass_Vars_t& SSAODrawNormalVars)
+{
+	SSAODrawNormalVars.m_bIsModel = true;
+	SSAODrawNormalVars.m_nBumpMap = NormalTexture;
+	SSAODrawNormalVars.m_nBumpMapFrame = BumpFrame;
+	SSAODrawNormalVars.m_nBumpMapTransform = BumpTransform;
+
+	// Need this for $BaseTextureTransform
+	SSAODrawNormalVars.BaseVars.InitVars(BaseTexture, Frame, BaseTextureTransform);
+}
+#endif
 
 SHADER_INIT_PARAMS()
 {
@@ -139,7 +156,7 @@ SHADER_INIT_PARAMS()
 	// Debugging Shenanigans and Default Stuff for Phong
 	bool bUsesNewBehaviour = IsDefined(PhongNewBehaviour) && GetBool(PhongNewBehaviour);
 	bool bHasPhongExponentTexture = IsDefined(PhongExponentTexture);
-	if (CVarDeveloper.GetInt() > 0 && IsDefined(BumpMap))
+	if (CVarDeveloper() > 0 && IsDefined(BumpMap))
 	{
 		// Phong related Caveats
 		if (GetBool(Phong)) // $Phong on by default under the BumpMap
@@ -306,7 +323,7 @@ SHADER_INIT
 		// If there is a $PhongExponentTexture, we don't care
 		// If there is no $PhongExponent, we have a problem as there is no Source for PhongExponent
 		// If there is no Alpha Flag, we can't use the Alpha for PhongExponent can we?
-		if (CVarDeveloper.GetInt() > 0 && !GetBool(BaseMapAlphaPhongMask))
+		if (CVarDeveloper() > 0 && !GetBool(BaseMapAlphaPhongMask))
 		{
 			// If using Phong, warn the User about not having a Phong Exponent Mask
 			if (IsTextureLoaded(BumpMap) && GetInt(Phong) && !IsDefined(PhongExponentTexture) && !IsDefined(PhongExponent))
@@ -362,11 +379,21 @@ SHADER_INIT
 // Virtual Void Override for Context Data
 TeethContext* CreateMaterialContextData() override
 {
-	return new TeethContext(this);
+	return new TeethContext(NULL);
 }
 
 SHADER_DRAW
 {
+#ifdef ASWSDK
+	if (ShouldDrawNormalsForSSAO())
+	{
+		SSAODrawNormalPass_Vars_t Vars;
+		Teeth_SetupSSAODrawNormalVars(Vars);
+		SSAONormalPass_Shader_Draw(this, pShaderShadow, pShaderAPI, Vars);
+		return;
+	}
+#endif
+
 	// Get Context Data. BaseShader handles creation for us, using the CreateMaterialContextData() virtual
 	auto* pContextData = GetMaterialContextData<TeethContext>(pContextDataPtr);
 //	auto& StaticCmds = pContextData->m_StaticCmds;
@@ -376,7 +403,7 @@ SHADER_DRAW
 	bool bHasBaseTexture = IsTextureLoaded(BaseTexture);
 	bool bHasNormalTexture = IsTextureLoaded(BumpMap);
 
-	bool bHasEnvMap = !bHasFlashlight && IsTextureLoaded(EnvMap) && mat_specular.GetBool();
+	bool bHasEnvMap = !bHasFlashlight && IsTextureLoaded(EnvMap);
 	bool bNormalMapAlphaEnvMapMask = !bHasEnvMap && HasFlag(MATERIAL_VAR_NORMALMAPALPHAENVMAPMASK);
 	bool bBaseAlphaEnvMapMask = !bHasEnvMap && HasFlag(MATERIAL_VAR_BASEALPHAENVMAPMASK);
 	bool bHasEnvMapMask = bHasEnvMap &&	IsTextureLoaded(EnvMapMask); // No Envmapping under the flashlight
@@ -593,6 +620,27 @@ SHADER_DRAW
 		SET_STATIC_PIXEL_SHADER_COMBO(LIGHTING_MODE, bHasFlashlight ? 0 : nLightingMode);
 		SET_STATIC_PIXEL_SHADER_COMBO(DETAILTEXTURE, bHasDetailTexture);
 		SET_STATIC_PIXEL_SHADER(lux_teeth_ps30);
+
+#ifdef ASWSDK
+		//==========================================================================//
+		// Per-Instance Command Buffer
+		//==========================================================================//
+		PI_BeginCommandBuffer();
+
+		if (!bHasFlashlight)
+			PI_SetVertexShaderAmbientLightCube();
+
+		if (!bHasFlashlight && bHasNormalTexture)
+		{
+			// c13, c14, c15, c16, c17, c18
+			PI_SetPixelShaderAmbientLightCube(LUX_PS_FLOAT_AMBIENTCUBE);
+
+			// c20, c21, c22, c23, c24, c25
+			PI_SetPixelShaderLocalLighting(LUX_PS_FLOAT_LIGHTDATA);
+		}
+
+		PI_EndCommandBuffer();
+#endif
 	}
 
 	//==========================================================================//
@@ -610,7 +658,7 @@ SHADER_DRAW
 		//==========================================================================//
 		// if mat_fullbright 2. Bind a standard white Texture...
 #ifdef DEBUG_FULLBRIGHT2 
-		if (mat_fullbright.GetInt() == 2 && !HasFlag(MATERIAL_VAR_NO_DEBUG_OVERRIDE))
+		if (mat_fullbright() == 2 && !HasFlag(MATERIAL_VAR_NO_DEBUG_OVERRIDE))
 			BindTexture(SAMPLER_BASETEXTURE, TEXTURE_GREY);
 		else
 #endif
@@ -773,11 +821,13 @@ SHADER_DRAW
 
 		if (!bHasFlashlight && bHasNormalTexture)
 		{
+#ifndef ASWSDK
 			// c13, c14, c15, c16, c17, c18
 			pShaderAPI->SetPixelShaderStateAmbientLightCube(LUX_PS_FLOAT_AMBIENTCUBE, !LightState.m_bAmbientLight);
 
 			// c20, c21, c22, c23, c24, c25
 			pShaderAPI->CommitPixelShaderLighting(LUX_PS_FLOAT_LIGHTDATA);
+#endif
 		}
 		else
 		{
@@ -807,9 +857,11 @@ SHADER_DRAW
 			bHasStaticPropLighting = StaticLightVertex(LightState); // LightState varies between SP and MP so we use a function to reinterpret
 			bHasDynamicPropLighting = LightState.m_bAmbientLight || (LightState.m_nNumLights > 0) ? 1 : 0;
 
+#ifndef ASWSDK
 			// Need to send this to the Vertex Shader manually in this scenario
 			if (bHasDynamicPropLighting)
 				SetAmbientCubeDynamicStateVertexShader();
+#endif
 		}
 
 		DECLARE_DYNAMIC_VERTEX_SHADER(lux_teeth_vs30);

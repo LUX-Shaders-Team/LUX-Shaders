@@ -12,7 +12,7 @@
 #include "SheenPass.h"
 
 // Includes for Shaderfiles...
-#include "lux_model_simplified_vs30.inc"
+#include "lux_sheenpass_vs30.inc"
 #include "lux_sheenpass_ps30.inc"
 
 void SheenPass_Init_Params(CBaseVSShader* pShader, SheenPass_Vars_t& info)
@@ -104,11 +104,11 @@ void SheenPass_Shader_Draw(CBaseVSShader* pShader, IShaderShadow* pShaderShadow,
 			//==========================================================================//
 
 			// Stock shader states that it wants MATERIAL_VAR2_NEEDS_TANGENT_SPACES
-			// But here we set a UserDataSize of 0
-			// Does this only work with vertex compression? Might be a FIXME..
+			// But set a UserDataSize of 0
+			// I set 4, because $SoftwareSkin is a thing
 			unsigned int nFlags = VERTEX_POSITION | VERTEX_NORMAL | VERTEX_FORMAT_COMPRESSED;
 			int TexCoords = 1;
-			int nUserDataSize = 0;
+			int nUserDataSize = bHasNormalMap ? 4 : 0;
 			pShaderShadow->VertexShaderVertexFormat(nFlags, TexCoords, NULL, nUserDataSize);
 
 			//==========================================================================//
@@ -134,12 +134,9 @@ void SheenPass_Shader_Draw(CBaseVSShader* pShader, IShaderShadow* pShaderShadow,
 			//==========================================================================//
 			// Set Static Shaders
 			//==========================================================================//
-			DECLARE_STATIC_VERTEX_SHADER(lux_model_simplified_vs30);
-			SET_STATIC_VERTEX_SHADER_COMBO(TEXCOORDS, 0);
-			SET_STATIC_VERTEX_SHADER_COMBO(NORMALS, bHasNormalMap ? 2 : 1);
-			SET_STATIC_VERTEX_SHADER_COMBO(VERTEXCOLORS, 0);
-			SET_STATIC_VERTEX_SHADER_COMBO(VERTEX_SWAY, 0);
-			SET_STATIC_VERTEX_SHADER(lux_model_simplified_vs30);
+			DECLARE_STATIC_VERTEX_SHADER(lux_sheenpass_vs30);
+			SET_STATIC_VERTEX_SHADER_COMBO(BUMPMAPPED, bHasNormalMap);
+			SET_STATIC_VERTEX_SHADER(lux_sheenpass_vs30);
 
 			DECLARE_STATIC_PIXEL_SHADER(lux_sheenpass_ps30);
 			SET_STATIC_PIXEL_SHADER_COMBO(BUMPMAPPED, bHasNormalMap);
@@ -198,10 +195,10 @@ void SheenPass_Shader_Draw(CBaseVSShader* pShader, IShaderShadow* pShaderShadow,
 			//==================================================================================================
 			// Set Dynamic Shaders
 			//==================================================================================================
-			DECLARE_DYNAMIC_VERTEX_SHADER(lux_model_simplified_vs30);
+			DECLARE_DYNAMIC_VERTEX_SHADER(lux_sheenpass_vs30);
 			SET_DYNAMIC_VERTEX_SHADER_COMBO(SKINNING, pShader->HasSkinning());
 			SET_DYNAMIC_VERTEX_SHADER_COMBO(COMPRESSION, pShader->HasVertexCompression());
-			SET_DYNAMIC_VERTEX_SHADER(lux_model_simplified_vs30);
+			SET_DYNAMIC_VERTEX_SHADER(lux_sheenpass_vs30);
 
 			DECLARE_DYNAMIC_PIXEL_SHADER(lux_sheenpass_ps30);
 			SET_DYNAMIC_PIXEL_SHADER(lux_sheenpass_ps30);

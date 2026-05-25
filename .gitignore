@@ -53,6 +53,8 @@ config.cfg
 
 # shader files
 *.tmp
+*.vcs
+*.inc
 
 # GCH
 *.h.gch

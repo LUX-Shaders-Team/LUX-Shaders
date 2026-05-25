@@ -1,7 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	30.09.2025 DMY
-//	Last Change :	 30.01.2026 DMY
+//	Last Change :	06.02.2025 DMY
 //
 //==========================================================================//
 
@@ -11,7 +11,7 @@
 //	STATIC:	"EMISSIVEBLENDMODE"			"0..2"
 //	STATIC:	"DETAILTEXTURE"				"0..1"
 //	STATIC:	"SELFILLUMTEXTURE"			"0..1"
-//  STATIC: "MINIMUMLIGHT"				"0..1"
+//  STATIC: "NEEDSBASETEXTURE"			"0..1"
 
 //==========================================================================//
 //	Declare Dynamic Combos
@@ -147,7 +147,11 @@ VS_OUTPUT main( const VS_INPUT v )
 	// TEXCOORD0
 	// Set WorldPos and compute Depth
 	o.WorldPos_ProjPosZ.xyz = f3WorldPos;
-	o.WorldPos_ProjPosZ.w = dot(float4(f3WorldPos, 1), cViewProjZ);
+	#if defined(ASWSDK)
+		o.WorldPos_ProjPosZ.w = f4ProjPos.z;
+	#else
+		o.WorldPos_ProjPosZ.w = dot(float4(f3WorldPos, 1.0f), cViewProjZ);
+	#endif
 
 	// Stuffing 1.0f into .zw so all Components of the TexCoord Transform influence the UV
 	float4 f4UnmodifiedTexCoord = float4(v.vTexCoord0.xy, 1.0f, 1.0f);
@@ -174,7 +178,7 @@ VS_OUTPUT main( const VS_INPUT v )
 		o.AdditiveTexCoords.w = dot(f4UnmodifiedTexCoord, g_TexCoordSelfIllum[1]);
 	#endif
 
-	#if MINIMUMLIGHT
+	#if NEEDSBASETEXTURE
 		o.BaseTexCoord.x = dot(f4UnmodifiedTexCoord, g_TexCoordBase[0]);
 		o.BaseTexCoord.y = dot(f4UnmodifiedTexCoord, g_TexCoordBase[1]);
 	#endif

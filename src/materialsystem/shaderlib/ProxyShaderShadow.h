@@ -1,7 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	17.09.2025 DMY
-//	Last Change :	 30.01.2026 DMY
+//	Last Change :	18.05.2026 DMY
 //
 //	Purpose of this File :	'Wrapper' for IShaderShadow
 //
@@ -17,6 +17,7 @@
 #include "shaderapi/ishadershadow.h"
 #include "VCSHotReload.h"
 #include "ShaderSpew.h"
+#include "../stdshaders/lux_common_defines.h"
 
 // For a more compact overview, look at the original ishadershadow.h
 class CProxyShaderShadow : IShaderShadow
@@ -45,6 +46,7 @@ public:
 	// OpenGL does however. It is not clear what this Function does
 	void EnablePolyOffset(PolygonOffsetMode_t nOffsetMode) override;
 
+#ifndef ASWSDK
 	// 'These methods for controlling stencil are obsolete and stubbed to do nothing.  Stencil
 	// control is via the shaderapi/material system now, not part of the shadow state.
 	// Methods related to stencil'
@@ -57,6 +59,13 @@ public:
 	void StencilReference(int nReference) override;
 	void StencilMask(int nMask) override;
 	void StencilWriteMask(int nMask) override;
+#endif
+
+#ifdef SFM_COMPATIBILITY
+	// Same as EnableColorWrites but per-Channel
+	// NOTE: Cannot be overloaded virtual Function, it will just crash the Game if you try that
+	int EnableColorWritesPerChannel(char r, char g, char b) override;
+#endif
 
 	// Allows the Shader to draw to the Destination RenderTargets RGB Values
 	// ColorWrites are enabled by default.
@@ -92,9 +101,11 @@ public:
 	// VFACE will be -1 for Backfaces and +1 for Frontfaces
 	void EnableCulling(bool bEnable) override;
 
+#ifndef ASWSDK
 	// ????: What does this do, old FFP Function?
 	// constant color + transparency
 	void EnableConstantColor(bool bEnable) override;
+#endif
 
 	// Indicates the Vertex Format used by the Vertex Shader
 	// Note that just setting Things you want here isn't going to work.
@@ -117,6 +128,7 @@ public:
 	void SetVertexShader(const char* pFileName, int nStaticVshIndex) override;
 	void SetPixelShader(const char* pFileName, int nStaticPshIndex = 0) override;
 
+#ifndef ASWSDK
 	// ????: What does this do, old FFP Function?
 	// Indicates we're going to light the model
 	void EnableLighting(bool bEnable) override;
@@ -124,6 +136,7 @@ public:
 	// ????: What does this do, old FFP Function?
 	// Enables specular lighting (lighting has also got to be enabled) override;
 	void EnableSpecular(bool bEnable) override;
+#endif
 
 	// "Convert from linear to gamma color space on writes to frame buffer."
 	// true = Shader outputs Linear values that need to be converted
@@ -136,7 +149,8 @@ public:
 	// This is using dedicated D3D9 Functionality.
 	// HDR Textures ( RGBA16161616F, RGBA16161616, R32F, etc. ) override; usually don't need conversion.
 	void EnableSRGBRead(Sampler_t sampler, bool bEnable) override;
-
+	
+#ifndef ASWSDK
 	// ????: Does this do what it says it does, disable skinning?
 	// Usually for Skinning you must set MATERIAL_VAR2_SUPPORTS_HW_SKINNING
 	// Then check NumBones to know when Skinning is enabled.
@@ -150,11 +164,13 @@ public:
 	// ????: What does this do, Function related to Procedural Textures?
 	// per texture unit stuff
 	void OverbrightValue(TextureStage_t stage, float value) override;
+#endif
 
 	// Enables a Sampler. Once enabled a Texture MUST be bound
 	// See also EnableSRGBRead() override;, which has Relevance to this Function
 	void EnableTexture(Sampler_t sampler, bool bEnable) override;
 
+#ifndef ASWSDK
 	// ????: What does this do, Function related to Procedural Textures?
 	void EnableTexGen(TextureStage_t stage, bool bEnable) override;
 
@@ -179,12 +195,14 @@ public:
 	void EnableConstantAlpha(bool bEnable) override;
 	void EnableVertexAlpha(bool bEnable) override;
 	void EnableTextureAlpha(TextureStage_t stage, bool bEnable) override;
+#endif
 
 	// ????: What does this do?
 	// "GR - Separate alpha blending"
 	void EnableBlendingSeparateAlpha(bool bEnable) override;
 	void BlendFuncSeparateAlpha(ShaderBlendFactor_t srcFactor, ShaderBlendFactor_t dstFactor) override;
 
+#ifndef ASWSDK
 	// Sets the FogMode ( as the name implies ) override;
 	// This is used internally by CBaseShader Functions you should be using instead
 	// like FogToBlack, DisableFog, etc.
@@ -197,6 +215,9 @@ public:
 	// "Indicates the morph format for use with a vertex shader
 	// The flags to pass in here come from the MorphFormatFlags_t enum"
 	void SetMorphFormat(MorphFormat_t flags) override;
+#else
+	void FogMode(ShaderFogMode_t fogMode, bool bVertexFog) override;
+#endif
 
 	// "some blending modes won't work properly with corrected fog"
 	void DisableFogGammaCorrection(bool bDisable) override;
@@ -208,10 +229,19 @@ public:
 	// Indicates that the Sampler is used for a Shadow Depth Texture
 	void SetShadowDepthFiltering(Sampler_t stage) override;
 
+#ifdef ASWSDK
+	// Per vertex texture unit stuff
+	void EnableVertexTexture(VertexTextureSampler_t sampler, bool bEnable) override;
+#endif
+
 	// ????: What does this do, old FFP Function?
 	// More alpha blending state
 	void BlendOp(ShaderBlendOp_t blendOp) override;
 	void BlendOpSeparateAlpha(ShaderBlendOp_t blendOp) override;
+
+#ifdef ASWSDK
+	float GetLightMapScaleFactor(void) const override;
+#endif
 
 private:
 	IShaderShadow* m_pShaderShadow = NULL;

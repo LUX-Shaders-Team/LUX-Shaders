@@ -453,12 +453,20 @@ SHADER_DRAW
 			// The Code here is from Mapbase, made to work with the SDK.
 			// ASW uses GetCurrentViewPort() and GetCurrentRenderTargetResolution()
 			// Which are not Functions the SDK has.
+#ifdef ASWSDK
+			int nViewportX;
+			int nViewportY;
+			int nViewportWidth;
+			int nViewportHeight;
+			pShaderAPI->GetCurrentViewport(nViewportX, nViewportY, nViewportWidth, nViewportHeight);
+#else
 			ShaderViewport_t vp;
 			pShaderAPI->GetViewports(&vp, 1);
 			int nViewportX = vp.m_nTopLeftX;
 			int nViewportY = vp.m_nTopLeftY;
 			int nViewportWidth = vp.m_nWidth;
 			int nViewportHeight = vp.m_nHeight;
+#endif
 
 			int nRTWidth, nRTHeight;
 			ITexture* pCurRenderTarget = pShaderAPI->GetRenderTargetEx(0);

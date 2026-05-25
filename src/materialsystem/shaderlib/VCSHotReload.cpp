@@ -1,13 +1,16 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	21.09.2025 DMY
-//	Last Change :	 30.01.2026 DMY
+//	Last Change :	18.05.2026 DMY
 //
 //==========================================================================//
 
 // BaseShader
 #include "BaseShader.h"
 #include "VCSHotReload.h"
+
+// FIXME: Filesystem Support
+#ifndef ASWSDK
 
 // Need this for String Mod Stuff
 #include "filesystem.h"
@@ -21,7 +24,7 @@
 
 // Needed on the SDK, in TF2C this is included via one of the other Headers.
 #include "utlbuffer.h"
-#include "Color.h"
+#include "color.h"
 
 // NOTE: This must be the last include File in a .cpp File!
 #include "tier0/memdbgon.h"
@@ -60,14 +63,6 @@ bool g_bHotReloadCacheEnabled = false;
 		1. Constructor of this Class *and* Deconstructor should call Cleanup Routine
 		2. Go through all Files in shaders/fxc/ and nuke all Files with the indexed Namepattern
 */
-
-// FIXME PRE-RELEASE: Throw to cpp_convars
-int GetQueueMode()
-{
-	// This has to be in a Function or the ConVarRef won't init correctly
-	static ConVarRef mat_queue_mode("mat_queue_mode");
-	return mat_queue_mode.GetInt();
-}
 
 VCSReferences_t* CShaderReload::FindReference(const char* ccVCS)
 {
@@ -189,6 +184,16 @@ void CShaderReload::UpdateFileTime(VCSReferences_t* pShader)
 	// Get the current Timestamp
 	pShader->m_LastFileTime = g_pFullFileSystem->GetFileTime(pShader->m_strFullPath.c_str(), "GAME");
 }
+
+// Part of strtools in TF2SDK, doesn't exist on SP so just defining it here
+#ifndef TF2SDK
+inline bool V_strEndsWith(const char* str, const char* suffix)
+{
+	size_t len = strlen(str);
+	size_t suflen = strlen(suffix);
+	return (len >= suflen) && !strcmp(str + len - suflen, suffix);
+}
+#endif
 
 void CShaderReload::CleanIndexedShaderFiles()
 {
@@ -384,7 +389,7 @@ void CShaderReload::ReloadPulse()
 		return;
 
 	// Only ever do this with a single thread
-	if(GetQueueMode() != 0)
+	if(mat_queue_mode() != 0)
 		return; // Silent for this one
 
 	// Make sure we init'd
@@ -456,7 +461,7 @@ CON_COMMAND_F(lux_vcshotreloads_toggle, "Enable/Disable .vcs reloading.\n", FCVA
 	if(g_bHotReloadEnabled)
 	{
 		// Only ever do this with a single thread
-		if(GetQueueMode() != 0)
+		if(mat_queue_mode() != 0)
 		{
 			Msg("%s\n", "CShaderReload Functions may only be used with mat_queue_mode 0.");
 			g_bHotReloadEnabled = false;
@@ -494,7 +499,7 @@ CON_COMMAND_F(lux_vcshotreloads_cache,
 "Once this is done, you can use lux_vcshotreloads_pulse.\n", FCVAR_CHEAT)
 {
 	// Only ever do this with a single thread
-	if(GetQueueMode() != 0)
+	if(mat_queue_mode() != 0)
 	{
 		Msg("%s\n", "CShaderReload Functions may only be used with mat_queue_mode 0.");
 		return;
@@ -519,7 +524,7 @@ CON_COMMAND_F(lux_vcshotreloads_pulse,
 	}
 
 	// Only ever do this with a single thread
-	if(GetQueueMode() != 0)
+	if(mat_queue_mode() != 0)
 	{
 		Msg("%s\n", "CShaderReload Functions can only be used with mat_queue_mode 0.");
 		return;
@@ -531,7 +536,7 @@ CON_COMMAND_F(lux_vcshotreloads_pulse,
 CON_COMMAND_F(lux_vcshotreloads_read, "Debug ConCommand to read the List of VCS References found\n", FCVAR_CHEAT)
 {
 	// Only ever do this with a single thread
-	if(GetQueueMode() != 0)
+	if(mat_queue_mode() != 0)
 	{
 		Msg("%s\n", "CShaderReload Functions may only be used with mat_queue_mode 0.");
 		return;
@@ -549,7 +554,7 @@ CON_COMMAND_F(lux_vcshotreloads_read, "Debug ConCommand to read the List of VCS 
 CON_COMMAND_F(lux_vcshotreloads_clear, "Debug ConCommand to read the List of VCS References found\n", FCVAR_CHEAT)
 {
 	// Only ever do this with a single thread
-	if(GetQueueMode() != 0)
+	if(mat_queue_mode() != 0)
 	{
 		Msg("%s\n", "CShaderReload Functions may only be used with mat_queue_mode 0.");
 		return;
@@ -557,3 +562,4 @@ CON_COMMAND_F(lux_vcshotreloads_clear, "Debug ConCommand to read the List of VCS
 
 	g_ShaderReload.ClearReferenceList();
 }
+#endif

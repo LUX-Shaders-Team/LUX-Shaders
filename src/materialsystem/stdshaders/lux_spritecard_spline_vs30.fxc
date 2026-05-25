@@ -85,7 +85,11 @@ VS_OUTPUT main( const VS_INPUT v )
 
 	// TEXCOORD0
     o.WorldPos_ProjPosZ.xyz = f4PosRad.xyz;
-    o.WorldPos_ProjPosZ.w = dot(float4(f4PosRad.xyz, 1.0f), cViewProjZ);
+	#if defined(ASWSDK)
+		o.WorldPos_ProjPosZ.w = f4ProjPos.z;
+	#else
+		o.WorldPos_ProjPosZ.w = dot(float4(f4PosRad.xyz, 1.0f), cViewProjZ);
+	#endif
 	
 	// TEXCOORD1
 	float2 f2_UV = float2(1.0f - v.vParams.z, v.vParams.y);

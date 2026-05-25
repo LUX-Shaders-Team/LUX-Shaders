@@ -22,6 +22,10 @@
 #include "../stdshaders/lux_registermap_cpp.h"
 #include "../stdshaders/lux_registermap_vs.h"
 
+#ifdef ASWSDK
+#include "renderparm.h"
+#endif
+
 // NOTE: This must be the last include File in a .cpp File!
 #include "tier0/memdbgon.h"
 
@@ -30,6 +34,7 @@ bool g_bSupressShaderWarnings = false;
 bool g_bHammerPlusPlus = false;
 bool g_bWaterAlienSwarmFogFactor = false;
 
+#ifndef ASWSDK
 #ifdef DEBUG
 bool g_bDebugSpew = false;
 bool g_bBreakPointShadow = false;
@@ -166,6 +171,7 @@ CON_COMMAND_F(lux_debug_breakpoint, "Forces an Assert in the BaseShader of the s
 		g_bBreakPointDynamic = false;
 	}
 }
+#endif
 #endif
 
 //-----------------------------------------------------------------------------
@@ -336,6 +342,15 @@ static ShaderParamInfo_t s_StandardParams[NUM_SHADER_MATERIAL_VARS] =
 		0
 	},
 
+	// Disables Shadow Mapping from Depth Textures
+	{
+		"$ReceiveProjectedTextureShadows",
+		"Whether or not the Material is allowed to receive Shadows from projected Textures.\nMaterials will still cast Shadows!",
+		SHADER_PARAM_TYPE_BOOL,
+		"1",
+		0
+	},
+
 	// Allows for an unfinished Stock Feature where N.L is not considered
 	{
 		"$ProjectedTextureNoLambert",
@@ -375,6 +390,15 @@ static ShaderParamInfo_t s_StandardParams[NUM_SHADER_MATERIAL_VARS] =
 		0
 	},
 
+	// Causes the CBaseShader::IsTranslucent() to return true, even when the Material is not using $Translucent
+	{
+		"$PretendTranslucent",
+		"Causes other Systems to think the Material is $Translucent when it's not. When set, will not cast Shadows from projected Textures.",
+		SHADER_PARAM_TYPE_BOOL,
+		"0",
+		0
+	},
+
 	// Parameter for debugging SPECIFIC Materials.
 	// Use lux_debug_material to specify a Keyword foudn in the Materials Name.
 	// Then set a breakpoint in an if-Statement that checks the boolean Value of this Parameter
@@ -391,6 +415,17 @@ static ShaderParamInfo_t s_StandardParams[NUM_SHADER_MATERIAL_VARS] =
 		SHADER_PARAM_NOT_EDITABLE
 	},
 };
+
+int CBaseShader::GetParamCount() const
+{
+	return NUM_SHADER_MATERIAL_VARS;
+}
+
+const ShaderParamInfo_t& CBaseShader::GetParamInfo(int nParamIndex) const
+{
+	Assert(nParamIndex < NUM_SHADER_MATERIAL_VARS);
+	return s_StandardParams[nParamIndex];
+}
 
 //-----------------------------------------------------------------------------
 // Default Shader Parameter Interface
@@ -451,11 +486,16 @@ void CBaseShader::InitShaderParams(IMaterialVar** ppParams, const char *pMateria
 	if (!IsDefined(ReceiveProjectedTextures))
 		SetBool(ReceiveProjectedTextures, true);
 
+	if (!IsDefined(ReceiveProjectedTextureShadows))
+		SetBool(ReceiveProjectedTextureShadows, true);
+
 	// lux_debug_..
+#ifndef ASWSDK
 	#ifdef DEBUG
 	if(g_bDebugSpew || g_bBreakPointShadow || g_bBreakPointDynamic)
 		SetBool(Debug_True, true);
 	#endif
+#endif
 
 	// Set $Alpha2 to 1.0f for all Shaders
 	// ( Defeault Value )
@@ -496,8 +536,13 @@ void CBaseShader::InitShaderInstance( IMaterialVar** ppParams, IShaderInit *pSha
 //-----------------------------------------------------------------------------
 // Called upon by the System. Forwards to a Shaders SHADER_INIT Section
 //-----------------------------------------------------------------------------
+#ifdef ASWSDK
+void CBaseShader::DrawElements( IMaterialVar **ppParams, int nModulationFlags,
+	IShaderShadow* pShaderShadow, IShaderDynamicAPI* pShaderAPI, VertexCompressionType_t vertexCompression, CBasePerMaterialContextData **pContextDataPtr, CBasePerInstanceContextData** pInstanceDataPtr )
+#else
 void CBaseShader::DrawElements( IMaterialVar **ppParams, int nModulationFlags,
 	IShaderShadow* pShaderShadow, IShaderDynamicAPI* pShaderAPI, VertexCompressionType_t vertexCompression, CBasePerMaterialContextData **pContextDataPtr )
+#endif
 {
 	VPROF("CBaseShader::DrawElements");
 
@@ -520,9 +565,17 @@ void CBaseShader::DrawElements( IMaterialVar **ppParams, int nModulationFlags,
 	}
 
 	m_nModulationFlags = nModulationFlags;
+#ifndef ASWSDK
 	m_pMeshBuilder = pShaderAPI ? pShaderAPI->GetVertexModifyBuilder() : NULL;
+#endif
 	m_nVertexCompression = vertexCompression;
 
+#ifdef ASWSDK
+	m_ppInstanceDataPtr = (CPerInstanceContextData**)pInstanceDataPtr;
+	m_nCurrentPass = 0;
+#endif
+
+#ifndef ASWSDK
 #ifdef DEBUG
 	bool bDebug = GetBool(Debug_True);
 
@@ -544,6 +597,7 @@ void CBaseShader::DrawElements( IMaterialVar **ppParams, int nModulationFlags,
 	// Send the MaterialName towards the vcs Reload Class
 	if(g_bHotReloadEnabled)
 		g_ShaderReload.SetMaterialName(CurrentMaterialName());
+#endif
 
 	if (IsSnapshotting())
 	{
@@ -571,7 +625,15 @@ void CBaseShader::DrawElements( IMaterialVar **ppParams, int nModulationFlags,
 	m_ppParams = NULL;
 	m_pShaderAPI = NULL;
 	m_pShaderShadow = NULL;
+#ifndef ASWSDK
 	m_pMeshBuilder = NULL;
+#endif
+
+#ifdef ASWSDK
+	m_ppInstanceDataPtr = NULL;
+	m_pCurrentInstanceCommandBuffer = NULL;
+	m_nCurrentPass = 0;
+#else
 
 	// Reset the Proxies.
 	// Ensures that the next Draw() doesn't get dangling Pointers
@@ -580,7 +642,6 @@ void CBaseShader::DrawElements( IMaterialVar **ppParams, int nModulationFlags,
 		s_ProxyShaderShadow.ResetShaderShadow();
 		s_ProxyShaderAPI.ResetShaderAPI();	
 	}
-
 	
 #ifdef DEBUG
 	// End Point for ShaderSpew, this is where printing happens
@@ -593,6 +654,7 @@ void CBaseShader::DrawElements( IMaterialVar **ppParams, int nModulationFlags,
 		g_bDebugSpew = false;
 		s_ShaderSpew.AllowSpew(false);
 	}
+#endif
 #endif
 }
 
@@ -666,8 +728,26 @@ void CBaseShader::Draw( bool bMakeActualDrawCall )
 
 		GetShaderSystem()->TakeSnapshot();
 
+#ifdef ASWSDK
+		// "Automagically add skinning + vertex lighting"
+		if (!m_ppInstanceDataPtr[m_nCurrentPass])
+		{
+			bool bIsSkinning = HasFlag2(MATERIAL_VAR2_SUPPORTS_HW_SKINNING);
+			bool bIsVertexLit = HasFlag2(MATERIAL_VAR2_LIGHTING_VERTEX_LIT);
+			if (bIsSkinning || bIsVertexLit)
+			{
+				PI_BeginCommandBuffer();
+
+				// NOTE: EndCommandBuffer will insert the appropriate commands
+				PI_EndCommandBuffer();
+			}
+		}
+#endif
+
+#ifndef ASWSDK
 #ifdef DEBUG
 		s_ShaderSpew.LogDraw_ShadowState();
+#endif
 #endif
 	}
 	else
@@ -677,16 +757,200 @@ void CBaseShader::Draw( bool bMakeActualDrawCall )
 
 		// ShiroDkxtro2: $DynamicNoDraw is set to 0 by Default
 		// If it's set to 1 by a Proxy or via Client IMaterialVar*, this will fail and not draw the Material. Dynamically.
-		GetShaderSystem()->DrawSnapshot(bMakeActualDrawCall && !GetBool(DynamicNoDraw));
+		bool bActualDrawCall = bMakeActualDrawCall && !GetBool(DynamicNoDraw);
+#ifdef ASWSDK
+		GetShaderSystem()->DrawSnapshot(m_ppInstanceDataPtr[m_nCurrentPass] ?
+			m_ppInstanceDataPtr[m_nCurrentPass]->m_pCommandBuffer : NULL, bActualDrawCall);
+#else
+		GetShaderSystem()->DrawSnapshot(bActualDrawCall);
+#endif
 
+#ifndef ASWSDK
 #ifdef DEBUG
 		// We only go down the Snapshot or Dynamic Path
 		// In case of Dynamic State we also need to log the fake ShadowState
 		s_ShaderSpew.LogDraw_ShadowState();
 		s_ShaderSpew.LogDraw_DynamicState();
 #endif
+#endif
+	}
+
+#ifdef ASWSDK
+	m_nCurrentPass++;
+#endif
+}
+
+//-----------------------------------------------------------------------------
+// Methods related to building per-instance command buffers
+//-----------------------------------------------------------------------------
+#ifdef ASWSDK
+void CBaseShader::PI_BeginCommandBuffer()
+{
+	// "NOTE: This assertion is here because the memory allocation strategy
+	// is perhaps not the best if this is used in dynamic states; we should
+	// rethink in that case."
+	Assert(IsSnapshotting());
+	Assert(!m_bBuildingInstanceCommandBuffer);
+
+	m_bBuildingInstanceCommandBuffer = true;
+
+	// ShiroDkxtro2: Reset this Buffer like your Life depends on it.
+	// If you store some other Data on Lighting or Ambient Cube Constants you end up overwriting it
+	m_PerInstanceCommands.Reset(m_ppParams);
+}
+
+void CBaseShader::PI_EndCommandBuffer()
+{
+	Assert(m_bBuildingInstanceCommandBuffer);
+
+	// Automagically add skinning
+	if (HasFlag2(MATERIAL_VAR2_SUPPORTS_HW_SKINNING))
+	{
+		PI_SetSkinningMatrices();
+	}
+
+	if (HasFlag2(MATERIAL_VAR2_LIGHTING_VERTEX_LIT))
+	{
+		PI_SetVertexShaderLocalLighting();
+	}
+
+	m_bBuildingInstanceCommandBuffer = false;
+
+	m_PerInstanceCommands.End();
+
+	// This is a size_t for us, we know this fits into an int though since the local size is just 512
+	int nSize = (int)m_PerInstanceCommands.Size();
+	if (nSize > 0)
+	{
+		CPerInstanceContextData* pContextData = m_ppInstanceDataPtr[m_nCurrentPass];
+		if (!pContextData)
+		{
+			pContextData = new CPerInstanceContextData;
+			m_ppInstanceDataPtr[m_nCurrentPass] = pContextData;
+		}
+		unsigned char* pBuf = pContextData->m_pCommandBuffer;
+		if (pContextData->m_nSize < nSize)
+		{
+			if (pContextData->m_pCommandBuffer)
+			{
+				delete pContextData->m_pCommandBuffer;
+			}
+			pBuf = new unsigned char[nSize];
+			pContextData->m_pCommandBuffer = pBuf;
+			pContextData->m_nSize = nSize;
+		}
+		memcpy(pBuf, m_PerInstanceCommands.Base(), nSize);
 	}
 }
+
+
+//-----------------------------------------------------------------------------
+// Queues commands onto the instance command buffer
+//-----------------------------------------------------------------------------
+void CBaseShader::PI_SetPixelShaderAmbientLightCube(int nFirstRegister)
+{
+	Assert(m_bBuildingInstanceCommandBuffer);
+	m_PerInstanceCommands.CBICMD_SetPixelShaderAmbientLightCube(nFirstRegister);
+}
+
+void CBaseShader::PI_SetPixelShaderLocalLighting(int nFirstRegister)
+{
+	Assert(m_bBuildingInstanceCommandBuffer);
+	m_PerInstanceCommands.CBICMD_SetPixelShaderLocalLighting(nFirstRegister);
+}
+
+void CBaseShader::PI_SetVertexShaderAmbientLightCube( /*int nFirstRegister*/)
+{
+	Assert(m_bBuildingInstanceCommandBuffer);
+	m_PerInstanceCommands.CBICMD_SetVertexShaderAmbientLightCube( /*nFirstRegister*/);
+}
+
+void CBaseShader::PI_SetVertexShaderLocalLighting()
+{
+	Assert(m_bBuildingInstanceCommandBuffer);
+	m_PerInstanceCommands.CBICMD_SetVertexShaderLocalLighting();
+}
+
+void CBaseShader::PI_SetSkinningMatrices()
+{
+	Assert(m_bBuildingInstanceCommandBuffer);
+	m_PerInstanceCommands.CBICMD_SetSkinningMatrices();
+}
+
+void CBaseShader::PI_SetPixelShaderAmbientLightCubeLuminance(int nFirstRegister)
+{
+	Assert(m_bBuildingInstanceCommandBuffer);
+	m_PerInstanceCommands.CBICMD_SetPixelShaderAmbientLightCubeLuminance(nFirstRegister);
+}
+
+void CBaseShader::PI_SetPixelShaderGlintDamping(int nFirstRegister)
+{
+	Assert(m_bBuildingInstanceCommandBuffer);
+	m_PerInstanceCommands.CBICMD_SetPixelShaderGlintDamping(nFirstRegister);
+}
+
+void CBaseShader::PI_SetModulationPixelShaderDynamicState_LinearColorSpace_LinearScale(int nRegister, float scale)
+{
+	Assert(m_bBuildingInstanceCommandBuffer);
+	Vector color2(1.0f, 1.0f, 1.0f);
+	ApplyColor2Factor(color2.Base());
+	m_PerInstanceCommands.CBICMD_SetModulationPixelShaderDynamicState_LinearColorSpace_LinearScale(nRegister, color2, scale);
+}
+
+void CBaseShader::PI_SetModulationPixelShaderDynamicState_LinearScale(int nRegister, float scale)
+{
+	Assert(m_bBuildingInstanceCommandBuffer);
+	Vector color2(1.0f, 1.0f, 1.0f);
+	ApplyColor2Factor(color2.Base());
+	m_PerInstanceCommands.CBICMD_SetModulationPixelShaderDynamicState_LinearScale(nRegister, color2, scale);
+}
+
+void CBaseShader::PI_SetModulationPixelShaderDynamicState_LinearScale_ScaleInW(int nRegister, float scale)
+{
+	Assert(m_bBuildingInstanceCommandBuffer);
+	Vector color2(1.0f, 1.0f, 1.0f);
+	ApplyColor2Factor(color2.Base());
+	m_PerInstanceCommands.CBICMD_SetModulationPixelShaderDynamicState_LinearScale_ScaleInW(nRegister, color2, scale);
+}
+
+void CBaseShader::PI_SetModulationPixelShaderDynamicState_LinearColorSpace(int nRegister)
+{
+	Assert(m_bBuildingInstanceCommandBuffer);
+	Vector color2(1.0f, 1.0f, 1.0f);
+	ApplyColor2Factor(color2.Base());
+	m_PerInstanceCommands.CBICMD_SetModulationPixelShaderDynamicState_LinearColorSpace(nRegister, color2);
+}
+
+void CBaseShader::PI_SetModulationPixelShaderDynamicState(int nRegister)
+{
+	Assert(m_bBuildingInstanceCommandBuffer);
+	Vector color2(1.0f, 1.0f, 1.0f);
+	ApplyColor2Factor(color2.Base());
+	m_PerInstanceCommands.CBICMD_SetModulationPixelShaderDynamicState(nRegister, color2);
+}
+
+void CBaseShader::PI_SetModulationVertexShaderDynamicState()
+{
+	Assert(m_bBuildingInstanceCommandBuffer);
+	Vector color2(1.0f, 1.0f, 1.0f);
+	ApplyColor2Factor(color2.Base());
+	m_PerInstanceCommands.CBICMD_SetModulationVertexShaderDynamicState(VERTEX_SHADER_MODULATION_COLOR, color2);
+}
+
+void CBaseShader::PI_SetModulationVertexShaderDynamicState_LinearScale(float flScale)
+{
+	Assert(m_bBuildingInstanceCommandBuffer);
+	Vector color2(1.0f, 1.0f, 1.0f);
+	ApplyColor2Factor(color2.Base());
+	m_PerInstanceCommands.CBICMD_SetModulationVertexShaderDynamicState_LinearScale(VERTEX_SHADER_MODULATION_COLOR, color2, flScale);
+}
+
+void CBaseShader::PI_SetModulationPixelShaderDynamicState_Identity(int nRegister)
+{
+	Assert(m_bBuildingInstanceCommandBuffer);
+	m_PerInstanceCommands.CBICMD_SetModulationPixelShaderDynamicState_Identity(nRegister);
+}
+#endif
 
 //-----------------------------------------------------------------------------
 // Finds a particular Parameter	(works because the lowest parameters match the shader)
@@ -720,6 +984,7 @@ bool CBaseShader::CanUseEditorMaterials()
 	return GetShaderSystem()->CanUseEditorMaterials();
 }
 
+#ifndef ASWSDK
 //-----------------------------------------------------------------------------
 // "Gets the builder..."
 //-----------------------------------------------------------------------------
@@ -727,6 +992,7 @@ CMeshBuilder* CBaseShader::MeshBuilder()
 {
 	return m_pMeshBuilder;
 }
+#endif
 
 //-----------------------------------------------------------------------------
 // Loads a Texture
@@ -790,6 +1056,24 @@ ShaderAPITextureHandle_t CBaseShader::GetShaderAPITextureBindHandle( int nTextur
 	int nFrame = pFrameVar ? pFrameVar->GetIntValue() : 0;
 	return GetShaderSystem()->GetShaderAPITextureBindHandle( pTextureVar->GetTextureValue(), nFrame, nTextureChannel );
 }
+
+#ifdef ASWSDK
+void CBaseShader::BindVertexTexture(VertexTextureSampler_t vtSampler, int nTextureVar, int nFrame /* = 0  */)
+{
+	Assert(!IsSnapshotting());
+
+	IMaterialVar* pTextureVar = m_ppParams[nTextureVar];
+	if (!pTextureVar)
+		return;
+
+	GetShaderSystem()->BindVertexTexture(vtSampler, pTextureVar->GetTextureValue());
+}
+
+ShaderAPITextureHandle_t CBaseShader::GetShaderAPITextureBindHandle(ITexture* pTexture, int nFrame, int nTextureChannel)
+{
+	return GetShaderSystem()->GetShaderAPITextureBindHandle(pTexture, nFrame, nTextureChannel);
+}
+#endif
 
 //-----------------------------------------------------------------------------
 // "Four different flavors of BindTexture(), handling the two-sampler
@@ -904,12 +1188,22 @@ bool CBaseShader::TextureIsTranslucent( int textureVar, bool isBaseTexture )
 			if (HasFlag(MATERIAL_VAR_OPAQUETEXTURE))
 				return false;
 
+			bool bSelfIllum = HasFlag(MATERIAL_VAR_SELFILLUM);
+			bool bBaseAlphaEnvMapMask = HasFlag(MATERIAL_VAR_BASEALPHAENVMAPMASK);
+
+			// ASW accounts for $SelfIllum not using the $BaseTexture's Alpha Channel when $SelfIllumMask is used
+			#ifdef ASWSDK
+				bool bHasSelfIllumMask = HasFlag2(MATERIAL_VAR2_SELFILLUMMASK);
+				bSelfIllum = bSelfIllum && !bHasSelfIllumMask;
+			#endif
+
 			// Check if we are using BaseTexture Alpha for something other than translucency.
 			// ShiroDkxtro2: This does not consider other Parameters like BaseMapAlphaPhongMask, or BlendTintByBaseAlpha..
-			if (!HasFlag(MATERIAL_VAR_SELFILLUM) && !HasFlag(MATERIAL_VAR_BASEALPHAENVMAPMASK))
+			if (!bSelfIllum && !bBaseAlphaEnvMapMask)
 			{
 				// Check if the Material has $Translucent or $AlphaTest.
-				if (HasFlag(MATERIAL_VAR_TRANSLUCENT) || HasFlag(MATERIAL_VAR_ALPHATEST))
+				bool bTranslucent = HasFlag(MATERIAL_VAR_TRANSLUCENT) && !GetBool(PretendTranslucent);
+				if (bTranslucent || HasFlag(MATERIAL_VAR_ALPHATEST))
 				{
 					// Make sure the Texture has an Alpha Channel.
 					// ( This is potentially unreliable )
@@ -937,10 +1231,12 @@ bool CBaseShader::IsAlphaModulating()
 	return (m_nModulationFlags & SHADER_USING_ALPHA_MODULATION) != 0;
 }
 
+#ifndef ASWSDK
 bool CBaseShader::IsColorModulating()
 {
 	return (m_nModulationFlags & SHADER_USING_COLOR_MODULATION) != 0;
 }
+#endif
 
 void CBaseShader::GetColorParameter( IMaterialVar **params, float *pColorOut ) const
 {
@@ -969,6 +1265,7 @@ void CBaseShader::GetColorParameter( IMaterialVar **params, float *pColorOut ) c
 int CBaseShader::ComputeModulationFlags( IMaterialVar** params, IShaderDynamicAPI* pShaderAPI )
 {
 	int mod = 0;
+#ifndef ASWSDK
 	if ( GetAlpha(params) < 1.0f )
 	{
 		mod |= SHADER_USING_ALPHA_MODULATION;
@@ -981,6 +1278,7 @@ int CBaseShader::ComputeModulationFlags( IMaterialVar** params, IShaderDynamicAP
 	{
 		mod |= SHADER_USING_COLOR_MODULATION;
 	}
+#endif
 
 	// ShiroDkxtro2: Made this compliant with multithreaded calls to this Function
 	if(IsSnapshotting() && IS_FLAG2_SET(MATERIAL_VAR2_USE_FLASHLIGHT) || pShaderAPI->InFlashlightMode())
@@ -1002,6 +1300,36 @@ int CBaseShader::ComputeModulationFlags( IMaterialVar** params, IShaderDynamicAP
 		}
 	}
 
+#ifdef SFM_COMPATIBILITY
+
+	// No idea what does this do.
+	if (pShaderAPI->Unknown63() >= 1)
+	{
+		if (!CommandLine()->CheckParm("-Unknown63"))
+			Error("pShaderAPI->Unknown63() >= 1. Tell @ShiroDkxtro2 what you did to cause this! Launch with -Unknown63 to remove this Error.");
+
+		mod |= SHADER_USING_UNKNOWN;
+	}
+#endif
+
+#ifdef ASWSDK
+	if (IsSnapshotting())
+	{
+		if (IS_FLAG2_SET(MATERIAL_VAR2_USE_GBUFFER0))
+			mod |= SHADER_USING_GBUFFER0;
+		if (IS_FLAG2_SET(MATERIAL_VAR2_USE_GBUFFER1))
+			mod |= SHADER_USING_GBUFFER1;
+	}
+	else
+	{
+		int nFixedLightingMode = pShaderAPI->GetIntRenderingParameter(INT_RENDERPARM_ENABLE_FIXED_LIGHTING);
+		if (nFixedLightingMode & 1)
+			mod |= SHADER_USING_GBUFFER0;
+		if (nFixedLightingMode & 2)
+			mod |= SHADER_USING_GBUFFER1;
+	}
+#endif
+
 	return mod;
 }
 
@@ -1012,7 +1340,7 @@ bool CBaseShader::NeedsPowerOfTwoFrameBufferTexture( IMaterialVar **params, bool
 { 
 	// This is a Virtual Function called by Client Code ( Particle System to name an Example ) 
 	// So use the manual Method or we get a crash since m_ppParams is nullptr
-	return HasFlag2(params, MATERIAL_VAR2_NEEDS_POWER_OF_TWO_FRAME_BUFFER_TEXTURE);
+	return (params[Flags2]->GetIntValue() & MATERIAL_VAR2_NEEDS_POWER_OF_TWO_FRAME_BUFFER_TEXTURE) != 0;
 }
 
 //-----------------------------------------------------------------------------
@@ -1032,7 +1360,9 @@ bool CBaseShader::IsTranslucent( IMaterialVar **params ) const
 {
 	// This is a Virtual Function called by Client Code ( Particle System to name an Example ) 
 	// So use the manual Method or we get a crash since m_ppParams is nullptr
-	return (params[Flags]->GetIntValue() & MATERIAL_VAR_TRANSLUCENT) != 0;
+	bool bActualTranslucent = (params[Flags]->GetIntValue() & MATERIAL_VAR_TRANSLUCENT) != 0;
+	bool bFakeTranslucent = params[PretendTranslucent]->GetIntValue() != 0;
+	return bFakeTranslucent || bActualTranslucent;
 }
 
 //-----------------------------------------------------------------------------
@@ -1040,6 +1370,10 @@ bool CBaseShader::IsTranslucent( IMaterialVar **params ) const
 //-----------------------------------------------------------------------------
 float CBaseShader::GetAlpha( IMaterialVar** ppParams )
 {
+	// ASW Doesn't even have this Function at all, implying it doesn't have or use$Alpha?
+#ifdef ASWSDK
+	return 1.0f;
+#else
 	if ( !ppParams )
 	{
 		ppParams = m_ppParams;
@@ -1058,8 +1392,10 @@ float CBaseShader::GetAlpha( IMaterialVar** ppParams )
 	// Support for second Alpha Parameter! Yay!
 	float f1Alpha2 = ppParams[Alpha2]->GetFloatValue();
 	return clamp( f1Alpha1 * f1Alpha2, 0.0f, 1.0f );
+#endif
 }
 
+#ifndef ASWSDK
 //-----------------------------------------------------------------------------
 // "Sets the color + transparency"
 // ShiroDkxtro2: Is this old Fixed Function Pipeline Stuff?
@@ -1129,6 +1465,7 @@ void CBaseShader::SetModulationDynamicState( int tintVar )
 		SetColorState( Color1, true );
 	}
 }
+#endif
 
 // Used by ComputeModulationColor below
 void CBaseShader::ApplyColor2Factor( float *pColorOut ) const // (*pColorOut) *= Color2
@@ -1183,7 +1520,7 @@ void CBaseShader::ComputeModulationColor( float* color )
 	{
 		color[0] = color[1] = color[2] = 0.0f;
 	}
-	if( mat_fullbright.GetInt() == 2 )
+	if( mat_fullbright() == 2 )
 	{
 		color[0] = color[1] = color[2] = 1.0f;
 	}
@@ -1231,7 +1568,6 @@ void CBaseShader::SetNormalBlendingShadowState( int textureVar, bool isBaseTextu
 	}
 }
 
-//ConVar mat_debug_flashlight_only( "mat_debug_flashlight_only", "0" );
 void CBaseShader::SetAdditiveBlendingShadowState( int textureVar, bool isBaseTexture )
 {
 	Assert( IsSnapshotting() );
@@ -1299,7 +1635,7 @@ void CBaseShader::SetBlendingShadowState( BlendType_t nMode )
 			break;
 
 		case BT_ADD:
-			EnableAlphaBlending( SHADER_BLEND_ONE, SHADER_BLEND_ONE );
+			EnableAlphaBlending(SHADER_BLEND_ONE, SHADER_BLEND_ONE);
 			break;
 
 		case BT_BLENDADD:
@@ -1311,6 +1647,7 @@ void CBaseShader::SetBlendingShadowState( BlendType_t nMode )
 //-----------------------------------------------------------------------------
 // Loads the identity transform into a matrix
 //-----------------------------------------------------------------------------
+#ifndef ASWSDK
 void CBaseShader::LoadIdentity( MaterialMatrixMode_t matrixMode )
 {
 	if(!(m_pShaderAPI && m_pShaderShadow))
@@ -1319,34 +1656,13 @@ void CBaseShader::LoadIdentity( MaterialMatrixMode_t matrixMode )
 	m_pShaderAPI->MatrixMode( matrixMode );
 	m_pShaderAPI->LoadIdentity( );
 }
-
-//-----------------------------------------------------------------------------
-// Loads the camera to world transform into a matrix
-//-----------------------------------------------------------------------------
-void CBaseShader::LoadCameraToWorldTransform( MaterialMatrixMode_t matrixMode )
-{
-	m_pShaderAPI->MatrixMode( matrixMode );
-	m_pShaderAPI->LoadCameraToWorld();
-}
-
-void CBaseShader::LoadCameraSpaceSphereMapTransform( MaterialMatrixMode_t matrixMode )
-{
-	static float mat[4][4] = 
-	{
-		{ 0.5f,  0.0f, 0.0f, 0.0f },
-		{ 0.0f, -0.5f, 0.0f, 0.0f },
-		{ 0.0f,  0.0f, 0.0f, 0.0f },
-		{ 0.5f, -0.5f, 0.0f, 1.0f },
-	};
-
-	m_pShaderAPI->MatrixMode( matrixMode );
-	m_pShaderAPI->LoadMatrix( (float*)mat );
-}
+#endif
 
 //-----------------------------------------------------------------------------
 // Helper methods for fog
 //-----------------------------------------------------------------------------
-void CBaseShader::FogToOOOverbright( void )
+#ifndef ASWSDK
+void CBaseShader::FogToOOOverbright()
 {
 	Assert( IsSnapshotting() );
 	if (( CurrentMaterialVarFlags() & MATERIAL_VAR_NOFOG ) == 0)
@@ -1359,7 +1675,7 @@ void CBaseShader::FogToOOOverbright( void )
 	}
 }
 
-void CBaseShader::FogToWhite( void )
+void CBaseShader::FogToWhite()
 {
 	Assert( IsSnapshotting() );
 	if (( CurrentMaterialVarFlags() & MATERIAL_VAR_NOFOG ) == 0)
@@ -1371,7 +1687,7 @@ void CBaseShader::FogToWhite( void )
 		m_pShaderShadow->FogMode( SHADER_FOGMODE_DISABLED );
 	}
 }
-void CBaseShader::FogToBlack( void )
+void CBaseShader::FogToBlack()
 {
 	Assert( IsSnapshotting() );
 	if (( CurrentMaterialVarFlags() & MATERIAL_VAR_NOFOG ) == 0)
@@ -1384,7 +1700,7 @@ void CBaseShader::FogToBlack( void )
 	}
 }
 
-void CBaseShader::FogToGrey( void )
+void CBaseShader::FogToGrey()
 {
 	Assert( IsSnapshotting() );
 	if (( CurrentMaterialVarFlags() & MATERIAL_VAR_NOFOG ) == 0)
@@ -1397,7 +1713,7 @@ void CBaseShader::FogToGrey( void )
 	}
 }
 
-void CBaseShader::FogToFogColor( void )
+void CBaseShader::FogToFogColor()
 {
 	Assert( IsSnapshotting() );
 	if (( CurrentMaterialVarFlags() & MATERIAL_VAR_NOFOG ) == 0)
@@ -1410,13 +1726,13 @@ void CBaseShader::FogToFogColor( void )
 	}
 }
 
-void CBaseShader::DisableFog( void )
+void CBaseShader::DisableFog()
 {
 	Assert( IsSnapshotting() );
 	m_pShaderShadow->FogMode( SHADER_FOGMODE_DISABLED );
 }
 
-void CBaseShader::DefaultFog( void )
+void CBaseShader::DefaultFog()
 {
 	if ( CurrentMaterialVarFlags() & MATERIAL_VAR_ADDITIVE )
 	{
@@ -1427,6 +1743,89 @@ void CBaseShader::DefaultFog( void )
 		FogToFogColor();
 	}
 }
+#else
+void CBaseShader::FogToOOOverbright()
+{
+	Assert(IsSnapshotting());
+	if ((CurrentMaterialVarFlags() & MATERIAL_VAR_NOFOG) == 0)
+	{
+		m_pShaderShadow->FogMode(SHADER_FOGMODE_OO_OVERBRIGHT, false);
+	}
+	else
+	{
+		m_pShaderShadow->FogMode(SHADER_FOGMODE_DISABLED, false);
+	}
+}
+
+void CBaseShader::FogToWhite()
+{
+	Assert(IsSnapshotting());
+	if ((CurrentMaterialVarFlags() & MATERIAL_VAR_NOFOG) == 0)
+	{
+		m_pShaderShadow->FogMode(SHADER_FOGMODE_WHITE, false);
+	}
+	else
+	{
+		m_pShaderShadow->FogMode(SHADER_FOGMODE_DISABLED, false);
+	}
+}
+void CBaseShader::FogToBlack()
+{
+	Assert(IsSnapshotting());
+	if ((CurrentMaterialVarFlags() & MATERIAL_VAR_NOFOG) == 0)
+	{
+		m_pShaderShadow->FogMode(SHADER_FOGMODE_BLACK, false);
+	}
+	else
+	{
+		m_pShaderShadow->FogMode(SHADER_FOGMODE_DISABLED, false);
+	}
+}
+
+void CBaseShader::FogToGrey()
+{
+	Assert(IsSnapshotting());
+	if ((CurrentMaterialVarFlags() & MATERIAL_VAR_NOFOG) == 0)
+	{
+		m_pShaderShadow->FogMode(SHADER_FOGMODE_GREY, false);
+	}
+	else
+	{
+		m_pShaderShadow->FogMode(SHADER_FOGMODE_DISABLED, false);
+	}
+}
+
+void CBaseShader::FogToFogColor()
+{
+	Assert(IsSnapshotting());
+	if ((CurrentMaterialVarFlags() & MATERIAL_VAR_NOFOG) == 0)
+	{
+		m_pShaderShadow->FogMode(SHADER_FOGMODE_FOGCOLOR, false);
+	}
+	else
+	{
+		m_pShaderShadow->FogMode(SHADER_FOGMODE_DISABLED, false);
+	}
+}
+
+void CBaseShader::DisableFog()
+{
+	Assert(IsSnapshotting());
+	m_pShaderShadow->FogMode(SHADER_FOGMODE_DISABLED, false);
+}
+
+void CBaseShader::DefaultFog()
+{
+	if (CurrentMaterialVarFlags() & MATERIAL_VAR_ADDITIVE, false)
+	{
+		FogToBlack();
+	}
+	else
+	{
+		FogToFogColor();
+	}
+}
+#endif
 
 bool CBaseShader::UsingFlashlight() const
 {

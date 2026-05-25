@@ -42,7 +42,7 @@
 #include "cpp_lux_commandbuilder.h"
 
 // Used for verbose and more readable Console Messages. Shader Debugging via ConColorMsg()
-#include "Color.h"
+#include "color.h"
 
 // Macro Register Map
 #include "lux_registermap_cpp.h"
@@ -196,22 +196,24 @@ struct Vars_Detail_t
 	int m_nDetailTextureTransform;
 	int m_nDetailScale;
 	int m_nDetailBlendmode;
-	int m_nDetailTint;
 	int m_nDetailBlendFactor;
+
+	// Some Shaders like VertexLitGeneric want a GammaToLinear Tint
+	// Init Function that calls InitVars should be used to set this
+	float3 m_f3DetailTint;
 
 // Instead of a Macro, just copy this.
 /*
-	InitVars(Detail, DetailFrame, DetailTextureTransform, DetailScale, DetailBlendMode, DetailTint, DetailBlendFactor);
+	InitVars(Detail, DetailFrame, DetailTextureTransform, DetailScale, DetailBlendMode, DetailBlendFactor);
 */
-	void InitVars(int Texture, int Frame, int Transform, int Scale, int Mode, int Tint, int Factor)
+	void InitVars(int Texture, int Frame, int Transform, int Scale, int Mode, int Factor)
 	{
 		m_nDetail = Texture;
 		m_nDetailFrame = Frame;
 		m_nDetailTextureTransform = Transform;
 		m_nDetailScale = Scale;
 		m_nDetailBlendmode = Mode;
-		m_nDetailTint = Tint;
-		m_nDetailBlendFactor = Factor;	
+		m_nDetailBlendFactor = Factor;
 	}
 };
 
@@ -392,6 +394,54 @@ struct FleshInterior_Vars_t
 	int m_nTime;
 
 	// TODO: Flesh Interior Pass
+};
+
+struct TreeSway_Vars_t
+{
+	TreeSway_Vars_t() { memset(this, 0xFF, sizeof(TreeSway_Vars_t)); }
+
+	int m_nTreeSway;
+	int m_nTreeSwayHeight;
+	int m_nTreeSwayStartHeight;
+	int m_nTreeSwayRadius;
+	int m_nTreeSwayStartRadius;
+	int m_nTreeSwaySpeed;
+	int m_nTreeSwaySpeedHighWindMultiplier;
+	int m_nTreeSwayStrength;
+	int m_nTreeSwayScrumbleSpeed;
+	int m_nTreeSwayScrumbleStrength;
+	int m_nTreeSwayScrumbleFrequency;
+	int m_nTreeSwayFalloffExp;
+	int m_nTreeSwayScrumbleFalloffExp;
+	int m_nTreeSwaySpeedLerpStart;
+	int m_nTreeSwaySpeedLerpEnd;
+	int m_nTreeSwayStatic;
+	int m_nTreeSwayStaticValues;
+
+	// Instead of a Macro, just copy this.
+/*
+	InitVars(TreeSway);
+*/
+	void InitVars(int nTreeSwayVar)
+	{
+		m_nTreeSway							= nTreeSwayVar + 0;
+		m_nTreeSwayHeight					= nTreeSwayVar + 1;
+		m_nTreeSwayStartHeight				= nTreeSwayVar + 2;
+		m_nTreeSwayRadius					= nTreeSwayVar + 3;
+		m_nTreeSwayStartRadius				= nTreeSwayVar + 4;
+		m_nTreeSwaySpeed					= nTreeSwayVar + 5;
+		m_nTreeSwaySpeedHighWindMultiplier	= nTreeSwayVar + 6;
+		m_nTreeSwayStrength					= nTreeSwayVar + 7;
+		m_nTreeSwayScrumbleSpeed			= nTreeSwayVar + 8;
+		m_nTreeSwayScrumbleStrength			= nTreeSwayVar + 9;
+		m_nTreeSwayScrumbleFrequency		= nTreeSwayVar + 10;
+		m_nTreeSwayFalloffExp				= nTreeSwayVar + 11;
+		m_nTreeSwayScrumbleFalloffExp		= nTreeSwayVar + 12;
+		m_nTreeSwaySpeedLerpStart			= nTreeSwayVar + 13;
+		m_nTreeSwaySpeedLerpEnd				= nTreeSwayVar + 14;
+		m_nTreeSwayStatic					= nTreeSwayVar + 15;
+		m_nTreeSwayStaticValues				= nTreeSwayVar + 16;
+	}
 };
 
 // TODO: Move Links to dedicated Link Macro or per Shader Links once we have a GitHub Wiki for this
@@ -657,5 +707,22 @@ SHADER_PARAM(SheenMapMaskScaleX,	SHADER_PARAM_TYPE_FLOAT,	"", "X Scale for the $
 SHADER_PARAM(SheenMapMaskScaleY,	SHADER_PARAM_TYPE_FLOAT,	"", "Y Scale for the $SheenMapMask.")\
 SHADER_PARAM(SheenMapMaskDirection, SHADER_PARAM_TYPE_INTEGER,	"", "Direction in which the $SheenMapMask should move.\n0 = ZY\n1 = ZX\n2 = YX")\
 SHADER_PARAM(SheenIndex,			SHADER_PARAM_TYPE_INTEGER,	"", "Not Functional.")
+
+#define Declare_RimLightPassParameters()\
+SHADER_PARAM(RimLightPass_Enabled,				SHADER_PARAM_TYPE_BOOL,		"", "Enables the RimLightPass")\
+SHADER_PARAM(RimLightPass_UseBumpMap,			SHADER_PARAM_TYPE_BOOL,		"", "Makes the RimLight Sample use the Normal Map for it's lookup Vector.")\
+SHADER_PARAM(RimLightPass_Tint,					SHADER_PARAM_TYPE_COLOR,	"", "Tints the Result of the RimLight.")\
+SHADER_PARAM(RimLightPass_Mask,					SHADER_PARAM_TYPE_TEXTURE,	"", "[RGB] Per-Texel Tint.\n[A] Nothing.")\
+SHADER_PARAM(RimLightPass_MaskFrame,			SHADER_PARAM_TYPE_INTEGER,	"", "Frame Number for $RimLightPass_Mask.")\
+SHADER_PARAM(RimLightPass_FresnelRanges,		SHADER_PARAM_TYPE_BOOL,		"", "Fresnel Ranges used on the RimLight Pass.")\
+SHADER_PARAM(RimLightPass_UseCustomAmbientCube,	SHADER_PARAM_TYPE_BOOL,		"", "Makes the RimLightPass use an Artist defined Ambient Cube instead of Ambient Cubes from the Map File.")\
+SHADER_PARAM(RimLightPass_CustomAmbientCubeXP,	SHADER_PARAM_TYPE_COLOR,	"", "Color in the X+ Direction of the Custom Ambient Cube.")\
+SHADER_PARAM(RimLightPass_CustomAmbientCubeXN,	SHADER_PARAM_TYPE_COLOR,	"", "Color in the X- Direction of the Custom Ambient Cube.")\
+SHADER_PARAM(RimLightPass_CustomAmbientCubeYP,	SHADER_PARAM_TYPE_COLOR,	"", "Color in the Y+ Direction of the Custom Ambient Cube.")\
+SHADER_PARAM(RimLightPass_CustomAmbientCubeYN,	SHADER_PARAM_TYPE_COLOR,	"", "Color in the Y- Direction of the Custom Ambient Cube.")\
+SHADER_PARAM(RimLightPass_CustomAmbientCubeZP,	SHADER_PARAM_TYPE_COLOR,	"", "Color in the Z+ Direction of the Custom Ambient Cube.")\
+SHADER_PARAM(RimLightPass_CustomAmbientCubeZN,	SHADER_PARAM_TYPE_COLOR,	"", "Color in the Z- Direction of the Custom Ambient Cube.")\
+SHADER_PARAM(RimLightPass_Cubemap,				SHADER_PARAM_TYPE_TEXTURE,	"", "[RGB] Cubemap Color Texture that replaces the RimLightPass Ambient Cube. ( More Expensive but also more Control ).\n[A] Nothing.")\
+SHADER_PARAM(RimLightPass_CubemapFrame,			SHADER_PARAM_TYPE_INTEGER,	"", "Frame Number for $RimLightPass_Cubemap.")
 
 #endif // CPP_LUX_SHARED_H

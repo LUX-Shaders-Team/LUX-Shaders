@@ -1,14 +1,20 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	20.01.2023 DMY
-//	Last Change :	 30.01.2026 DMY
+//	Last Change :	25.05.2026 DMY
 //
 //==========================================================================//
 
 // Commonly Shared Definitions, Defines and Data for all Shaders
 #include "../cpp_lux_shared.h"
 
+#ifndef ASWSDK
 #include "materialsystem/MaterialSystemUtil.h"
+#endif
+
+#ifdef ASWSDK
+#include "renderpasses/SSAODrawNormalPass.h"
+#endif
 
 // This allows for additional passes for other effects
 #include "renderpasses/Cloak.h"
@@ -16,15 +22,23 @@
 #include "renderpasses/EmissiveBlend.h"
 #include "renderpasses/FleshInterior.h"
 #include "renderpasses/MeshOutline.h"
+#include "renderpasses/RimLightPass.h"
 
 // Includes for Shaderfiles...
 #include "lux_model_simplified_vs30.inc"
 #include "lux_model_vs30.inc"
 #include "lux_model_bump_vs30.inc"
+#ifndef ASWSDK
 #include "lux_vertexlitgeneric_simple_ps30.inc"
 #include "lux_vertexlitgeneric_bump_ps30.inc"
 #include "lux_vertexlitgeneric_phong_ps30.inc"
 #include "lux_vertexlitgeneric_flashlight_ps30.inc"
+#else
+#include "lux_vertexlitgeneric_asw_simple_ps30.inc"
+#include "lux_vertexlitgeneric_asw_bump_ps30.inc"
+#include "lux_vertexlitgeneric_asw_phong_ps30.inc"
+#include "lux_vertexlitgeneric_asw_flashlight_ps30.inc"
+#endif
 
 // LUX Shaders will replace existing Shaders.
 #ifdef REPLACE_SDK_SHADERS
@@ -45,6 +59,7 @@ DEFINE_FALLBACK_SHADER(VertexLitGeneric_DX7,	LUX_VertexLitGeneric)
 DEFINE_FALLBACK_SHADER(VertexLitGeneric_DX6,	LUX_VertexLitGeneric)
 #endif
 
+#ifndef ASWSDK
 CON_COMMAND_F(lux_toggle_envmaplerp, "Forces EnvMapLerp and reloads all Materials.\n", FCVAR_NONE)
 {
 	// Connect MatSys if it hasn't been
@@ -58,6 +73,7 @@ CON_COMMAND_F(lux_toggle_envmaplerp, "Forces EnvMapLerp and reloads all Material
 	// Reload all Materials
 	g_pMaterialSystem->ReloadMaterials();
 }
+#endif
 
 //==========================================================================//
 // CommandBuffer Setup
@@ -91,15 +107,17 @@ public:
 	bool m_bPhong_InvertPhongMask = false;
 	bool m_bPhong_PhongExponentTextureMask = false;
 
+#ifndef ASWSDK
 	bool m_bEnvMapLerp = false;
 	bool m_bLerpLock = false;
 	CTextureReference m_RefCubemapA;
 	CTextureReference m_RefCubemapB;
 	float m_f1LerpStart = 0.0f;
+#endif
 
-	VertexLitGenericContext(CBaseShader* pShader)
-		: m_SemiStaticCmds(pShader),
-		m_StaticCmds(pShader)
+	VertexLitGenericContext(IMaterialVar** ppParams)
+		: m_SemiStaticCmds(ppParams),
+		m_StaticCmds(ppParams)
 	{
 	}
 };
@@ -148,14 +166,23 @@ SHADER_INFO_D3D			(LUX_SHADERINFO_SM30)
 
 BEGIN_SHADER_PARAMS
 	Declare_NormalTextureParameters()
+#ifdef ASWSDK
+	SHADER_PARAM(TF2Compatibility, SHADER_PARAM_TYPE_BOOL, "", "Makes the Shader favor TF2 Behavior over ASW Behavior ( Makes the Shader account for TF2 Quirks )")
+#endif
+
 	Declare_SelfIlluminationParameters()
 	Declare_DetailTextureParameters()
 	Declare_SelfIllumTextureParameters()
 	Declare_EnvironmentMapParameters()
 	Declare_EnvMapMaskParameters()
+#ifndef ASWSDK
 	SHADER_PARAM(EnvMapLerp, SHADER_PARAM_TYPE_BOOL, "", "When the local Cubemap changes it traditionally snaps, enabling this causes them to interpolate based on Time instead.")
+#endif
 	SHADER_PARAM(BaseAlphaEnvMapMaskMinMaxExp, SHADER_PARAM_TYPE_VEC3, "", "ASW+ Feature, only allowed on Materials without BumpMaps and Phong. Applies Scale, Bias, Exponent to BaseAlphaEnvMapMask.")
+
+#ifndef ASWSDK
 	Declare_LightmappingParameters()
+#endif
 	Declare_PhongParameters()
 	Declare_RimLightParameters()
 	Declare_SeamlessParameters()
@@ -171,6 +198,7 @@ BEGIN_SHADER_PARAMS
 	Declare_CloakParameters()
 	Declare_SheenPassParameters()
 	Declare_MeshOutlineParameters()
+	Declare_RimLightPassParameters()
 
 	// Treesway Implementation
 	Declare_TreeswayParameters()
@@ -181,7 +209,32 @@ BEGIN_SHADER_PARAMS
 
 	// We can't replicate this Parameter but we can at least make Materials from L4D1 not utterly broken
 	SHADER_PARAM(ShinyBlood, SHADER_PARAM_TYPE_BOOL, "", "(INTERNAL PARAMETER) Disables Phong to unbreak some L4D1 Materials.")
+
+	#ifdef ASWSDK
+		// Parameter Name predetermined by SFM, if this is supposed to look like stock VLG it must use this Name
+		SHADER_PARAM(AmbientOcclusion, SHADER_PARAM_TYPE_FLOAT, "", "Default 1.0f - The Strength of the AO Effect")
+	#endif
 END_SHADER_PARAMS
+
+#ifdef ASWSDK
+void VLG_SetupSSAODrawNormalVars(SSAODrawNormalPass_Vars_t &SSAODrawNormalVars)
+{
+	SSAODrawNormalVars.m_bIsModel = true;
+	SSAODrawNormalVars.m_nBumpMap = NormalTexture;
+	SSAODrawNormalVars.m_nBumpMapFrame = BumpFrame;
+	SSAODrawNormalVars.m_nBumpMapTransform = BumpTransform;
+
+	// Shader supports Wrinklemapping
+	SSAODrawNormalVars.m_nBumpCompress = BumpCompress;
+	SSAODrawNormalVars.m_nBumpStretch = BumpStretch;
+
+	// Shader supports Treesway
+	SSAODrawNormalVars.TreeSwayVars.InitVars(TreeSway);
+
+	// Need this for $BaseTextureTransform
+	SSAODrawNormalVars.BaseVars.InitVars(BaseTexture, Frame, BaseTextureTransform);
+}
+#endif
 
 void VLG_SetupCloakVars(Cloak_Vars_t &CloakVars)
 {
@@ -199,7 +252,11 @@ void VLG_SetupEmissiveBlendVars(EmissiveBlend_Vars_t& EmissiveVars)
 	EmissiveVars.SelfIllum.InitVars(SelfIllumTexture, SelfIllumTextureFrame);
 
 	// DetailBlendMode 5 and 6 are handled here, since it simplifies our Shaders
-	EmissiveVars.Detail.InitVars(Detail, DetailFrame, DetailTextureTransform, DetailScale, DetailBlendMode, DetailTint, DetailBlendFactor);
+	EmissiveVars.Detail.InitVars(Detail, DetailFrame, DetailTextureTransform, DetailScale, DetailBlendMode, DetailBlendFactor);
+	
+	// $DetailTint is linear on LightmappedGeneric
+	// It is GammaToLinear on VertexLitGeneric
+	EmissiveVars.Detail.m_f3DetailTint = GammaToLinearTint(GetFloat3(DetailTint));
 
 	// Minimum Light and Transform Fallbacks
 	EmissiveVars.Base.InitVars(BaseTexture, Frame, BaseTextureTransform);
@@ -208,6 +265,13 @@ void VLG_SetupEmissiveBlendVars(EmissiveBlend_Vars_t& EmissiveVars)
 void VLG_SetupSheenPassVars(SheenPass_Vars_t& SheenVars)
 {
 	SheenVars.InitVars(SheenPassEnabled, NormalTexture, BumpFrame, BumpTransform);
+}
+
+void VLG_SetupRimLightPassVars(RimLightPass_Vars_t& RimlightVars)
+{
+	RimlightVars.Base.InitVars(BaseTexture, Frame, BaseTextureTransform);
+	RimlightVars.Normal.InitVars(BumpMap);
+	RimlightVars.InitVars(RimLightPass_Enabled);
 }
 
 // IMPORTANT: Virtual Function Override.
@@ -238,7 +302,9 @@ bool IsTranslucent( IMaterialVar** params ) const override
 			return true;
 	}
 
-	return params[Flags]->GetIntValue() & MATERIAL_VAR_TRANSLUCENT;
+	bool bIsTranslucent = params[Flags]->GetIntValue() & MATERIAL_VAR_TRANSLUCENT;
+	bool bPretendTranslucent = params[PretendTranslucent]->GetIntValue() != 0;
+	return bIsTranslucent || bPretendTranslucent;
 }
 
 // ShiroDkxtro2 : Stock VLG Shader has a huge Amount of Caveats
@@ -252,13 +318,13 @@ void LuxVertexLitGeneric_ParamsDebugger()
 
 	// All Textures
 	bool bHasBaseTexture = IsDefined(BaseTexture);
-	bool bHasNormalTexture = IsDefined(NormalTexture);
+	bool bHasNormalTexture = IsDefined(BumpMap) || IsDefined(NormalTexture);
 	bool bHasDetailTexture = IsDefined(Detail);
 	bool bHasLightWarpTexture = IsDefined(LightWarpTexture);
 	bool bHasLightWarpNoBump = GetBool(LightWarpNoBump);
 	
 	bool bSelfIllum = HasFlag(MATERIAL_VAR_SELFILLUM);
-//	bool bhasSelfIllumMask = bSelfIllum && IsDefined(SelfIllumMask);
+	bool bhasSelfIllumMask = bSelfIllum && IsDefined(SelfIllumMask);
 
 	bool bHasPhong = GetBool(Phong);
 	bool bHasPhongExponentTexture = bHasPhong && IsDefined(PhongExponentTexture);
@@ -324,7 +390,7 @@ void LuxVertexLitGeneric_ParamsDebugger()
 		nAlphaUsed += bDesaturateWithBaseAlpha;
 		nAlphaUsed += bBaseAlphaEnvMapMask;
 		nAlphaUsed += bBaseMapAlphaPhongMask;
-		nAlphaUsed += bSelfIllum;
+		nAlphaUsed += bSelfIllum && !(bhasSelfIllumMask || bSelfIllum_EnvMapMask_Alpha);
 
 		// This one doesn't count, we replicate L4D Behaviour with it..
 		if (bBlendTintByBaseAlpha && bBaseAlphaEnvMapMask)
@@ -505,7 +571,7 @@ SHADER_INIT_PARAMS()
 {
 	// Let Developers know about potential Issues
 	// This needs to happen first since we initialise Values afterwards and that makes them count as "defined"
-	if (CVarDeveloper.GetInt() > 0)
+	if (CVarDeveloper() > 0)
 		LuxVertexLitGeneric_ParamsDebugger();
 
 	Cloak_Vars_t CloakVars;
@@ -519,6 +585,10 @@ SHADER_INIT_PARAMS()
 	SheenPass_Vars_t SheenVars;
 	VLG_SetupSheenPassVars(SheenVars);
 	SheenPass_Init_Params(this, SheenVars);
+
+	RimLightPass_Vars_t RimlightPassVars;
+	VLG_SetupRimLightPassVars(RimlightPassVars);
+	RimLightPass_Init_Params(this, RimlightPassVars);
 
 	// Always dealing with a Model!
 	SetFlag(MATERIAL_VAR_MODEL);
@@ -580,12 +650,14 @@ SHADER_INIT_PARAMS()
 			DefaultFloat(EnvMapLightScale, 1.0f);
 		}
 
+#ifndef ASWSDK
 		if(lux_envmap_forcelerp.GetBool())
 			SetBool(EnvMapLerp, true);
 
 		// Disable EnvMapLerp if the Cubemap is NOT env_cubemap
 		if(GetBool(EnvMapLerp) && V_stricmp(GetString(EnvMap), "env_cubemap"))
 			SetBool(EnvMapLerp, false);
+#endif
 	}
 
 	// Default Value is supposed to be 1.0f
@@ -602,8 +674,8 @@ SHADER_INIT_PARAMS()
 	DefaultFloat(DetailScale, 4.0f);
 
 	// Scale, Bias, Exponent.
-	// This is a non-Stock Default Value. 1.0f for full Scale, 5.0f for Exponent
-	DefaultFloat3(SelfIllumFresnelMinMaxExp, 1.0f, 0.0f, 5.0f);
+	// Consistent with SDK and ASW, previously had a default here of 1.0f, 0.0f, 5.0f which causes.. Issues..
+	DefaultFloat3(SelfIllumFresnelMinMaxExp, 0.0f, 1.0f, 1.0f);
 
 	// Funny issue we had: The Combine Elite's VMT uses $SelfIllumTint "[2 1 1]".
 	// Caused the model to be rendered as pink...
@@ -639,11 +711,18 @@ SHADER_INIT_PARAMS()
 		if (GetBool(BaseMapAlphaPhongMask) || bHasBumpMap || IsDefined(LightWarpTexture) && !GetBool(LightWarpNoBump))
 		{
 			// By Default, $BaseMapAlphaPhongMask forces a flat Normal even when $BumpMap is used.
-			if (!GetBool(PhongNewBehaviour) && GetBool(BaseMapAlphaPhongMask))
-				DefaultBool(PhongFlatNormal, true);
+			// Not on ASW, but we allow it with this Parameter so SFM can render the Materials correctly
+			#ifdef ASWSDK
+			if(GetBool(TF2Compatibility))
+			#endif
+			{	
+				if (!GetBool(PhongNewBehaviour) && GetBool(BaseMapAlphaPhongMask))
+					DefaultBool(PhongFlatNormal, true);
+			}
 
 			// PhongFresnelRanges need this or Fresnel will be 0.0f
 			DefaultFloat3(PhongFresnelRanges, 0.0f, 0.5f, 1.0f);
+			DefaultFloat(PhongAlbedoBoost, 1.0f);
 
 			// ShiroDkxtro2 Instruction Reduction :
 			// On the Shader we'd do < $PhongExponentTexture.x * 149 + 1 >
@@ -662,13 +741,37 @@ SHADER_INIT_PARAMS()
 			{
 				// Default Value is supposed to be ... Well in SDK2013mp it's 0...
 				// It replaces the *149 of the calculation so that is what its default value SHOULD be
-				DefaultFloat(PhongExponent, 1.0f);
-				DefaultFloat(PhongExponentFactor, 149.0f);
+				// NOTE: ASW does 1.0 - .r + .r * 150.0f
+				// The 1.0-r isn't replicated here but the 150* IS
+				#ifdef ASWSDK
+				if (!GetBool(TF2Compatibility))
+				{
+					DefaultFloat(PhongExponent, 0.0f);
+					DefaultFloat(PhongExponentFactor, 150.0f);
+				}
+				else
+				{
+					// NOTE: We still do the 1-.r but I'm trying to account for that here by not adding +1 at all times
+					DefaultFloat(PhongExponent, 0.0f);
+					DefaultFloat(PhongExponentFactor, 149.0f);
+				}
+				#else
+					DefaultFloat(PhongExponent, 1.0f);
+					DefaultFloat(PhongExponentFactor, 149.0f);
+				#endif
 			}
 			else
 			{
-				// Default Value is supposed to be 5.0f
-				DefaultFloat(PhongExponent, 5.0f);
+				#ifdef ASWSDK
+				// In ASW when $PhongExponent == 0.0f ( which is the default Value there )
+				// It will use the $PhongExponentTexture, if you don't have one, a White one will be assigned
+				// Since it does 1-r+r*150, the equivalent for LUX will be setting a $PhongExponent of 150
+				if(!GetBool(TF2Compatibility))
+					DefaultFloat(PhongExponent, 150.0f);
+				else
+				#endif
+					// Default Value is supposed to be 5.0f
+					DefaultFloat(PhongExponent, 5.0f);
 			}
 		}
 	}
@@ -699,12 +802,16 @@ SHADER_INIT_PARAMS()
 		SetBool(EnvMapMaskFlip, 1);
 	}
 
-	if (IsDefined(BumpMap))
+	if (IsDefined(BumpMap) || (IsDefined(LightWarpTexture) && !GetBool(LightWarpNoBump)) || (GetBool(Phong) && GetBool(BaseMapAlphaPhongMask)))
 	{
 		// Required for dynamic Lighting
 		SetFlag2(MATERIAL_VAR2_NEEDS_TANGENT_SPACES);
 		SetFlag2(MATERIAL_VAR2_DIFFUSE_BUMPMAPPED_MODEL);
 	}
+
+#ifdef ASWSDK
+	DefaultFloat(AmbientOcclusion, 1.0f);
+#endif
 }
 
 SHADER_FALLBACK
@@ -744,6 +851,10 @@ SHADER_INIT
 	VLG_SetupSheenPassVars(SheenVars);
 	SheenPass_Shader_Init(this, SheenVars);
 
+	RimLightPass_Vars_t RimlightPassVars;
+	VLG_SetupRimLightPassVars(RimlightPassVars);
+	RimLightPass_Shader_Init(this, RimlightPassVars);
+
 	// Always needed...
 	SetFlag(MATERIAL_VAR_MODEL);								// This has to be set here!!! Can't be set later
 	SetFlag2(MATERIAL_VAR2_SUPPORTS_HW_SKINNING);				// Required for skinning
@@ -781,7 +892,15 @@ SHADER_INIT
 		bAlternativeSelfIllum = GetBool(SelfIllumFresnel) || GetBool(SelfIllum_EnvMapMask_Alpha) || bHasSelfIllumMask;
 
 	if (bHasSelfIllumMask)
-		LoadTexture(SelfIllumMask,0);
+	{
+		LoadTexture(SelfIllumMask, 0);
+
+		// This is mostly used with Phong but in ASW this Flag gets set on regular VertexLitGeneric
+		// Don't set this and Materials using $SelfIllumMask and $Translucent will be broken!
+		#ifdef ASWSDK
+			SetFlag2(MATERIAL_VAR2_SELFILLUMMASK);
+		#endif
+	}
 
 	// Need to load this for the second Pass
 	LoadTexture(SelfIllumTexture, TEXTUREFLAGS_SRGB);
@@ -812,9 +931,11 @@ SHADER_INIT
 
 	LoadTexture(LightWarpTexture, 0);
 
+#ifndef ASWSDK
 	// ShiroDkxtro2: $Lightmap appears to be totally dynamic.
 	// This probably doesn't do anything, and won't allow for custom Lightmaps either.
 	LoadTexture(Lightmap, 0);
+#endif
 
 	// SphereMap Support
 	// Orange Box Code does this.
@@ -877,11 +998,11 @@ SHADER_INIT
 // Virtual Void Override for Context Data
 VertexLitGenericContext* CreateMaterialContextData() override
 {
-	return new VertexLitGenericContext(this);
+	return new VertexLitGenericContext(NULL);
 }
 
 // Exposed Function for Multipass Rendering
-void LuxVertexLitGeneric_Shader_Draw(IShaderShadow* pShaderShadow, IShaderDynamicAPI* pShaderAPI, CBasePerMaterialContextData** pContextDataPtr)
+void LuxVertexLitGeneric_Shader_Draw(IMaterialVar** ppParams, IShaderShadow* pShaderShadow, IShaderDynamicAPI* pShaderAPI, CBasePerMaterialContextData** pContextDataPtr)
 {
 	// Get Context Data. BaseShader handles creation for us, using the CreateMaterialContextData() virtual
 	auto* pContextData = GetMaterialContextData<VertexLitGenericContext>(pContextDataPtr);
@@ -915,8 +1036,12 @@ void LuxVertexLitGeneric_Shader_Draw(IShaderShadow* pShaderShadow, IShaderDynami
 	bool bHasSelfIllumMask = bSelfIllum && IsTextureLoaded(SelfIllumMask);
 	bool bHasSelfIllumFresnel = bSelfIllum && GetBool(SelfIllumFresnel);
 
-	// LightWarpTexture
+	// LightWarpTexture allowed with proj. Texture in ASW/SFM
+	#ifdef ASWSDK
+	bool bHasLightWarpTexture = IsTextureLoaded(LightWarpTexture);
+	#else
 	bool bHasLightWarpTexture = !bProjTex && IsTextureLoaded(LightWarpTexture); // No Lightwarp under the flashlight
+	#endif
 	bool bHasLightWarpNoBump = bHasLightWarpTexture && GetBool(LightWarpNoBump);
 	
 	// Phong Variables, needed before EnvMap because of EnvMapSphere
@@ -950,7 +1075,11 @@ void LuxVertexLitGeneric_Shader_Draw(IShaderShadow* pShaderShadow, IShaderDynami
 	bool bBumpedShader = bHasPhong || bHasNormalTexture || bHasLightWarpTexture && !bHasLightWarpNoBump;
 	bool bHasVertexColors = HasFlag(MATERIAL_VAR_VERTEXCOLOR) || HasFlag(MATERIAL_VAR_VERTEXALPHA);
 
+#ifndef ASWSDK
 	bool bHasLightmapTexture = !bProjTex && IsTextureLoaded(Lightmap);
+#else
+	const bool bHasLightmapTexture = false;
+#endif
 
 	//==========================================================================//
 	// Pre-Snapshot Context Data Variables
@@ -959,7 +1088,25 @@ void LuxVertexLitGeneric_Shader_Draw(IShaderShadow* pShaderShadow, IShaderDynami
 	{
 		pContextData->m_nBlendType = ComputeBlendType(BaseTexture, true, Detail, GetInt(DetailBlendMode));
 		pContextData->m_bIsFullyOpaque = IsFullyOpaque(pContextData->m_nBlendType);
-		pContextData->m_nEnvMapMode = bHasEnvMap + bHasEnvMapMask;
+
+		#if defined(ASWSDK)
+			// No $EnvMapSphere support on ASW
+			pContextData->m_nEnvMapMode = bHasEnvMap + bHasEnvMapMask;
+		#else
+		if(!bBumpedShader)
+		{
+			// > 2 means $EnvMapMask
+			// 1 = $EnvMap ( BaseAlpha or NormalMapAlpha )
+			// 2 = $EnvMapSphere
+			// 3 = $EnvMapMask
+			// 4 = $EnvMapMask + $EnvMapSphere
+			pContextData->m_nEnvMapMode = bHasEnvMap + bEnvMapSphere + 2 * bHasEnvMapMask;
+		}
+		else
+		{
+			pContextData->m_nEnvMapMode = bHasEnvMap + bHasEnvMapMask;
+		}
+		#endif
 
 		// Evaluate the entire Phong Shenanigans and store it in the ContextData
 		// ( Lots of branching )
@@ -1007,6 +1154,9 @@ void LuxVertexLitGeneric_Shader_Draw(IShaderShadow* pShaderShadow, IShaderDynami
 			pContextData->m_bPhong_InvertEnvMapMask = GetBool(EnvMapMaskFlip);
 			pContextData->m_bEnvMapFresnel = GetBool(EnvMapFresnel); // This is a float, not a bool..
 		}
+
+		// Special Scenario:
+		// You can have $Phong without $BumpMap, BUT the StandardTexture for this does not have Alpha?
 
 		// These Caveats are exclusive to $NormalMapAlphaEnvMapMask
 		bool bBaseAlphaEnvMapMask = HasFlag(MATERIAL_VAR_BASEALPHAENVMAPMASK);
@@ -1159,12 +1309,19 @@ void LuxVertexLitGeneric_Shader_Draw(IShaderShadow* pShaderShadow, IShaderDynami
 		// s10 - $BumpStretch, only allowed with Base Wrinkle, not sRGB
 		EnableSampler(bAnyWrinkleMapping, SHADER_SAMPLER10, false);
 
+#ifndef ASWSDK
 		// s11 - $Lightmap
-		if(!bHasPhong && !bHasNormalTexture)
+		if(!bBumpedShader)
 			EnableSampler(SAMPLER_LIGHTMAP, false); // bHasLightmapTexture, 
+#else
+		EnableSampler(SHADER_SAMPLER11, true); // Used for SSAO RT
+#endif
 
+
+#ifndef ASWSDK
 		// s12 - Previous Envmap for $EnvMapLerp
 		EnableSampler(bHasEnvMap && GetBool(EnvMapLerp), SHADER_SAMPLER12, !IsHDREnabled());
+#endif
 
 		// s13 - $SelfIllumMask
 		EnableSampler(bSelfIllum && !GetBool(SelfIllum_EnvMapMask_Alpha), SAMPLER_SELFILLUM, false);
@@ -1217,15 +1374,36 @@ void LuxVertexLitGeneric_Shader_Draw(IShaderShadow* pShaderShadow, IShaderDynami
 
 		if (bProjTex)
 		{
+#ifdef ASWSDK
+			DECLARE_STATIC_PIXEL_SHADER(lux_vertexlitgeneric_asw_flashlight_ps30);
+			SET_STATIC_PIXEL_SHADER_COMBO(LIGHTCOMBO, bBumpedShader + bHasPhong + bHasPhongExponentTexture); // Phong can be used without a BumpMap
+			SET_STATIC_PIXEL_SHADER_COMBO(WRINKLEMAPS, bAnyWrinkleMapping);
+			SET_STATIC_PIXEL_SHADER_COMBO(XBYBASEALPHA, bBlendTintByBaseAlpha + 2 * bDesaturateWithBaseAlpha);
+			SET_STATIC_PIXEL_SHADER_COMBO(DETAILTEXTURE, bHasDetailTexture);
+			SET_STATIC_PIXEL_SHADER_COMBO(LIGHTWARPTEXTURE, bHasLightWarpTexture);
+			SET_STATIC_PIXEL_SHADER(lux_vertexlitgeneric_asw_flashlight_ps30);
+#else
 			DECLARE_STATIC_PIXEL_SHADER(lux_vertexlitgeneric_flashlight_ps30);
 			SET_STATIC_PIXEL_SHADER_COMBO(LIGHTCOMBO, bBumpedShader + bHasPhong + bHasPhongExponentTexture); // Phong can be used without a BumpMap
 			SET_STATIC_PIXEL_SHADER_COMBO(WRINKLEMAPS, bAnyWrinkleMapping);
 			SET_STATIC_PIXEL_SHADER_COMBO(XBYBASEALPHA, bBlendTintByBaseAlpha + 2 * bDesaturateWithBaseAlpha);
 			SET_STATIC_PIXEL_SHADER_COMBO(DETAILTEXTURE, bHasDetailTexture);
 			SET_STATIC_PIXEL_SHADER(lux_vertexlitgeneric_flashlight_ps30);
+#endif
 		}
 		else if (bHasPhong)
 		{
+#ifdef ASWSDK
+			DECLARE_STATIC_PIXEL_SHADER(lux_vertexlitgeneric_asw_phong_ps30);
+			SET_STATIC_PIXEL_SHADER_COMBO(ENVMAPMODE, pContextData->m_nEnvMapMode);
+			SET_STATIC_PIXEL_SHADER_COMBO(DETAILTEXTURE, bHasDetailTexture);
+			SET_STATIC_PIXEL_SHADER_COMBO(SELFILLUMMODE, nSelfIllumMode);
+			SET_STATIC_PIXEL_SHADER_COMBO(XBYBASEALPHA, bBlendTintByBaseAlpha + 2 * bDesaturateWithBaseAlpha);
+			SET_STATIC_PIXEL_SHADER_COMBO(EXPONENTTEXTURE, bHasPhongExponentTexture);
+			SET_STATIC_PIXEL_SHADER_COMBO(WRINKLEMAPS, bAnyWrinkleMapping);
+			SET_STATIC_PIXEL_SHADER_COMBO(LIGHTWARPTEXTURE, bHasLightWarpTexture);
+			SET_STATIC_PIXEL_SHADER(lux_vertexlitgeneric_asw_phong_ps30);
+#else
 			DECLARE_STATIC_PIXEL_SHADER(lux_vertexlitgeneric_phong_ps30);
 			SET_STATIC_PIXEL_SHADER_COMBO(ENVMAPMODE, pContextData->m_nEnvMapMode);
 			SET_STATIC_PIXEL_SHADER_COMBO(ENVMAPLERP, bHasEnvMap && GetBool(EnvMapLerp));
@@ -1234,28 +1412,70 @@ void LuxVertexLitGeneric_Shader_Draw(IShaderShadow* pShaderShadow, IShaderDynami
 			SET_STATIC_PIXEL_SHADER_COMBO(XBYBASEALPHA, bBlendTintByBaseAlpha + 2 * bDesaturateWithBaseAlpha);
 			SET_STATIC_PIXEL_SHADER_COMBO(EXPONENTTEXTURE, bHasPhongExponentTexture);
 			SET_STATIC_PIXEL_SHADER_COMBO(WRINKLEMAPS, bAnyWrinkleMapping);
+			SET_STATIC_PIXEL_SHADER_COMBO(LIGHTWARPTEXTURE, bHasLightWarpTexture);
 			SET_STATIC_PIXEL_SHADER(lux_vertexlitgeneric_phong_ps30);
+#endif
 		}
 		else if (bBumpedShader)
 		{
+#ifdef ASWSDK
+			DECLARE_STATIC_PIXEL_SHADER(lux_vertexlitgeneric_asw_bump_ps30);
+			SET_STATIC_PIXEL_SHADER_COMBO(ENVMAPMODE, pContextData->m_nEnvMapMode);
+			SET_STATIC_PIXEL_SHADER_COMBO(DETAILTEXTURE, bHasDetailTexture);
+			SET_STATIC_PIXEL_SHADER_COMBO(SELFILLUMMODE, nSelfIllumMode);
+			SET_STATIC_PIXEL_SHADER_COMBO(XBYBASEALPHA, bBlendTintByBaseAlpha + 2 * bDesaturateWithBaseAlpha);
+			SET_STATIC_PIXEL_SHADER_COMBO(LIGHTWARPTEXTURE, bHasLightWarpTexture);
+			SET_STATIC_PIXEL_SHADER(lux_vertexlitgeneric_asw_bump_ps30);
+#else
 			DECLARE_STATIC_PIXEL_SHADER(lux_vertexlitgeneric_bump_ps30);
 			SET_STATIC_PIXEL_SHADER_COMBO(ENVMAPMODE, pContextData->m_nEnvMapMode);
 			SET_STATIC_PIXEL_SHADER_COMBO(ENVMAPLERP, bHasEnvMap && GetBool(EnvMapLerp));
 			SET_STATIC_PIXEL_SHADER_COMBO(DETAILTEXTURE, bHasDetailTexture);
 			SET_STATIC_PIXEL_SHADER_COMBO(SELFILLUMMODE, nSelfIllumMode);
 			SET_STATIC_PIXEL_SHADER_COMBO(XBYBASEALPHA, bBlendTintByBaseAlpha + 2 * bDesaturateWithBaseAlpha);
+			SET_STATIC_PIXEL_SHADER_COMBO(LIGHTWARPTEXTURE, bHasLightWarpTexture);
 			SET_STATIC_PIXEL_SHADER(lux_vertexlitgeneric_bump_ps30);
+#endif
 		}
 		else
 		{
+#ifdef ASWSDK
+			DECLARE_STATIC_PIXEL_SHADER(lux_vertexlitgeneric_asw_simple_ps30);
+			SET_STATIC_PIXEL_SHADER_COMBO(ENVMAPMODE, pContextData->m_nEnvMapMode);
+			SET_STATIC_PIXEL_SHADER_COMBO(DETAILTEXTURE, bHasDetailTexture);
+			SET_STATIC_PIXEL_SHADER_COMBO(SELFILLUMMODE, nSelfIllumMode);
+			SET_STATIC_PIXEL_SHADER_COMBO(XBYBASEALPHA, bBlendTintByBaseAlpha + 2 * bDesaturateWithBaseAlpha);
+			SET_STATIC_PIXEL_SHADER_COMBO(LIGHTWARPTEXTURE, bHasLightWarpTexture);
+			SET_STATIC_PIXEL_SHADER(lux_vertexlitgeneric_asw_simple_ps30);
+#else
 			DECLARE_STATIC_PIXEL_SHADER(lux_vertexlitgeneric_simple_ps30);
-			SET_STATIC_PIXEL_SHADER_COMBO(ENVMAPMODE, pContextData->m_nEnvMapMode + 2 * bEnvMapSphere);
+			SET_STATIC_PIXEL_SHADER_COMBO(ENVMAPMODE, pContextData->m_nEnvMapMode);
 			SET_STATIC_PIXEL_SHADER_COMBO(ENVMAPLERP, bHasEnvMap && GetBool(EnvMapLerp));
 			SET_STATIC_PIXEL_SHADER_COMBO(DETAILTEXTURE, bHasDetailTexture);
 			SET_STATIC_PIXEL_SHADER_COMBO(SELFILLUMMODE, nSelfIllumMode);
 			SET_STATIC_PIXEL_SHADER_COMBO(XBYBASEALPHA, bBlendTintByBaseAlpha + 2 * bDesaturateWithBaseAlpha);
+			SET_STATIC_PIXEL_SHADER_COMBO(LIGHTWARPTEXTURE, bHasLightWarpTexture);
 			SET_STATIC_PIXEL_SHADER(lux_vertexlitgeneric_simple_ps30);
+#endif
 		}
+
+#ifdef ASWSDK
+		//==========================================================================//
+		// Per-Instance Command Buffer
+		//==========================================================================//
+		PI_BeginCommandBuffer();
+
+		if(!bProjTex && bBumpedShader)
+			PI_SetPixelShaderLocalLighting(LUX_PS_FLOAT_LIGHTDATA);
+
+		if (!bProjTex && bBumpedShader)
+			PI_SetPixelShaderAmbientLightCube(LUX_PS_FLOAT_AMBIENTCUBE);
+
+		if (!bProjTex && !bHasPhong && !bHasNormalTexture)
+			PI_SetVertexShaderAmbientLightCube();
+
+		PI_EndCommandBuffer();
+#endif
 	}
 
 	//==========================================================================//
@@ -1270,10 +1490,10 @@ void LuxVertexLitGeneric_Shader_Draw(IShaderShadow* pShaderShadow, IShaderDynami
 //		StaticCmds.End();
 
 		// Set the Buffer back to its original ( Empty ) State
-		SemiStaticCmds.Reset(this);
+//		SemiStaticCmds.Reset(ppParams);
 
 		// Instruct the Buffer to set an End Point
-		SemiStaticCmds.End();
+//		SemiStaticCmds.End();
 	}
 
 	//==========================================================================//
@@ -1282,7 +1502,7 @@ void LuxVertexLitGeneric_Shader_Draw(IShaderShadow* pShaderShadow, IShaderDynami
 	if(MaterialVarsChanged())
 	{
 		// Set the Buffer back to its original ( Empty ) State
-		SemiStaticCmds.Reset(this);
+		SemiStaticCmds.Reset(ppParams);
 
 		//==========================================================================//
 		// Bind StandardTextures
@@ -1299,7 +1519,9 @@ void LuxVertexLitGeneric_Shader_Draw(IShaderShadow* pShaderShadow, IShaderDynami
 		{
 			// LightWarp forces this without a BumpMap, $LightWarpNoBump allows using Vertex Lighting.
 			if (bHasLightWarpTexture && !bHasLightWarpNoBump)
+			{
 				SemiStaticCmds.BindTexture(SAMPLER_NORMALMAP, TEXTURE_NORMALMAP_FLAT);
+			}
 
 			// This is allowed but we still use the Normal Map Sampler.
 			else if (bHasBaseMapAlphaPhongMask)
@@ -1394,6 +1616,7 @@ void LuxVertexLitGeneric_Shader_Draw(IShaderShadow* pShaderShadow, IShaderDynami
 		// c12
 		SemiStaticCmds.SetPixelShaderFogParams(LUX_PS_FLOAT_FOGPARAMETERS);
 
+#ifndef ASWSDK
 		// c13, c14, c15, c16, c17, c18
 		if (!bProjTex && bBumpedShader)
 			SemiStaticCmds.SetPixelShaderStateAmbientLightCube(LUX_PS_FLOAT_AMBIENTCUBE);
@@ -1401,6 +1624,7 @@ void LuxVertexLitGeneric_Shader_Draw(IShaderShadow* pShaderShadow, IShaderDynami
 		// c20, c21, c22, c23, c24, c25
 		if (!bProjTex && bBumpedShader)
 			SemiStaticCmds.CommitPixelShaderLighting(LUX_PS_FLOAT_LIGHTDATA);
+#endif
 
 		// c32
 		// XByBaseAlpha makes use of the same Constant, give it the right Parameter
@@ -1433,6 +1657,12 @@ void LuxVertexLitGeneric_Shader_Draw(IShaderShadow* pShaderShadow, IShaderDynami
 			f4SelfIllumTint_Scale.rgb = GetFloat3(SelfIllumTint);
 			f4SelfIllumTint_Scale.a = bHasSelfIllumMask ? GetFloat(SelfIllumMaskScale) : 0.0f;
 
+#ifdef ASWSDK
+			// In ASW the untinted BaseTexture is used for SelfIllum, that is not the case in TF2
+			// I try to hack it back in here by multiplying the SelfIllumTint with the actual Tint
+			if (GetBool(TF2Compatibility))
+				f4SelfIllumTint_Scale.rgb *= f4BaseTextureTint.rgb;
+#endif
 			float4 f4SelfIllumFresnelTerms = 0.0f;
 			if(GetBool(SelfIllumFresnel))
 			{
@@ -1445,7 +1675,7 @@ void LuxVertexLitGeneric_Shader_Draw(IShaderShadow* pShaderShadow, IShaderDynami
 				f4SelfIllumFresnelTerms.y = (f1Max != 0.0f) ? (f1Min / f1Max) : 0.0f;
 				f4SelfIllumFresnelTerms.x = 1.0f - f4SelfIllumFresnelTerms.y;
 				f4SelfIllumFresnelTerms.z = f1Exp;
-				f4SelfIllumFresnelTerms.w = Max(f1Max, 0.0f);
+				f4SelfIllumFresnelTerms.w = MAX(f1Max, 0.0f);
 
 				// This saves a multiply in the Shader
 				f4SelfIllumTint_Scale.rgb *= f4SelfIllumFresnelTerms.w;
@@ -1487,7 +1717,13 @@ void LuxVertexLitGeneric_Shader_Draw(IShaderShadow* pShaderShadow, IShaderDynami
 			if (pContextData->m_bEnvMapFresnel || bHasPhong)
 			{
 				if (pContextData->m_bEnvMapFresnel && !bHasPhong)
+				{
 					f4EnvMapFresnelRanges.xyz = GetFloat3(EnvMapFresnelMinMaxExp);
+
+					// "convert max fresnel into scale factor" - ASW Code
+					// *sigh* well if the Artists like it..
+					f4EnvMapFresnelRanges.y -= f4EnvMapFresnelRanges.x;
+				}
 				else
 					f4EnvMapFresnelRanges.x = GetFloat(EnvMapFresnel);
 			}
@@ -1512,7 +1748,7 @@ void LuxVertexLitGeneric_Shader_Draw(IShaderShadow* pShaderShadow, IShaderDynami
 				// Stock-Consistency: They wanted to replicate the 1-BaseAlpha Behaviour
 				f4BaseAlphaParams.y -= f4BaseAlphaParams.x;
 
-				SemiStaticCmds.SetPixelShaderConstant(LUX_PS_FLOAT_ENVMAP_POSITION, f4EnvMapFresnelRanges);
+				SemiStaticCmds.SetPixelShaderConstant(LUX_PS_FLOAT_ENVMAP_POSITION, f4BaseAlphaParams);
 			}
 		}
 
@@ -1605,13 +1841,21 @@ void LuxVertexLitGeneric_Shader_Draw(IShaderShadow* pShaderShadow, IShaderDynami
 		// s11 - $Lightmap
 		// This is entirely Dynamic, so the Sampler is always enabled without bump and phong.
 		// We MUST bind SOMETHING to it.
-		if (!bHasPhong && !bHasNormalTexture)
+#ifndef ASWSDK
+		if (!bBumpedShader)
 		{
 			if (bHasLightmapTexture)
 				BindTexture(SAMPLER_LIGHTMAP, Lightmap);
 			else
 				BindTexture(SAMPLER_LIGHTMAP, TEXTURE_BLACK);
 		}
+#else
+		ITexture* pAOTexture = pShaderAPI->GetTextureRenderingParameter(TEXTURE_RENDERPARM_AMBIENT_OCCLUSION);
+		if (pAOTexture)
+			BindTexture(SHADER_SAMPLER11, pAOTexture);
+		else
+			pShaderAPI->BindStandardTexture(SHADER_SAMPLER11, TEXTURE_WHITE);
+#endif
 
 		// s14 - $EnvMap
 		// EnvMapControls always dynamic because of EnvMapLerp
@@ -1622,6 +1866,7 @@ void LuxVertexLitGeneric_Shader_Draw(IShaderShadow* pShaderShadow, IShaderDynami
 			f4EnvMapControls.y = (float)pContextData->m_bNormalMapAlphaEnvMapMask;
 			f4EnvMapControls.z = (float)pContextData->m_bPhong_InvertEnvMapMask;
 
+#ifndef ASWSDK
 			// Make really really sure ContextData is real here
 			if(GetBool(EnvMapLerp) && pContextData)
 			{
@@ -1652,7 +1897,7 @@ void LuxVertexLitGeneric_Shader_Draw(IShaderShadow* pShaderShadow, IShaderDynami
 					float f1CurrentTime = MAX(0, float(pShaderAPI->CurrentTime()) - pContextData->m_f1LerpStart - 2.0f);
 
 					// Gives us a nice 0..1 Factor
-					float f1TargetTime = saturate(f1CurrentTime / lux_envmap_lerptime.GetFloat());
+					float f1TargetTime = fxsaturate(f1CurrentTime / lux_envmap_lerptime.GetFloat());
 
 					// If we reached the new Cubemap, unlock and set the previous Cubemap as the current Cubemap
 					// Effectively reseting to the Start-Position of this System
@@ -1675,6 +1920,7 @@ void LuxVertexLitGeneric_Shader_Draw(IShaderShadow* pShaderShadow, IShaderDynami
 				BindTexture(SAMPLER_ENVMAPTEXTURE, pContextData->m_RefCubemapA);
 			}
 			else
+#endif
 				BindTexture(SAMPLER_ENVMAPTEXTURE, EnvMap, EnvMapFrame);
 
 			pShaderAPI->SetPixelShaderConstant(LUX_PS_FLOAT_ENVMAP_CONTROLS, f4EnvMapControls);
@@ -1683,7 +1929,12 @@ void LuxVertexLitGeneric_Shader_Draw(IShaderShadow* pShaderShadow, IShaderDynami
 
 		// Binds Textures and sends Flashlight Constants
 		// Returns bFlashlightShadows
-		bool bFlashlightShadows = SetupFlashlight();
+		#ifdef ASWSDK
+			bool bUberlight = false;
+			bool bFlashlightShadows = SetupFlashlight(&bUberlight);
+		#else
+			bool bFlashlightShadows = SetupFlashlight();
+		#endif
 
 		//==========================================================================//
 		// Setup Constant Registers
@@ -1762,6 +2013,26 @@ void LuxVertexLitGeneric_Shader_Draw(IShaderShadow* pShaderShadow, IShaderDynami
 		if (bHasEnvMap || bDesaturateWithBaseAlpha || bHasLightmapTexture || bHasPhong && GetBool(BaseMapLuminancePhongMask))
 			SetLuminanceGammaConstant(LUX_PS_FLOAT_LUMINANCE_GAMMA);
 
+#ifdef ASWSDK
+		pShaderAPI->SetScreenSizeForVPOS(LUX_PS_FLOAT_ASW_SCREENSIZE);
+
+		float4 cSSAOControls = 1.0f;
+
+		// Some duplicate Code here, FlashlightState has an Ambient Occlusion Factor, so we have to get it
+		if(bProjTex)
+		{
+			ITexture* pFlashlightDepthTexture;
+			FlashlightState_t FlashlightState;
+			VMatrix xmWorldToTexture;
+			FlashlightState = pShaderAPI->GetFlashlightStateEx(xmWorldToTexture, &pFlashlightDepthTexture);
+			cSSAOControls.x *= FlashlightState.m_flAmbientOcclusion;
+		}
+
+		cSSAOControls.x *= GetFloat(AmbientOcclusion);
+		cSSAOControls.x = fxsaturate(cSSAOControls.x); // Make sure this doesn't go out of Range
+		pShaderAPI->SetPixelShaderConstant(LUX_PS_FLOAT_ASW_SSAOCONTROLS, cSSAOControls);
+#endif
+
 		// Prepare boolean array, yes we need to use BOOL
 		BOOL BBools[REGISTER_BOOL_MAX] = { false };
 
@@ -1782,10 +2053,6 @@ void LuxVertexLitGeneric_Shader_Draw(IShaderShadow* pShaderShadow, IShaderDynami
 		// Only have Dynamic Half-Lambert with BumpMapping
 		if(bBumpedShader && bHalfLambert)
 			BBools[LUX_PS_BOOL_HALFLAMBERT] = true;
-
-		// b1
-		if(bHasLightWarpTexture)
-			BBools[LUX_PS_BOOL_LIGHTWARPTEXTURE] = true;
 
 		// b4, b5, b6, b7, b8, b9, b10, b11
 		if (bHasPhong)
@@ -1840,9 +2107,11 @@ void LuxVertexLitGeneric_Shader_Draw(IShaderShadow* pShaderShadow, IShaderDynami
 			bHasStaticPropLighting = StaticLightVertex(LightState);
 			bHasDynamicPropLighting = (LightState.m_bAmbientLight || (LightState.m_nNumLights > 0)) ? 1 : 0;
 
+#ifndef ASWSDK
 			// Need to send this to the Vertex Shader manually in this scenario
 			if (bHasDynamicPropLighting)
 				pShaderAPI->SetVertexShaderStateAmbientLightCube();
+#endif
 		}
 
 		if (bProjTex)
@@ -1871,27 +2140,51 @@ void LuxVertexLitGeneric_Shader_Draw(IShaderShadow* pShaderShadow, IShaderDynami
 
 		if (bProjTex)
 		{
+#ifdef ASWSDK
+			DECLARE_DYNAMIC_PIXEL_SHADER(lux_vertexlitgeneric_asw_flashlight_ps30);
+			SET_DYNAMIC_PIXEL_SHADER_COMBO(PROJTEXSHADOWS, bFlashlightShadows);
+			SET_DYNAMIC_PIXEL_SHADER_COMBO(UBERLIGHT, bUberlight);
+			SET_DYNAMIC_PIXEL_SHADER(lux_vertexlitgeneric_asw_flashlight_ps30);
+#else
 			DECLARE_DYNAMIC_PIXEL_SHADER(lux_vertexlitgeneric_flashlight_ps30);
 			SET_DYNAMIC_PIXEL_SHADER_COMBO(PROJTEXSHADOWS, bFlashlightShadows);
 			SET_DYNAMIC_PIXEL_SHADER(lux_vertexlitgeneric_flashlight_ps30);
+#endif
 		}
 		else if (bHasPhong)
 		{
+#ifdef ASWSDK
+			DECLARE_DYNAMIC_PIXEL_SHADER(lux_vertexlitgeneric_asw_phong_ps30);
+			SET_DYNAMIC_PIXEL_SHADER_COMBO(NUM_LIGHTS_COMBO, LightState.m_nNumLights);
+			SET_DYNAMIC_PIXEL_SHADER(lux_vertexlitgeneric_asw_phong_ps30);
+#else
 			DECLARE_DYNAMIC_PIXEL_SHADER(lux_vertexlitgeneric_phong_ps30);
 			SET_DYNAMIC_PIXEL_SHADER_COMBO(NUM_LIGHTS_COMBO, LightState.m_nNumLights);
 			SET_DYNAMIC_PIXEL_SHADER(lux_vertexlitgeneric_phong_ps30);
+#endif
 		}
 		else if (bBumpedShader)
 		{
+#ifdef ASWSDK
+			DECLARE_DYNAMIC_PIXEL_SHADER(lux_vertexlitgeneric_asw_bump_ps30);
+			SET_DYNAMIC_PIXEL_SHADER_COMBO(NUM_LIGHTS_COMBO, LightState.m_nNumLights);
+			SET_DYNAMIC_PIXEL_SHADER(lux_vertexlitgeneric_asw_bump_ps30);
+#else
 			DECLARE_DYNAMIC_PIXEL_SHADER(lux_vertexlitgeneric_bump_ps30);
 			SET_DYNAMIC_PIXEL_SHADER_COMBO(NUM_LIGHTS_COMBO, LightState.m_nNumLights);
 			SET_DYNAMIC_PIXEL_SHADER(lux_vertexlitgeneric_bump_ps30);
+#endif
 		}
 		else
 		{
+#ifdef ASWSDK
+			DECLARE_DYNAMIC_PIXEL_SHADER(lux_vertexlitgeneric_asw_simple_ps30);
+			SET_DYNAMIC_PIXEL_SHADER(lux_vertexlitgeneric_asw_simple_ps30);
+#else
 			DECLARE_DYNAMIC_PIXEL_SHADER(lux_vertexlitgeneric_simple_ps30);
 			SET_DYNAMIC_PIXEL_SHADER_COMBO(LIGHTMAPPED_MODEL, bHasLightmapTexture);
 			SET_DYNAMIC_PIXEL_SHADER(lux_vertexlitgeneric_simple_ps30);
+#endif
 		}
 
 //		pShaderAPI->ExecuteCommandBuffer(StaticCmds.Base());
@@ -1907,7 +2200,7 @@ void LuxVertexLitGeneric_Shader_Draw(IShaderShadow* pShaderShadow, IShaderDynami
 	if(IsDynamicState())
 	{
 #ifdef DEBUG_FULLBRIGHT2 
-		if (mat_fullbright.GetInt() == 2 && !HasFlag(MATERIAL_VAR_NO_DEBUG_OVERRIDE))
+		if (mat_fullbright() == 2 && !HasFlag(MATERIAL_VAR_NO_DEBUG_OVERRIDE))
 			BindTexture(SAMPLER_BASETEXTURE, TEXTURE_GREY);
 #endif
 
@@ -1969,6 +2262,15 @@ void LuxVertexLitGeneric_Shader_Draw(IShaderShadow* pShaderShadow, IShaderDynami
 
 SHADER_DRAW
 {
+#ifdef ASWSDK
+	if(ShouldDrawNormalsForSSAO())
+	{
+		SSAODrawNormalPass_Vars_t Vars;
+		VLG_SetupSSAODrawNormalVars(Vars);
+		SSAONormalPass_Shader_Draw(this, pShaderShadow, pShaderAPI, Vars);
+		return;
+	}
+#endif
 	// Outline Support
 	if (GetBool(MeshOutline_Enable))
 	{
@@ -1998,7 +2300,7 @@ SHADER_DRAW
 	// Don't bother to even render it
 	if (pShaderShadow || bDrawBasePass)
 	{
-		LuxVertexLitGeneric_Shader_Draw(pShaderShadow, pShaderAPI, pContextDataPtr);
+		LuxVertexLitGeneric_Shader_Draw(params, pShaderShadow, pShaderAPI, pContextDataPtr);
 	}
 	else
 	{
@@ -2032,6 +2334,15 @@ SHADER_DRAW
 		SheenPass_Shader_Draw(this, pShaderShadow, pShaderAPI, SheenVars);
 	}
 	else if (GetBool(SheenPassEnabled))
+		Draw(false);
+
+	if (pShaderShadow || bDrawBasePass)
+	{
+		RimLightPass_Vars_t RimlightPassVars;
+		VLG_SetupRimLightPassVars(RimlightPassVars);
+		RimLightPass_Shader_Draw(this, pShaderShadow, pShaderAPI, RimlightPassVars);
+	}
+	else if (GetBool(RimLightPass_Enabled))
 		Draw(false);
 
 	// Only draw Spy Cloak if it's enabled

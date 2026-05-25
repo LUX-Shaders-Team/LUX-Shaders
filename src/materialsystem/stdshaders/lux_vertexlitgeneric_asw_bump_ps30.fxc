@@ -1,0 +1,51 @@
+//===================== File of the LUX Shader Project =====================//
+//
+//	Initial D.	:	14.02.2023 DMY
+//	Last Change :	24.05.2026 DMY
+//
+//==========================================================================//
+
+//==========================================================================//
+//	Declare Static Combos
+//==========================================================================//
+// STATIC:	"ENVMAPMODE"				"0..2"
+// STATIC:	"SELFILLUMMODE"				"0..2"
+// STATIC:	"XBYBASEALPHA"				"0..2"
+// STATIC:	"DETAILTEXTURE"				"0..1"
+// STATIC:  "LIGHTWARPTEXTURE"          "0..1"
+
+//==========================================================================//
+//	Declare Dynamic Combos
+//==========================================================================//
+// DYNAMIC: "NUM_LIGHTS_COMBO"			"0..4"
+
+//==========================================================================//
+//	Skipping undesired Combos
+//	The Order of Static Combos and Skips has a drastic Impact on Compile Time!
+//==========================================================================//
+// SKIP: ( $ENVMAPMODE != 2 && $SELFILLUMMODE == 2 )
+
+// I found several Community VMT's in SFM that utilize $SelfIllumMask with $BlendTintByBaseAlpha
+// Well, it's technically the correct approach, it will no longer use the $BaseTexture's Alpha Channel
+// @SKIP: ( $SELFILLUMMODE == 1 && $XBYBASEALPHA != 0)
+
+//==========================================================================//
+//	Unpack Combos specific to this Shader
+//==========================================================================//
+#if (ENVMAPMODE > 0)
+    #define ENVMAP 1
+#else
+    #define ENVMAP 0
+#endif
+
+#if (ENVMAPMODE == 2)
+    #define ENVMAPMASK 1
+#else
+    #define ENVMAPMASK 0
+#endif
+
+//==========================================================================//
+//	Call into Main Function
+//==========================================================================//
+
+#include "lux_vertexlitgeneric_main.h"

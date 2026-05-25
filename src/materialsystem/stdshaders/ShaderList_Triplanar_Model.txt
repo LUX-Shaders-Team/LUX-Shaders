@@ -18,3 +18,7 @@ lux_model_vs30.fxc
 lux_model_bump_vs30.fxc
 lux_triplanar_model_ps30.fxc
 lux_triplanar_model_flashlight_ps30.fxc
+
+// ASW
+lux_ssao_drawnormal_ps30.fxc
+lux_ssao_drawnormal_vs30.fxc

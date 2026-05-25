@@ -15,11 +15,15 @@
 #include "shaderlib_cvar.h"
 #include "mathlib/mathlib.h"
 #include "tier1/tier1.h"
-#include "Color.h"
+#include "color.h"
+#include "../stdshaders/lux_common_defines.h"
+#ifndef ASWSDK
 #include "filesystem.h"
 #include <tier2/tier2.h>
+#endif
 #include <vector>
 #include <array>
+#include "tier0/icommandline.h"
 
 // Needed for Parameter Spews
 #include "BaseShader.h"
@@ -112,10 +116,18 @@ CShaderDLL::CShaderDLL()
 //-----------------------------------------------------------------------------
 bool CShaderDLL::Connect( CreateInterfaceFn factory, bool bIsMaterialSystem )
 {
-#ifdef NOLUX
-	if ( !CommandLine()->HasParm( "-nolux" ) )
+#ifdef TF2SDK
+	#ifdef NOLUX
+		if ( !CommandLine()->HasParm( "-nolux" ) )
+	#else
+		if ( CommandLine()->HasParm( "-nolux" ) )
+	#endif
 #else
-	if ( CommandLine()->HasParm( "-nolux" ) )
+	#ifdef NOLUX
+		if (!CommandLine()->CheckParm("-nolux"))
+	#else
+		if (CommandLine()->CheckParm("-nolux"))
+	#endif
 #endif
     {
         return false;
@@ -186,6 +198,9 @@ void CShaderDLL::InsertShader( IShader *pShader )
 	m_ShaderList.AddToTail( pShader );
 }
 
+
+// Everything below only on the SDK due to FileSystem not being accounted for ( FIXME )
+#ifndef ASWSDK
 
 //-----------------------------------------------------------------------------
 //  When we find a "\n" we replace it with "  \n" for markdown formated strings 
@@ -260,6 +275,11 @@ struct ShaderListEntry_t
 	int nCategory;
 };
 
+// Doesn't exist on SP, so just locally defining it here in that case
+#ifndef TF2SDK
+#define V_ARRAYSIZE(x) (sizeof(x)/sizeof(x[0]))
+#endif
+
 CON_COMMAND_F(lux_help_shaders, "Returns all Shader Names in the Custom Shader DLL. Usage: lux_help_shaders <category>", FCVAR_NONE)
 {
 	CUtlVector<ShaderListEntry_t> vecShaders;
@@ -280,7 +300,14 @@ CON_COMMAND_F(lux_help_shaders, "Returns all Shader Names in the Custom Shader D
 				}
 			}
 
-			ShaderListEntry_t* pListEntry = vecShaders.AddToTailGetPtr();
+			// This could just be written in a better way..
+			ShaderListEntry_t* pListEntry;
+#ifdef TF2SDK
+			pListEntry = vecShaders.AddToTailGetPtr();
+#else
+			vecShaders.AddToTail();
+			pListEntry = &vecShaders.Tail();
+#endif
 			pListEntry->pszName = pszName;
 			pListEntry->nCategory = nCategory;
 		}
@@ -454,9 +481,11 @@ CON_COMMAND_F(lux_help, "Enter Shader Name and retrieve Information about it.", 
 						case SHADER_PARAM_TYPE_STRING:
 							ConColorMsg(ColorParamType, "[String]\n");
 							break;
+#ifdef TF2SDK
 						case SHADER_PARAM_TYPE_MATRIX4X2:
 							ConColorMsg(ColorParamType, "[Matrix4x2]\n");
 							break;
+#endif
 						default: break;
 					}
 
@@ -570,7 +599,11 @@ CON_COMMAND_F(lux_generate_github_wiki, "Generates a wiki in markdown format. (m
 	char szLuxDumpDir[MAX_PATH];
 	{
 		char szGamePath[MAX_PATH];
-		g_pFullFileSystem->GetSearchPath_safe("GAME", false, szGamePath);
+		#ifdef TF2SDK
+			g_pFullFileSystem->GetSearchPath_safe("GAME", false, szGamePath);
+		#else
+			g_pFullFileSystem->GetSearchPath("GAME", false, szGamePath, MAX_PATH);
+		#endif
 		V_sprintf_safe(szLuxDumpDir, "%s%s", strtok(szGamePath, ";"), LUX_GITHUB_WIKI_DIR);
 		g_pFullFileSystem->CreateDirHierarchy(szLuxDumpDir);
 	}
@@ -726,9 +759,11 @@ CON_COMMAND_F(lux_generate_github_wiki, "Generates a wiki in markdown format. (m
 								case SHADER_PARAM_TYPE_STRING:
 									fprintf(pLuxGithubWikiDump, "&nbsp;&nbsp;&nbsp;&nbsp;[String]  \n");
 									break;
+#ifdef TF2SDK
 								case SHADER_PARAM_TYPE_MATRIX4X2:
 									fprintf(pLuxGithubWikiDump, "&nbsp;&nbsp;&nbsp;&nbsp;[Matrix4x2]  \n");
 									break;
+#endif
 								default: break;
 								}
 								fprintf(pLuxGithubWikiDump, "%s\n\n", pParamHelpShader);
@@ -750,5 +785,5 @@ CON_COMMAND_F(lux_generate_github_wiki, "Generates a wiki in markdown format. (m
 	Msg("Github Wiki file dump at: %s", szLuxDumpDir);
 }
 
-
+#endif // !ASWSDK
 #endif // NOLUX

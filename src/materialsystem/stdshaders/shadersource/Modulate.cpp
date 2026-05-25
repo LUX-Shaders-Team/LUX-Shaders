@@ -1,7 +1,7 @@
 ﻿//===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	20.01.2023 DMY
-//	Last Change :	 30.01.2026 DMY
+//	Last Change :	25.05.2026 DMY
 //
 //==========================================================================//
 
@@ -87,7 +87,9 @@ bool IsTranslucent( IMaterialVar** params ) const override
 			return true;
 	}
 
-	return params[Flags]->GetIntValue() & MATERIAL_VAR_TRANSLUCENT;
+	bool bIsTranslucent = params[Flags]->GetIntValue() & MATERIAL_VAR_TRANSLUCENT;
+	bool bPretendTranslucent = params[PretendTranslucent]->GetIntValue() != 0;
+	return bIsTranslucent || bPretendTranslucent;
 }
 
 // Set Up Vars here
@@ -132,6 +134,15 @@ SHADER_INIT
 
 SHADER_DRAW
 {
+#ifdef ASWSDK
+	// Not doing this here
+	if (ShouldDrawNormalsForSSAO())
+	{
+		Draw(false); // Without this crash + "No render states in shader ".."
+		return;
+	}
+#endif
+
 	bool bDrawBasePass = true;
 
 	Cloak_Vars_t CloakVars;
@@ -244,6 +255,18 @@ SHADER_DRAW
 			SET_STATIC_PIXEL_SHADER_COMBO(DETAILTEXTURE, bHasDetailTexture);
 			SET_STATIC_PIXEL_SHADER_COMBO(VERTEXCOLORS, bHasVertexColors);
 			SET_STATIC_PIXEL_SHADER(lux_modulate_ps30);
+
+#ifdef ASWSDK
+			//==========================================================================//
+			// Per-Instance Command Buffer
+			//==========================================================================//
+			PI_BeginCommandBuffer();
+
+			if (GetBool(EnableVertexLighting))
+				PI_SetVertexShaderAmbientLightCube();
+
+			PI_EndCommandBuffer();
+#endif
 		}
 
 		//==========================================================================//
@@ -343,8 +366,10 @@ SHADER_DRAW
 				bHasDynamicPropLighting = (LightState.m_bAmbientLight || (LightState.m_nNumLights > 0)) ? 1 : 0;
 
 				// Need to send this to the Vertex Shader manually in this scenario
+#ifndef ASWSDK
 				if (bHasDynamicPropLighting)
 					pShaderAPI->SetVertexShaderStateAmbientLightCube();
+#endif
 			}
 
 			DECLARE_DYNAMIC_VERTEX_SHADER(lux_model_vs30);

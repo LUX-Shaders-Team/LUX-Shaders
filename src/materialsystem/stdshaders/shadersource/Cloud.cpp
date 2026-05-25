@@ -1,9 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	20.01.2023 DMY
-//	Last Change :	 30.01.2026 DMY
-//
-//	Purpose of this File :	
+//	Last Change :	18.05.2026 DMY
 //
 //==========================================================================//
 
@@ -81,6 +79,12 @@ SHADER_INIT
 
 SHADER_DRAW
 {
+	// Translucent Shaders don't get Normals and SSAO
+#ifdef ASWSDK
+	if (ShouldDrawNormalsForSSAO())
+		return;
+#endif
+
 	//==========================================================================//
 	// Static Snapshot of the Shader Settings
 	//==========================================================================//

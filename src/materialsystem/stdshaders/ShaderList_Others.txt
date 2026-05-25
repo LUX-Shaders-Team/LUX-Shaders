@@ -13,7 +13,6 @@
 // All fxc Files that don't get a dedicated script
 //============================================
 
-lux_black_ps30.fxc
 lux_depthtodestalpha_ps30.fxc
 lux_eyes_vs30.fxc
 lux_eyes_ps30.fxc
@@ -21,3 +20,7 @@ lux_debug_luxels_vs30.fxc
 lux_debug_luxels_ps30.fxc
 lux_debug_textureview_vs30.fxc
 lux_debug_textureview_ps30.fxc
+
+// ASW
+lux_ssao_drawnormal_ps30.fxc
+lux_ssao_drawnormal_vs30.fxc

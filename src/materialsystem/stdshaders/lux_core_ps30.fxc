@@ -1,14 +1,14 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	02.01.2024 DMY
-//	Last Change :	 30.01.2026 DMY
+//	Last Change :	22.05.2026 DMY
 //
 //==========================================================================//
 
 //==========================================================================//
 //	Declare Static Combos
 //==========================================================================//
-// STATIC:	"ENVMAPMODE"			"0..1"
+// STATIC:	"ENVMAP"				"0..1"
 // STATIC:	"CORECOLOR"				"0..1"
 // STATIC:	"REFRACTION"			"0..1"
 // STATIC:	"FLOWMAPPING"			"0..1"
@@ -22,9 +22,9 @@
 //	Skipping undesired Combos
 //	The Order of Static Combos and Skips has a drastic Impact on Compile Time!
 //==========================================================================//
-// EnvMap is reserved for Pass1
-// Refraction and Color are only done for Pass0
-// SKIP : ($ENVMAPMODE == 1 && ($CORECOLOR == 1 || $REFRACTION == 1))
+// EnvMap is reserved for the second Pass
+// Refraction and Color are only done for the first Pass
+// SKIP : ($ENVMAP != 0 && ($CORECOLOR == 1 || $REFRACTION == 1))
 
 //==========================================================================//
 //	Common Definitions
@@ -51,11 +51,7 @@
 #include "lux_common_ps_fxc.h"
 
 #include "lux_common_normalmap.h"
-
-// we have an envmap
-#if ENVMAPMODE
 #include "lux_common_envmap.h"
-#endif
 
 //		s0 is Framebuffer
 //		Sampler_BaseTexture		: register(s0);

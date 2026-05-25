@@ -29,6 +29,18 @@
 //==========================================================================//
 //	Unpack Combos
 //==========================================================================//
+#if (ENVMAPMODE > 0)
+    #define ENVMAP 1
+#else
+    #define ENVMAP 0
+#endif
+
+#if (ENVMAPMODE == 2)
+    #define ENVMAPMASK 1
+#else
+    #define ENVMAPMASK 0
+#endif
+
 #if (XBYBASEALPHA > 0)
 	#if (XBYBASEALPHA == 1)
 		#define BLENDTINTBYBASEALPHA 1

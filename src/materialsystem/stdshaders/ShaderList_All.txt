@@ -13,7 +13,6 @@
 // Sorted by Compiletime
 //============================================
 
-lux_black_ps30.fxc
 lux_bloom_ps30.fxc
 lux_blurfilters_ps30.fxc
 lux_blurfilters_vs30.fxc
@@ -53,8 +52,6 @@ lux_emissive_vs30.fxc
 lux_engine_post_ps30.fxc
 lux_eyes_ps30.fxc
 lux_eyes_vs30.fxc
-lux_infected_ps30.fxc
-lux_infected_vs30.fxc
 lux_lightmappedgeneric_bump_ps30.fxc
 lux_lightmappedgeneric_decal_ps30.fxc
 lux_lightmappedgeneric_flashlight_ps30.fxc
@@ -64,18 +61,19 @@ lux_lightmappedreflective_ps30.fxc
 lux_lightmappedreflective_vs30.fxc
 lux_meshoutline_ps30.fxc
 lux_meshoutline_vs30.fxc
-lux_modelshadertest_ps30.fxc
-lux_modelshadertest_vs30.fxc
 lux_model_bump_vs30.fxc
 lux_model_simplified_vs30.fxc
 lux_model_vs30.fxc
 lux_modulate_ps30.fxc
 lux_refract_ps30.fxc
 lux_refract_vs30.fxc
+lux_rimlightpass_ps30.fxc
+lux_rimlightpass_vs30.fxc
 lux_screenspace_ps30.fxc
 lux_screenspace_vs30.fxc
 lux_shatteredglass_ps30.fxc
 lux_shatteredglass_vs30.fxc
+lux_sheenpass_vs30.fxc
 lux_sheenpass_ps30.fxc
 lux_sky_compressed_ps30.fxc
 lux_sky_hdri_ps30.fxc
@@ -85,6 +83,8 @@ lux_sky_simple_ps30.fxc
 lux_spritecard_ps30.fxc
 lux_spritecard_spline_vs30.fxc
 lux_spritecard_vs30.fxc
+lux_ssao_drawnormal_ps30.fxc
+lux_ssao_drawnormal_vs30.fxc
 lux_sprite_ps30.fxc
 lux_sprite_vs30.fxc
 lux_teeth_ps30.fxc
@@ -100,6 +100,10 @@ lux_vertexlitgeneric_bump_ps30.fxc
 lux_vertexlitgeneric_flashlight_ps30.fxc
 lux_vertexlitgeneric_phong_ps30.fxc
 lux_vertexlitgeneric_simple_ps30.fxc
+lux_vertexlitgeneric_asw_simple_ps30.fxc
+lux_vertexlitgeneric_asw_bump_ps30.fxc
+lux_vertexlitgeneric_asw_phong_ps30.fxc
+lux_vertexlitgeneric_asw_flashlight_ps30.fxc
 lux_water_cheap_ps30.fxc
 lux_water_expensive_ps30.fxc
 lux_water_vs30.fxc

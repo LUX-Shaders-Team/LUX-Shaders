@@ -17,8 +17,6 @@
 // Now uses the actual headers!
 #include "../shaderlib/cshader.h"
 #include "../shaderlib/BaseShader.h"
-
-#include "convar.h"
 #include <renderparm.h>
 
 // LUX
@@ -61,7 +59,9 @@ public:
 	void SetPixelShaderConstantFudge( int pixelReg, int constantVar );
 
 	// Sets light direction for pixel shaders.
+#ifndef ASWSDK
 	void SetPixelShaderLightColors( int pixelReg );
+#endif
 
 	// Sets vertex shader texture transforms
 	void SetVertexShaderTextureTranslation( int vertexReg, int translationVar );
@@ -94,8 +94,10 @@ public:
 	void LoadViewportTransformScaledIntoVertexShaderConstant( int vertexReg );
 
 	// Sets up ambient light cube...
+#ifndef ASWSDK
 	void SetAmbientCubeDynamicStateVertexShader( );
 	float GetAmbientLightCubeLuminance( );
+#endif
 
 	// Helpers for dealing with envmaptint
 	void SetEnvMapTintPixelShaderDynamicState( int pixelReg, int tintVar, int alphaVar, bool bConvertFromGammaToLinear = false );
@@ -117,12 +119,20 @@ public:
 	//This pass fills in the areas that passed the alpha test with depth in dest alpha 
 	//by writing only equal depth pixels and only if we should be writing depth to dest alpha
 	void DrawEqualDepthToDestAlpha( void );
-	
+
+#ifdef ASWSDK
+	bool ShouldDrawNormalsForSSAO();
+#endif
+
 	// Stock Functions
 	// I changed the default Register Index here but it's not using the LUX_PS_FLOAT_PROJTEX_COLOR Macro!!
 	void SetFlashLightColorFromState(FlashlightState_t const &state, int nPSRegister = 19, bool bFlashlightNoLambert = false);
 	float ShadowAttenFromState( FlashlightState_t const &state );
 	float ShadowFilterFromState( FlashlightState_t const &state );
+
+#ifdef ASWSDK
+	void SetupUberlightFromState(FlashlightState_t const& state);
+#endif
 
 	//==========================================================================//
 	// LUX ADDITIONS
@@ -161,7 +171,11 @@ public:
 	// Bind Samplers and send constants to the shader for the flashlight.
 	// This is uniform on LUX, which is why we can do this in one function
 	// Returns bFlashlightShadow and doesn't do anything if not in flashlightmode
+#ifdef ASWSDK
+	bool SetupFlashlight(bool* bUberlight = NULL);
+#else
 	bool SetupFlashlight();
+#endif
 
 	// Compute the mipmap count of a texture
 	// This Function assumes a *square* Texture
@@ -174,12 +188,12 @@ public:
 	float4 ComputeTint(const bool bAllowDiffuseModulation, const int var_Alpha);
 
 	// Computes LightmapScaleFactor * SSBumpMathFix and $Alpha * $Alpha2
-	float4 GetModulationConstant(const bool bBrush, const bool bSSBumpMathFix);
+	float4 GetModulationConstant(const bool bBrush, const bool bSSBumpMathFix, const float f1LightmapScaleFactor = 1.0f);
 
 	// Sets float4(LightmapScaleFactor, AlphaModulation) to c1
 	// This is used in SetupDefaultRegisters()
 	// Exposed as separate function as some shaders may want to set their own tint variables
-	void SetModulationConstant(const bool bSSBumpMathFix = false, const bool bBrush = true);
+	void SetModulationConstant(const bool bSSBumpMathFix = false, const bool bBrush = true, const float f1LightmapScaleFactor = 1.0f);
 
 	// Setup all the default things ( tint, lightmap factor, fog, eyepos )
 	void SetupDefaultRegisters(const bool bFog, const bool bEyePos, const int var_Alpha = Alpha, const bool bSSBumpMathFix = false);

@@ -2,7 +2,7 @@
 //
 //	Original D. :	29.10.2024 DMY
 //	Initial D.	:	11.11.2025 DMY
-//	Last Change :	 30.01.2026 DMY
+//	Last Change :	18.05.2026 DMY
 //
 //==========================================================================//
 
@@ -57,7 +57,7 @@ SHADER_INIT_PARAMS()
 	DefaultFloat(EdgeSoftnessEnd, 0.5);
 	DefaultFloat(OutlineAlpha, 1.0);
 
-	if (CVarDeveloper.GetInt() > 0)
+	if (CVarDeveloper() > 0)
 	{
 		if (!IsDefined(BaseTexture) && !GetBool(DistanceAlphaFromDetail))
 		{
@@ -107,6 +107,15 @@ SHADER_INIT
 
 SHADER_DRAW
 {
+#ifdef ASWSDK
+	// Non-Opaque Surface, draw Nothing
+	if (ShouldDrawNormalsForSSAO())
+	{
+		Draw(false);
+		return;
+	}
+#endif
+
 	// Set up some booleans
 	//===============================//
 	bool bHasBaseTexture = IsTextureLoaded(BaseTexture);
@@ -204,7 +213,7 @@ SHADER_DRAW
 		DECLARE_STATIC_PIXEL_SHADER(lux_distancealpha_ps30);
 		SET_STATIC_PIXEL_SHADER_COMBO(MATERIAL_TYPE, nMaterialType);
 		SET_STATIC_PIXEL_SHADER_COMBO(VERTEX_COLORS, bHasVertexColors);
-		SET_STATIC_PIXEL_SHADER_COMBO(DETAILTEXTURE, nDetailMode);
+		SET_STATIC_PIXEL_SHADER_COMBO(DETAILMODE, nDetailMode);
 		SET_STATIC_PIXEL_SHADER_COMBO(SOFT_MASK, GetBool(SoftEdges));
 		SET_STATIC_PIXEL_SHADER_COMBO(OUTLINE, GetBool(Outline));
 		SET_STATIC_PIXEL_SHADER_COMBO(OUTER_GLOW, GetBool(Glow));
@@ -226,7 +235,7 @@ SHADER_DRAW
 		//==========================================================================//
 
 #ifdef DEBUG_FULLBRIGHT2 
-		if (mat_fullbright.GetInt() == 2 && !HasFlag(MATERIAL_VAR_NO_DEBUG_OVERRIDE))
+		if (mat_fullbright() == 2 && !HasFlag(MATERIAL_VAR_NO_DEBUG_OVERRIDE))
 			BindTexture(SAMPLER_BASETEXTURE, TEXTURE_GREY);
 		else
 #endif
@@ -305,7 +314,7 @@ SHADER_DRAW
 
 				// ..1: Up these resolutions, find a dynamic approach for these constants?
 				// ..2: (float), those are integers right now
-				float f1ResScale = max(0.5f, max(1024.0f / nWidth, 768.0f / nHeight));
+				float f1ResScale = MAX(0.5f, MAX(1024.0f / nWidth, 768.0f / nHeight));
 
 				if (bScaleEdges)
 				{

@@ -1,7 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	07.02.2023 DMY
-//	Last Change :	30.01.2026 DMY
+//	Last Change :	18.05.2026 DMY
 //
 //==========================================================================//
 
@@ -10,26 +10,60 @@
 
 // Version Number used to be based on amount of commits
 // Since v1.00 its arbitrary
-ConVar lux_version("lux_version", "1.80");
+ConVar lux_version("lux_version", "1.90d");
 ConVar lux_oldshaders("lux_oldshaders", "0", FCVAR_RELOAD_MATERIALS);
 
 //==========================================================================//
 // Stock ConVars
 //==========================================================================//
 
-// FIXME PRE-RELEASE: Developer, fullbright & mat_specular should be ConVarRefs and since that can't be in global scope, int Functions
-ConVar CVarDeveloper("developer", "0", 0);
-ConVar mat_fullbright("mat_fullbright", "0", FCVAR_CHEAT);
-ConVar mat_specular("mat_specular", "1", 0);
+int CVarDeveloper()
+{
+	static ConVarRef CVar("developer");
+	return CVar.GetInt();
+}
 
-// Used in Water.cpp
-ConVar r_waterforceexpensive("r_waterforceexpensive", "0", FCVAR_ARCHIVE, "Forces the Water Shader to use Expensive Water. This is an Archive ConVar, use with Caution.");
+int mat_fullbright()
+{
+	static ConVarRef CVar("mat_fullbright");
+	return CVar.GetInt();	
+}
+
+int mat_specular()
+{
+	static ConVarRef CVar("mat_specular");
+	return CVar.GetInt();	
+}
 
 // Note that this is separate from the DebugLuxels Shader
 // This one is used for non-Brush Geometry
+int mat_luxels()
+{
 #ifdef DEBUG_LUXELS
-ConVar mat_luxels("mat_luxels", "0", FCVAR_CHEAT);
+	static ConVarRef CVar("mat_luxels");
+	return CVar.GetInt();
+#else
+	return 0;
 #endif
+}
+
+int mat_queue_mode()
+{
+	static ConVarRef CVar("mat_queue_mode");
+	return CVar.GetInt();
+}
+
+int mat_reduceparticles()
+{
+	static ConVarRef CVar("mat_reduceparticles");
+	return CVar.GetInt();
+}
+
+// Used in Cable.cpp
+ConVar rope_min_pixel_diameter("rope_min_pixel_diameter", "2.0", FCVAR_CHEAT);
+
+// Used in Water.cpp
+ConVar r_waterforceexpensive("r_waterforceexpensive", "0", FCVAR_ARCHIVE, "Forces the Water Shader to use Expensive Water. This is an Archive ConVar, use with Caution.");
 
 ConVar mat_disable_lightwarp("mat_disable_lightwarp", "0");
 
@@ -37,11 +71,12 @@ ConVar mat_disable_lightwarp("mat_disable_lightwarp", "0");
 // Now using a copy from the TF2-SDK
 ConVar r_lightmap_bicubic("r_lightmap_bicubic", "0", FCVAR_NONE, "Enable bi-cubic (high quality) lightmap sampling.");
 
-// FIXME: Is this set by the Options Menu or Config.cfg? Why is it a Cheat
-ConVar r_rimlight("r_rimlight", "1", FCVAR_CHEAT);
-
 // Used on Sky Shaders
-ConVar mat_use_compressed_hdr_textures("mat_use_compressed_hdr_textures", "0", NULL);
+ConVar mat_use_compressed_hdr_textures("mat_use_compressed_hdr_textures", "0", FCVAR_NONE);
+
+#ifdef ASWSDK
+ConVar r_flashlightbrightness("r_flashlightbrightness", "0.25", FCVAR_CHEAT);
+#endif
 
 //==========================================================================//
 // General ConVars
@@ -123,7 +158,7 @@ ConVar lux_cable_forcespline("lux_cable_forcespline", "0", FCVAR_CHEAT, "Causes 
 // NOTE: Skybox Bicubic is experimental
 ConVar lux_sky_UseFilter("lux_sky_usefilter", "1", FCVAR_RELOAD_MATERIALS, "By Default(1) RGBs Compressed Textures ( $HDRCompressedTexture ) are filtered, setting this ConVar to 0 disables the Filter.");
 ConVar lux_sky_BicubicFilter("lux_sky_bicubic", "0", FCVAR_RELOAD_MATERIALS, "Use Bicubic instead of Bilinear. Please ClampS and ClampT your Textures when using this.");
-ConVar lux_sky_UseModelMatrix("lux_sky_usemodelmatrix", "0", NULL, "Allows rotation and translation of the Mesh thats used by the Skybox Shader.");
+ConVar lux_sky_UseModelMatrix("lux_sky_usemodelmatrix", "0", FCVAR_NONE, "Allows rotation and translation of the Mesh thats used by the Skybox Shader.");
 
 //==========================================================================//
 // Water Shader
@@ -131,8 +166,8 @@ ConVar lux_sky_UseModelMatrix("lux_sky_usemodelmatrix", "0", NULL, "Allows rotat
 
 // Used in Water.cpp
 ConVar lux_water_projectedtexturesupport("lux_waterflashlightsupport", "1", FCVAR_NONE, "0 = Water Fog can *not* be illuminated by projected Textures.\n"
-	"1 = Waterfog can be illuminated by projected Textures.\n"
-	"ConVar forces $ReceiveProjectedTextures Values.\n"); // FIXME PRE-RELEASE: No it doesn't
+	"1 = Water Fog *can* be illuminated by projected Textures.\n"
+	"ConVar forces $ReceiveProjectedTextures Values.\n");
 
 ConVar lux_water_debugflowmaps("lux_water_debugflowmaps", "0", FCVAR_CHEAT, "Force Draw the FlowMap Results ( Requires a Material Reload.");
 ConVar lux_water_forcefogtype("lux_water_forcefogtype", "0", FCVAR_CHEAT, "Forces Shaders to calculate the HeightFogFactor for Water using the (1) SDK or (2) Alien Swarm Method.");
@@ -181,18 +216,6 @@ ConVar lux_infected_forcerandomisation("lux_infected_forcerandomisation", "0", F
 // Others
 //==========================================================================//
 
-// LUX FIXME: Kill these before release, rn they are only used for tf2c's engine post fallback
-// Default ConVars from Engine Post
-// NOTE: Made these Cheats.
-#ifdef NOLUX
-ConVar mat_screen_blur_override("mat_screen_blur_override", "-1.0", FCVAR_CHEAT);
-ConVar mat_depth_blur_focal_distance_override("mat_depth_blur_focal_distance_override", "-1.0", FCVAR_CHEAT);
-ConVar mat_depth_blur_strength_override("mat_depth_blur_strength_override", "-1.0", FCVAR_CHEAT);
-ConVar mat_grain_scale_override("mat_grain_scale_override", "-1.0", FCVAR_CHEAT);
-ConVar mat_local_contrast_scale_override("mat_local_contrast_scale_override", "0.0", FCVAR_CHEAT);
-ConVar mat_local_contrast_midtone_mask_override("mat_local_contrast_midtone_mask_override", "-1.0", FCVAR_CHEAT);
-ConVar mat_local_contrast_vignette_start_override("mat_local_contrast_vignette_start_override", "-1.0", FCVAR_CHEAT);
-ConVar mat_local_contrast_vignette_end_override("mat_local_contrast_vignette_end_override", "-1.0", FCVAR_CHEAT);
-ConVar mat_local_contrast_edge_scale_override("mat_local_contrast_edge_scale_override", "-1000.0", FCVAR_CHEAT);
-#endif
-
+ConVar lux_emissiveblend_allowopacity("lux_emissiveblend_allowopacity", "0", FCVAR_NONE, "Enables $BaseTexture Opacity to affect Emissive Blend");
+ConVar lux_projtex_shadowfiltersizefix("lux_projtex_shadowfiltersizefix", "0", FCVAR_NONE,
+"When enabled, the ShadowFilterSize is computed based on the Width/Height of the Depth Texture provided by the Engine.\nIn Contrast without, non 1:1 Aspect Ratios won't filter correctly AND sometimes the Engine provides the wrong Resolution in the Struct!");

@@ -54,7 +54,7 @@ const float4 cSizeParams2			: register(LUX_VS_FLOAT_SET1_9);
 // "alpha fade w/ distance"
 #define START_FAR_FADE  (cSizeParams2.x)
 
-// "alpha = 1-min(1,max(0, (dist-start_fade)*factor))"
+// "alpha = 1-MIN(1,MAX(0, (dist-start_fade)*factor))"
 #define FAR_FADE_FACTOR (cSizeParams2.y)
 
 //==========================================================================//
@@ -201,7 +201,7 @@ VS_OUTPUT main( const VS_INPUT v )
 		f1Radius = 0.0f;
 
 	// if the Maximum Size Factor is smaller use that instead
-	f1Radius = min(f1Radius, MAXIMUM_SIZE_FACTOR * f1DistanceToSurface);
+    f1Radius = min(f1Radius, MAXIMUM_SIZE_FACTOR * f1DistanceToSurface);
 
 	// Prepare some extra variables for Orientation
 	// {
@@ -276,7 +276,11 @@ VS_OUTPUT main( const VS_INPUT v )
 	o.ARGB_Color = f4Tint;
 
     o.WorldPos_ProjPosZ.xyz = f3WorldPos;
-    o.WorldPos_ProjPosZ.w = dot(float4(f3WorldPos, 1.0f), cViewProjZ);
+	#if defined(ASWSDK)
+		o.WorldPos_ProjPosZ.w = ProjPos.z;
+	#else
+		o.WorldPos_ProjPosZ.w = dot(float4(f3WorldPos, 1.0f), cViewProjZ);
+	#endif
 
 	// "Map projected position to the refraction texture"
 	float2 f2ScreenPos;

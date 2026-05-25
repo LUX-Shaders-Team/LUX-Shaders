@@ -1,7 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	29.10.2024 DMY
-//	Last Change :	 30.01.2026 DMY
+//	Last Change :	18.02.2026 DMY
 //
 //==========================================================================//
 
@@ -10,7 +10,7 @@
 //==========================================================================//
 // STATIC:	"MATERIAL_TYPE"				"0..3" // Brush, Model, Unlit, Projected Textures
 // STATIC:	"VERTEX_COLORS"				"0..1" // Not for Brushes
-// STATIC:	"DETAILTEXTURE"				"0..3" // Detail, Alpha from Detail, BlendTintByBaseAlpha
+// STATIC:	"DETAILMODE"				"0..3" // Detail, Alpha from Detail, BlendTintByBaseAlpha
 // STATIC:	"SOFT_MASK"					"0..1"
 // STATIC:	"OUTLINE"					"0..1"
 // STATIC:	"OUTER_GLOW"				"0..1"
@@ -53,7 +53,25 @@
 	#define PROJTEX 1
 #endif
 
-// FIXME: Decompress DETAILTEXTURE Combo
+#if (DETAILMODE > 0)
+	#define DETAILTEXTURE 1
+
+	#if (DETAILMODE >= 2)
+		#define DISTANCEALPHAFROMDETAIL 1
+	#else
+		#define DISTANCEALPHAFROMDETAIL 0
+	#endif
+
+	#if (DETAILMODE == 3)
+		#define BLENDTINTBYBASEALPHA 1
+	#else
+		#define BLENDTINTBYBASEALPHA 0
+	#endif
+#else
+	#define DETAILTEXTURE 0
+	#define DISTANCEALPHAFROMDETAIL 0
+	#define BLENDTINTBYBASEALPHA 0
+#endif 
 
 //==========================================================================//
 //	Common Definitions
@@ -206,23 +224,13 @@ float4 main(PS_INPUT i) : COLOR
 	float4 f4BaseTexture = tex2D(Sampler_BaseTexture, f2BaseUV);
 	float f1DistanceAlphaMask = f4BaseTexture.a;
 
-	// ShiroDkxtro2:
-	// More could be done with this,
-	// but due to how DISTANCEALPHAFROMDETAIL
-	// on the original Shader works,
-	// we can't really change this without breaking existing Materials..
-	// Its a very niche feature.
-	// If you want my personal Suggestion on what to change:
-	// Make the Alpha ( Opacity Mask / Signed Distance Field ) 
-	// Come from the Detail Alpha, but DON'T modify the original Alpha
-	#if (DETAILTEXTURE > 0)
+	#if DETAILTEXTURE
 		float4 f4DetailTexture = tex2D(Sampler_DetailTexture, f2DetailUV);
 		f4DetailTexture.xyz *= g_f3DetailTextureTint;
 
-		// This is DISTANCEALPHAFROMDETAIL
-		// In which case, we need to set the Detail Alpha to 1.0f,
-		// as some Blendmodes use it.. Very shortsighted design honestly
-		#if (DETAILTEXTURE > 1)
+		// We need to set the Detail Alpha to 1.0f after using it as actual Alpha.
+		// Some Blendmodes use it. Very shortsighted Design honestly
+		#if DISTANCEALPHAFROMDETAIL
 			f1DistanceAlphaMask = f4DetailTexture.a;
 			f4DetailTexture.a = 1.0f;
 		#endif
@@ -248,7 +256,7 @@ float4 main(PS_INPUT i) : COLOR
 		f1MaskUsed = f1DistanceAlphaMask >= 0.5f;
 
 		// This is odd because when you use DISTANCEALPHAFROMDETAIL, it will *still* mess with BaseTexture Alpha
-		#if (DETAILTEXTURE > 0)
+		#if DISTANCEALPHAFROMDETAIL
 			f4BaseTexture.a *= f1MaskUsed;
 		#else
 			f4BaseTexture.a = f1MaskUsed;
@@ -256,7 +264,7 @@ float4 main(PS_INPUT i) : COLOR
 	#endif
 
 	#if OUTER_GLOW
-		#if (DETAILTEXTURE > 1)
+		#if DISTANCEALPHAFROMDETAIL
 			float4 f4GlowColor = tex2D(Sampler_DetailTexture, f2DetailUV + GLOW_UV_OFFSET);
 		#else
 			float4 f4GlowColor = tex2D(Sampler_BaseTexture, f2BaseUV + GLOW_UV_OFFSET);
@@ -269,17 +277,13 @@ float4 main(PS_INPUT i) : COLOR
 	// Distance Alpha is basically done now
 	// So we can focus on the rest now.
 
-	// Lets start with BlendTintByBaseAlpha
-	// This is on DetailTexture 3 because on the original Shader
-	// ( vertexlit_and_unlit_generic_vs20.fxc )
-	// It would only allow you to have BlendTintByBaseAlpha
-	// if DISTANCEALPHAFROMDETAIL was also true, reusing DetailTexture
+	// On the original Shader ( vertexlit_and_unlit_generic_vs20.fxc )
+	// It would only allow you to have BLENDTINTBYBASEALPHA as long as you also use DISTANCEALPHAFROMDETAIL
+	//  was also true, reusing DetailTexture
 	// means no useless static+1 and a gazillion combos that are unusable
 	// NOTE: GlowColor affects Alpha. This might look wrong with OUTER_GLOW.
-	#if (DETAILTEXTURE == 3)
-	float3	f3TintedBaseTexture	= f4BaseTexture.xyz * g_f3DefaultTint;
-			f3TintedBaseTexture	= lerp(f3TintedBaseTexture, g_f3DefaultTint, g_f1DefaultAlphaFactor);
-			f4BaseTexture.xyz	= lerp(f4BaseTexture.xyz, f3TintedBaseTexture, f4BaseTexture.w);
+	#if BLENDTINTBYBASEALPHA
+		ComputeBlendTintByBaseAlpha(f4BaseTexture, g_f3DefaultTint, g_f1DefaultAlphaFactor);
 	#endif
 
 	// Compute Result. Which is just BaseTexture * Lighting

@@ -1,0 +1,153 @@
+//===================== File of the LUX Shader Project =====================//
+//
+//	Initial D.	:	06.05.2026 DMY
+//	Last Change :	06.05.2026 DMY
+//
+//==========================================================================//
+
+//==========================================================================//
+//	Declare Static Combos
+//==========================================================================//
+// STATIC:	"NORMALMAPS"				"0..2"
+// STATIC:	"BLENDMODULATE"				"0..1"
+// STATIC:	"WRINKLEMAPPING"			"0..1"
+
+//==========================================================================//
+//	Declare Dynamic Combos
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Skipping undesired Combos
+//	The Order of Static Combos and Skips has a drastic Impact on Compile Time!
+//==========================================================================//
+// No Wrinklemaps with Blend Materials or no Normal Maps
+// SKIP: ($NORMALMAPS == 0 && $WRINKLEMAPPING != 0)
+// SKIP: ($NORMALMAPS != 2 && $BLENDMODULATE != 0)
+// SKIP: ($NORMALMAPS == 2 && $WRINKLEMAPPING != 0)
+
+//==========================================================================//
+//	Unpack Combos
+//==========================================================================//
+// NONE
+
+//==========================================================================//
+//	Common Definitions
+//==========================================================================//
+
+#define TONEMAP_SCALE_NONE
+//#define TONEMAP_SCALE_LINEAR
+//#define TONEMAP_SCALE_GAMMA
+
+//==========================================================================//
+//	Constants, Functions, Includes
+//==========================================================================//
+
+sampler Sampler_NormalMap		: register(s0);
+
+#if (NORMALMAPS == 2)
+	sampler Sampler_NormalMap2	: register(s1);
+
+	#if BLENDMODULATE
+		sampler Sampler_BlendModulate : register(s2);
+	#endif
+#elif WRINKLEMAPPING
+	sampler Sampler_BumpCompress : register(s1);
+	sampler Sampler_BumpStretch  : register(s2);
+#endif
+
+//==========================================================================//
+//	PS Input
+//==========================================================================//	
+struct PS_INPUT
+{
+	float4 WorldPos_ProjPosZ	: TEXCOORD0;
+    float4 TexCoords1			: TEXCOORD1;
+	float4 TexCoords2			: TEXCOORD2;
+
+	#if (NORMALMAPS == 2)
+		float BlendWeight		: COLOR;
+	#elif WRINKLEMAPPING
+		float WrinkleWeight		: TEXCOORD3;
+	#endif
+	
+    float SSAOWeight			: TEXCOORD4;
+	
+	float3 Tangent				: TANGENT;
+	float3 Binormal				: BINORMAL;
+	float3 Normal				: NORMAL;
+};
+ 
+//==========================================================================//
+//	PS Entry Point
+//==========================================================================//
+float4 main(PS_INPUT i) : COLOR
+{
+	//	Getting our PS_INPUT
+	//==========================================================================//
+	
+	#if (NORMALMAPS > 0)
+	
+	    float2 f2TexCoord1 = i.TexCoords1.xy;
+		float3x3 xmTBN = float3x3(i.Tangent, i.Binormal, i.Normal);
+		
+		float3 f3NormalTS = tex2D(Sampler_NormalMap, f2TexCoord1).rgb;
+	
+		#if (NORMALMAPS == 2)
+	
+		    float2 f2TexCoord2 = i.TexCoords1.zw;
+			float3 f3NormalTS2 = tex2D(Sampler_NormalMap2, f2TexCoord2).rgb;
+			
+			float f1BlendFactor = i.BlendWeight;
+			#if BLENDMODULATE
+				float4 f4BlendModulateTexture = tex2D(Sampler_BlendModulate, i.TexCoords2.xy);
+	
+				// Stock-Consistency
+				float f1MinBlend = saturate(f4BlendModulateTexture.g - f4BlendModulateTexture.r);
+				float f1MaxBlend = saturate(f4BlendModulateTexture.g + f4BlendModulateTexture.r);
+				f1BlendFactor = smoothstep(f1MinBlend, f1MaxBlend, f1BlendFactor);
+			#endif
+		
+			f3NormalTS = lerp(f3NormalTS, f3NormalTS2, f1BlendFactor);
+	
+		#elif WRINKLEMAPPING
+
+			float f1WrinkleWeight = i.WrinkleWeight;
+		
+			// WrinkleWeight comes in [-1.0, +1.0f] Range
+			// Compression will happen with negative Values and Stretching with positive Values.
+			// Stock Shader does saturate(-WrinkleWeight) and saturate(WrinkleWeight)
+			// I assume the Compiler will 'optimise' this as
+			// min r0.x 0.0f f1WrinkleWeight
+			// max r0.y 0.0f -f1WrinkleWeight
+			// abs r0.y r0.y
+			// Unless it can find an Instruction with _abs (doubt) or _sat
+			// I think mad_sat is a thing?
+			// I doubt the Compiler is smart enough to optimise the Equation we use the Weights on though.. ( it should have 1x MUL and 2x MAD )
+			float f1CompressWeight = saturate(-f1WrinkleWeight); 
+			float f1StretchWeight = saturate(f1WrinkleWeight);
+		
+			// Should sum to 1
+			float f1TextureWeight = 1.0f - f1CompressWeight - f1StretchWeight;
+		
+			// The Textures:
+			float3 f3BumpCompressTexture = tex2D(Sampler_BumpCompress, f2TexCoord1).rgb;
+			float3 f3BumpStretchTexture  = tex2D(Sampler_BumpStretch, f2TexCoord1).rgb;
+		
+			// $BumpMap WrinkleMapping
+			f3NormalTS =  f1TextureWeight  * f3NormalTS;
+			f3NormalTS += f1CompressWeight * f3BumpCompressTexture;
+			f3NormalTS += f1StretchWeight  * f3BumpStretchTexture;
+	
+		#endif
+	
+		// Decompress
+		f3NormalTS = f3NormalTS * 2.0f - 1.0f;
+	
+		float3 f3NormalWS = normalize(mul(f3NormalTS, xmTBN));
+	
+		return float4(f3NormalWS, i.SSAOWeight);
+	#else
+	    return float4(i.Normal, i.SSAOWeight);
+	#endif	
+}

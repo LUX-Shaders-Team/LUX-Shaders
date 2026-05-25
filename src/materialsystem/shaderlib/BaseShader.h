@@ -17,13 +17,17 @@
 #include "materialsystem/imaterialvar.h"
 #include "materialsystem/ishaderapi.h"
 #include "materialsystem/imaterialsystemhardwareconfig.h"
-#include "convar.h"
 #include "ProxyShaderShadow.h"
 #include "ProxyShaderAPI.h"
 
 // Helper Functions ( including FloatX ones ) were moved to CBaseShader
 // So we need this include
 #include "../stdshaders/cpp_floatx.h"
+
+// Need this for ASW
+#ifdef ASWSDK
+#include "../stdshaders/cpp_lux_commandbuilder.h"
+#endif
 
 //-----------------------------------------------------------------------------
 // Macros
@@ -41,6 +45,7 @@ extern bool g_bWaterAlienSwarmFogFactor;
 //-----------------------------------------------------------------------------
 // Helper Function for dll loading
 //-----------------------------------------------------------------------------
+#ifndef ASWSDK
 template<typename T>
 inline T *LoadInterface( const char *module, const char *version, Sys_Flags flags = SYS_NOFLAGS )
 {
@@ -56,6 +61,7 @@ inline T *LoadInterface( const char *module, const char *version, Sys_Flags flag
 
     return nullptr;
 }
+#endif
 
 //-----------------------------------------------------------------------------
 // Forward declarations
@@ -84,10 +90,12 @@ enum ShaderMaterialVars_t
 	Alpha2,
 	AlphaTestReference,
 	ReceiveProjectedTextures,
+	ReceiveProjectedTextureShadows,
 	ProjectedTextureNoLambert,
 	AllowDiffuseModulation,
 	NoTint,
 	DynamicNoDraw,
+	PretendTranslucent,
 	Debug_True,
 
 	NUM_SHADER_MATERIAL_VARS
@@ -139,6 +147,8 @@ enum BlendType_t
 // Allows Shaders to store Data specific to their Materials in the Context Data
 // ( Draw Function Only )
 // Useful for cutting down on the performance Impact of a Shader!
+// NOTE: CBasePerInstanceContextData Definition is provided by IShader.h in ASW
+#ifndef ASWSDK
 class CBasePerMaterialContextData								// shaders can keep per material data in classes descended from this
 {
  public:
@@ -157,17 +167,39 @@ class CBasePerMaterialContextData								// shaders can keep per material data i
 	{
 	}
 };
+#endif
 
 class LUXPerMaterialContextData : public CBasePerMaterialContextData
 {
 public:
-	bool m_bSnapshottingCommands;;
+	bool m_bSnapshottingCommands;
 	
 	FORCEINLINE LUXPerMaterialContextData()
 	{
 		m_bSnapshottingCommands = true;
 	}
 };
+
+#ifdef ASWSDK
+// CBasePerInstanceContextData Definition is provided by IShader.h in ASW
+// However, the actual CommandBuffer used for this ( commandbuilder.h ) has been replaced in LUX by cpp_lux_commandbuilder.h
+// I will use the LUX Commandbuilder for making the Commands and then memcpy the Results into this Thing
+// ASW does something very similar!
+class CPerInstanceContextData : public CBasePerInstanceContextData
+{
+public:
+	CPerInstanceContextData() : m_pCommandBuffer(NULL), m_nSize(0) {}
+	virtual ~CPerInstanceContextData()
+	{
+		if (m_pCommandBuffer)
+		{
+			delete m_pCommandBuffer;
+		}
+	}
+	unsigned char* m_pCommandBuffer;
+	int m_nSize;
+};
+#endif
 
 //-----------------------------------------------------------------------------
 // Base class for Shaders, contains Helper Methods.
@@ -180,6 +212,11 @@ public:
 
 	// Methods inherited from IShader
 	virtual char const* GetFallbackShader( IMaterialVar** params ) const { return 0; }
+
+	// Two Alien Swarm Functions
+	virtual int GetParamCount() const;
+	virtual const ShaderParamInfo_t& GetParamInfo(int paramIndex) const;
+
 	virtual int GetNumParams( ) const;
 	virtual char const* GetParamName( int paramIndex ) const;
 	virtual char const* GetParamHelp( int paramIndex ) const;
@@ -189,10 +226,16 @@ public:
 
 	virtual void InitShaderParams( IMaterialVar** ppParams, const char *pMaterialName );
 	virtual void InitShaderInstance( IMaterialVar** ppParams, IShaderInit *pShaderInit, const char *pMaterialName, const char *pTextureGroupName );
+#ifdef ASWSDK
+	// In Alien Swarm, each Shader receives an additional ** for Per-Instance Command Buffers
+	virtual void DrawElements( IMaterialVar **params, int nModulationFlags, IShaderShadow* pShaderShadow, IShaderDynamicAPI* pShaderAPI,
+								VertexCompressionType_t vertexCompression, CBasePerMaterialContextData **pContext, CBasePerInstanceContextData** pInstanceDataPtr);
+#else
 	virtual void DrawElements( IMaterialVar **params, int nModulationFlags, IShaderShadow* pShaderShadow, IShaderDynamicAPI* pShaderAPI,
 								VertexCompressionType_t vertexCompression, CBasePerMaterialContextData **pContext );
 
 	virtual	const SoftwareVertexShader_t GetSoftwareVertexShader() const { return m_SoftwareVertexShader; }
+#endif
 
 	virtual int ComputeModulationFlags( IMaterialVar** params, IShaderDynamicAPI* pShaderAPI );
 	virtual bool NeedsPowerOfTwoFrameBufferTexture( IMaterialVar **params, bool bCheckSpecificToThisFrame = true ) const;
@@ -213,9 +256,34 @@ public:
 	// Are we currently taking a Snapshot?
 	bool IsSnapshotting() const;
 
+	// This can ONLY be used in Alien Swarm
+#ifdef ASWSDK
+	// Methods related to building per-instance ("PI_") command buffers
+	void PI_BeginCommandBuffer();
+	void PI_EndCommandBuffer();
+	void PI_SetPixelShaderAmbientLightCube(int nFirstRegister);
+	void PI_SetPixelShaderLocalLighting(int nFirstRegister);
+	void PI_SetPixelShaderAmbientLightCubeLuminance(int nFirstRegister);
+	void PI_SetPixelShaderGlintDamping(int nFirstRegister);
+	void PI_SetVertexShaderAmbientLightCube( /*int nFirstRegister*/);
+	void PI_SetModulationPixelShaderDynamicState(int nRegister);
+	void PI_SetModulationPixelShaderDynamicState_LinearColorSpace_LinearScale(int nRegister, float scale);
+	void PI_SetModulationPixelShaderDynamicState_LinearScale(int nRegister, float scale);
+	void PI_SetModulationPixelShaderDynamicState_LinearScale_ScaleInW(int nRegister, float scale);
+	void PI_SetModulationPixelShaderDynamicState_LinearColorSpace(int nRegister);
+	void PI_SetModulationPixelShaderDynamicState_Identity(int nRegister);
+	void PI_SetModulationVertexShaderDynamicState(void);
+	void PI_SetModulationVertexShaderDynamicState_LinearScale(float flScale);
+#endif
+
 	// "Gets at the current Materialvar flags"
 	// ( Returns the int of Flags )
 	int CurrentMaterialVarFlags() const;
+
+#ifdef ASWSDK
+	// Gets at the current materialvar2 flags
+	int CurrentMaterialVarFlags2() const;
+#endif
 
 	// Finds a particular Parameter	(works because the lowest Parameters match the Shader)
 	int FindParamIndex( const char *pName ) const;
@@ -230,7 +298,9 @@ public:
 
 	// "Gets the builder..."
 	// ShiroDkxtro2: This appears to be non-functional, likely a DX8 Leftover.
+#ifndef ASWSDK
 	CMeshBuilder* MeshBuilder();
+#endif
 
 	// Loads a Texture
 	void LoadTexture( int nTextureVar, int nAdditionalCreationFlags = 0 );
@@ -248,6 +318,12 @@ public:
 	// ShiroDkxtro2: This is used internally and for the CommandBuffer/CommandBuilder
 	// There don't appear to be sources for ShaderAPITextureHandle_t, so this is useless for us.
 	ShaderAPITextureHandle_t GetShaderAPITextureBindHandle( int nTextureVar, int nFrameVar, int nTextureChannel = 0 );
+
+	// From Alien Swarm
+#ifdef ASWSDK
+	ShaderAPITextureHandle_t GetShaderAPITextureBindHandle(ITexture* pTexture, int nFrame, int nTextureChannel = 0);
+	void BindVertexTexture(VertexTextureSampler_t vtSampler, int nTextureVar, int nFrame = 0);
+#endif
 
 	// Binds a Texture
 	// Second Samplers here are dead, I was told this was once used by some procedually generated Textures
@@ -273,13 +349,13 @@ public:
 	bool IsWhite( int colorVar );
 
 	// Helper methods for fog
-	void FogToOOOverbright( void );
-	void FogToWhite( void );
-	void FogToBlack( void );
-	void FogToGrey( void );
-	void FogToFogColor( void );
-	void DisableFog( void );
-	void DefaultFog( void );
+	void FogToOOOverbright();
+	void FogToWhite();
+	void FogToBlack();
+	void FogToGrey();
+	void FogToFogColor();
+	void DisableFog();
+	void DefaultFog();
 	
 	// Helpers for alpha blending
 	void EnableAlphaBlending( ShaderBlendFactor_t src, ShaderBlendFactor_t dst );
@@ -292,19 +368,20 @@ public:
 	void SetDefaultBlendingShadowState( int textureVar = -1, bool isBaseTexture = true );
 
 	// Helpers for color modulation
+#ifndef ASWSDK
 	void SetColorState( int colorVar, bool setAlpha = false );
-	bool IsAlphaModulating();
-	bool IsColorModulating();
-	void ComputeModulationColor( float* color );
 	void SetModulationShadowState( int tintVar = -1 );
 	void SetModulationDynamicState( int tintVar = -1 );
 
 	// Loads the identity matrix into the texture
 	void LoadIdentity( MaterialMatrixMode_t matrixMode );
+#endif
+	bool IsAlphaModulating();
 
-	// Loads the camera to world transform
-	void LoadCameraToWorldTransform( MaterialMatrixMode_t matrixMode );
-	void LoadCameraSpaceSphereMapTransform( MaterialMatrixMode_t matrixMode );
+#ifndef ASWSDK
+	bool IsColorModulating();
+#endif
+	void ComputeModulationColor( float* color );
 
 	// Both UsingFlashlight and UsingEdictor only work in the Draw Stage of the Shader
 	bool UsingFlashlight() const;
@@ -322,7 +399,9 @@ public:
 	IShaderDynamicAPI* m_pShaderAPI = NULL;
 
 	int m_nModulationFlags = 0;
+#ifndef ASWSDK
 	CMeshBuilder* m_pMeshBuilder = NULL;
+#endif
 	VertexCompressionType_t m_nVertexCompression = VERTEX_COMPRESSION_NONE;
 	
 	// This requires modification of CShader.h
@@ -584,11 +663,26 @@ public:
 		return m_pShaderAPI && m_pMaterialContextData && m_pMaterialContextData->m_bMaterialVarsChanged;
 	}
 
+#ifndef ASWSDK
 protected:
 	SoftwareVertexShader_t m_SoftwareVertexShader;
-
+#endif
 
 private:
+#ifdef ASWSDK
+
+	// "This is a per-instance state which is handled completely by the system"
+	void PI_SetSkinningMatrices();
+	void PI_SetVertexShaderLocalLighting();
+
+	bool m_bBuildingInstanceCommandBuffer = false;
+	CPerInstanceContextData** m_ppInstanceDataPtr;
+	CPerInstanceContextData* m_pCurrentInstanceCommandBuffer;
+	int m_nCurrentPass;
+
+	// Unfortunate but we need this to temporarily store CommandBuilder Results
+	CommandBuilder_t<512> m_PerInstanceCommands;
+#endif
 	LUXPerMaterialContextData *m_pMaterialContextData;
 };
 
@@ -600,6 +694,16 @@ inline int CBaseShader::CurrentMaterialVarFlags() const
 {
 	return m_ppParams[Flags]->GetIntValue();
 }
+
+//-----------------------------------------------------------------------------
+// Gets at the current materialvar2 flags
+//-----------------------------------------------------------------------------
+#ifdef ASWSDK
+inline int CBaseShader::CurrentMaterialVarFlags2() const
+{
+	return m_ppParams[Flags2]->GetIntValue();
+}
+#endif
 
 //-----------------------------------------------------------------------------
 // Are we currently taking a Snapshot?

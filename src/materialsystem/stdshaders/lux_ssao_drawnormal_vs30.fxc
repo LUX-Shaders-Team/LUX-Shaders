@@ -1,0 +1,270 @@
+//===================== File of the LUX Shader Project =====================//
+//
+//	Initial D.	:	18.05.2026 DMY
+//	Last Change :	18.05.2026 DMY
+//
+//==========================================================================//
+
+// Shader based off lux_model_simplified and lux_brush_simplified
+
+//==========================================================================//
+//	Declare Static Combos
+//==========================================================================//
+//	STATIC:	"BRUSH_OR_DISPLACEMENT"		"0..1"
+//	STATIC: "NORMALMAPS"				"0..2"
+//	STATIC: "BLENDMODULATE"				"0..1"
+//	STATIC:	"NORMALS"					"0..2"
+//  STATIC: "VERTEX_SWAY"				"0..2"
+
+//==========================================================================//
+//	Declare Dynamic Combos
+//==========================================================================//
+//	DYNAMIC: "COMPRESSION"				"0..1"
+//  DYNAMIC: "SKINNING"                 "0..1"
+
+//==========================================================================//
+//	Skipping undesired Combos
+//	The Order of Static Combos and Skips has a drastic Impact on Compile Time!
+//==========================================================================//
+// Only Displacements can have two Normal Maps, or a $BlendModulateTexture
+// Brushes can't have Treesway, they also can't have WrinkleWeights
+// SKIP: ($BRUSH_OR_DISPLACEMENT == 0 && $NORMALMAPS == 2)
+// SKIP: ($BRUSH_OR_DISPLACEMENT == 0 && $BLENDMODULATE != 0)
+// SKIP: ($BRUSH_OR_DISPLACEMENT != 0 && $VERTEX_SWAY != 0)
+// SKIP: ($BRUSH_OR_DISPLACEMENT != 0 && $NORMALS == 2)
+
+//==========================================================================//
+//	Decompress Combos
+//==========================================================================//
+#if (NORMALS == 0)
+	#define VERTEXNORMALS 1
+	#define VERTEXTANGENTS 0
+	#define WRINKLEWEIGHTS 0
+#elif (NORMALS == 1)
+	#define VERTEXNORMALS 1
+	#define VERTEXTANGENTS 1
+	#define WRINKLEWEIGHTS 0
+#elif (NORMALS == 2)
+	#define VERTEXNORMALS 1
+	#define VERTEXTANGENTS 1
+	#define WRINKLEWEIGHTS 1
+#endif
+
+//==========================================================================//
+//	Constants, Functions, Includes
+//==========================================================================//
+
+// Include for all Vertex Shaders
+#include "lux_common_vs_fxc.h"
+
+#if BRUSH_OR_DISPLACEMENT
+	// Brush specific Functions
+	#include "lux_common_vs_brush.h"
+#else
+	// Model specific Functions
+	#include "lux_common_vs_model.h"
+	
+	// Tree Sway
+	#include "lux_common_vs_sway.h"
+#endif
+
+const float3 g_f3ViewDir : register(LUX_VS_FLOAT_SET0_0);
+
+const float4 g_TexCoordTransform1[2] : register(LUX_VS_TEXTURETRANSFORM_01);
+const float4 g_TexCoordTransform2[2] : register(LUX_VS_TEXTURETRANSFORM_02);
+const float4 g_TexCoordTransform3[2] : register(LUX_VS_TEXTURETRANSFORM_03);
+
+//==========================================================================//
+//	VS Input
+//==========================================================================//
+struct VS_INPUT
+{
+    // This is all of the stuff that we ever use
+    float4 vPos                     : POSITION;
+	float4 vBoneWeights             : BLENDWEIGHT;
+	float4 vBoneIndices             : BLENDINDICES;
+    float4 vNormal                  : NORMAL;
+#if BRUSH_OR_DISPLACEMENT
+	float3 vTangentS				: TANGENT;
+	float3 vTangentT				: BINORMAL;
+#else
+	float4 vTangent					: TANGENT;
+#endif
+    float2 vTexCoord0               : TEXCOORD0;
+    float4 vUnusedTexCoord	        : TEXCOORD1;
+    float4 vMorphTexCoord			: TEXCOORD2;
+	float4 vColor                   : COLOR0;
+	float3 vSpecular				: COLOR1;
+
+	// Holds uncompressed TangentS with Binormal Sign ( when not using compression )
+	float4 vUserData				: TANGENT;
+
+	// Position and normal/tangent deltas
+	float4 vPosFlex					: POSITION1;
+	float4 vNormalFlex				: NORMAL1;
+
+	// Morphing
+	float vVertexID					: POSITION2;
+};
+
+//==========================================================================//
+//	VS Output
+//==========================================================================//
+struct VS_OUTPUT
+{
+    float4 ProjPosSetup				: POSITION; 
+	float4 WorldPos_ProjPosZ		: TEXCOORD0;
+    float4 TexCoords1				: TEXCOORD1;
+	float4 TexCoords2				: TEXCOORD2;
+
+	#if (NORMALMAPS == 2)
+		float BlendWeight			: COLOR;
+	#elif WRINKLEWEIGHTS
+		float WrinkleWeight			: TEXCOORD3;
+	#endif
+	
+	float SSAOWeight				: TEXCOORD4;
+	
+	#if (VERTEXTANGENTS || VERTEXNORMALS)
+		float3 Tangent				: TANGENT;
+		float3 Binormal				: BINORMAL;	
+		float3 Normal				: NORMAL;
+	#endif
+};
+
+//==========================================================================//
+//	VS Entry Point
+//==========================================================================//
+VS_OUTPUT main( const VS_INPUT v )
+{
+	VS_OUTPUT o = ( VS_OUTPUT )0;
+
+	//==========================================================================//
+	//	Handle Decompression
+	//==========================================================================//
+
+	float3 f3ObjectNormal;
+	#if BRUSH_OR_DISPLACEMENT
+		DecompressVertexNormal(v.vNormal, f3ObjectNormal);
+	#else
+		#if VERTEXTANGENTS
+			// Tangents are also compressed into the NORMAL Stream
+			// Compressed Verts get Normal, Tangent and Binormal Sign through the NORMAL Stream
+			// Uncompressed Verts get an Uncompressed NORMAL Stream,
+			// with Tangent and Binormal Sign on the TANGENT Stream
+			float4 f4ObjectTangents;
+			DecompressVertexNormal(v.vNormal, v.vTangent, f3ObjectNormal, f4ObjectTangents);
+		#elif VERTEXNORMALS
+			DecompressVertexNormal(v.vNormal, f3ObjectNormal);
+		#endif
+	#endif
+	
+	// Variable needed for Skinning and Morphing
+	float3 f3ObjectPosition = v.vPos.xyz;
+
+	//==========================================================================//
+	//	Handle Morphing
+	//==========================================================================//
+	#if !BRUSH_OR_DISPLACEMENT
+		#if WRINKLEWEIGHTS
+			ApplyMorph( v.vPosFlex, v.vNormalFlex, f3ObjectPosition, f3ObjectNormal, f4ObjectTangents.xyz, o.WrinkleWeight );
+		#elif VERTEXTANGENTS
+			ApplyMorph( v.vPosFlex, v.vNormalFlex, f3ObjectPosition, f3ObjectNormal, f4ObjectTangents.xyz );
+		#elif VERTEXNORMALS
+			ApplyMorph( v.vPosFlex, v.vNormalFlex, f3ObjectPosition, f3ObjectNormal );
+		#else
+			ApplyMorph( v.vPosFlex, f3ObjectPosition );
+		#endif
+	#endif
+	
+	//==========================================================================//
+	//	Handle Rotations and Offsets
+	//==========================================================================//
+	#if (VERTEX_SWAY != 0)
+		f3ObjectPosition = ComputeSway(f3ObjectPosition);
+	#endif
+		
+	float3 f3WorldNormal, f3WorldPos;
+	#if !BRUSH_OR_DISPLACEMENT
+		#if VERTEXTANGENTS
+			float3 f3WorldTangent, f3WorldBinormal;
+			AlignVertexInputs(SKINNING, float4(f3ObjectPosition, 1.0f), f3ObjectNormal, f4ObjectTangents,
+				v.vBoneWeights, v.vBoneIndices, f3WorldPos, f3WorldNormal, f3WorldTangent, f3WorldBinormal);
+		#elif VERTEXNORMALS
+			AlignVertexInputs(SKINNING, float4(f3ObjectPosition, 1.0f), f3ObjectNormal,
+				v.vBoneWeights, v.vBoneIndices, f3WorldPos, f3WorldNormal);
+		#else
+			AlignVertexInputs(SKINNING, float4(f3ObjectPosition, 1.0f),
+				v.vBoneWeights, v.vBoneIndices, f3WorldPos);
+		#endif
+	#else
+		// For WorldPos
+	    AlignInputWithOffset(f3ObjectPosition, f3WorldPos);
+	
+		#if VERTEXNORMALS
+			AlignInputWithoutOffset(f3ObjectNormal, f3WorldNormal);
+		#endif
+
+		#if VERTEXTANGENTS
+			float3 f3ObjectTangent = v.vTangentS.xyz;
+			float3 f3ObjectBinormal = v.vTangentT.xyz;
+	
+			float3 f3WorldTangent, f3WorldBinormal;
+			AlignInputWithoutOffset(f3ObjectTangent, f3WorldTangent);
+			AlignInputWithoutOffset(f3ObjectBinormal, f3WorldBinormal);
+		#endif
+	#endif
+	
+	//==========================================================================//
+	//	VS Output
+	//==========================================================================//
+	// Transform into Projection Space ( Clip Space )
+	// This will flatten the geometrical Position into a 2D-Plane
+	float4 f4ProjPos = mul(float4(f3WorldPos, 1.0f), cViewProj);
+	o.ProjPosSetup = FixHPO(f4ProjPos); // Apply Half-Pixel Offset Fix
+	
+	// TEXCOORD0
+	// Set WorldPos and compute Depth
+	o.WorldPos_ProjPosZ.xyz = f3WorldPos;
+	#if defined(ASWSDK)
+		o.WorldPos_ProjPosZ.w = f4ProjPos.z;
+	#else
+		o.WorldPos_ProjPosZ.w = dot(float4(f3WorldPos, 1.0f), cViewProjZ);
+	#endif
+
+	// Stuffing 1.0f into .zw so all Components of the TexCoord Transform influence the UV
+	float4 f4UnmodifiedTexCoord = float4(v.vTexCoord0.xy, 1.0f, 1.0f);
+
+	// TEXCOORD1
+	#if (NORMALMAPS >= 1)
+		o.TexCoords1.x = dot(f4UnmodifiedTexCoord, g_TexCoordTransform1[0]);
+		o.TexCoords1.y = dot(f4UnmodifiedTexCoord, g_TexCoordTransform1[1]);
+	
+		#if (NORMALMAPS >= 2)
+			o.TexCoords1.z = dot(f4UnmodifiedTexCoord, g_TexCoordTransform2[0]);
+			o.TexCoords1.w = dot(f4UnmodifiedTexCoord, g_TexCoordTransform2[1]);
+	
+			#if BLENDMODULATE
+				o.TexCoords2.x = dot(f4UnmodifiedTexCoord, g_TexCoordTransform3[0]);
+				o.TexCoords2.y = dot(f4UnmodifiedTexCoord, g_TexCoordTransform3[1]);
+			#endif
+		#endif
+	#endif
+	
+	// TECOORD4 : Always	
+	o.SSAOWeight = dot(g_f3ViewDir, f3WorldPos - g_f3EyePos);
+	
+	// TANGENT, BINORMAL, NORMAL
+	#if VERTEXTANGENTS
+		o.Tangent = f3WorldTangent;
+		o.Binormal = f3WorldBinormal;
+		o.Normal.xyz = f3WorldNormal;
+	#elif VERTEXNORMALS
+		o.Normal.xyz = f3WorldNormal;
+	#endif
+	
+	#if (NORMALMAPS == 2)
+		o.BlendWeight = v.vColor.a;
+	#endif
+    return o;
+}

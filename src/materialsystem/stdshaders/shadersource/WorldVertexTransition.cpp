@@ -1,12 +1,16 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	20.01.2023 DMY
-//	Last Change :	 30.01.2026 DMY
+//	Last Change :	23.05.2026 DMY
 //
 //==========================================================================//
 
 // Commonly Shared Definitions, Defines and Data for all Shaders
 #include "../cpp_lux_shared.h"
+
+#ifdef ASWSDK
+#include "renderpasses/SSAODrawNormalPass.h"
+#endif
 
 // Includes for Shaderfiles...
 #include "lux_worldvertextransition_simple_ps30.inc"
@@ -38,6 +42,7 @@ class WorldVertexTransitionContext : public LUXPerMaterialContextData
 public:
 	ShrinkableCommandBuilder_t<5000> m_StaticCmds;
 	CommandBuilder_t<1000> m_SemiStaticCmds;
+	float f1LightmapScaleFactor = 1.0f; // Only used on ASW
 
 	// Snapshot / Dynamic State
 	BlendType_t m_nBlendType = BT_NONE;
@@ -45,9 +50,9 @@ public:
 
 	// Everything related to constants
 
-	WorldVertexTransitionContext(CBaseShader* pShader)
-		: m_SemiStaticCmds(pShader),
-		m_StaticCmds(pShader)
+	WorldVertexTransitionContext(IMaterialVar** ppParams)
+		: m_SemiStaticCmds(ppParams),
+		m_StaticCmds(ppParams)
 	{
 	}
 };
@@ -88,6 +93,7 @@ BEGIN_SHADER_PARAMS
 	Declare_NormalTextureParameters()
 	Declare_DisplacementBump()
 	Declare_NoDiffuseBumpLighting()
+	SHADER_PARAM(BumpMask, SHADER_PARAM_TYPE_TEXTURE, "", "[RGB] Third Normal Map that is blended from using the Alpha Channel of this Texture.\n[A] Blendfactor for $BumpMap and $BumpMap2 & default SpecularMask without other EnvMapMask Parameters.\n")
 
 	// Detail
 	Declare_DetailTextureParameters()
@@ -124,6 +130,28 @@ BEGIN_SHADER_PARAMS
 	Declare_SeamlessParameters()
 	SHADER_PARAM(DistanceAlpha, SHADER_PARAM_TYPE_BOOL, "", "Cheap edge filtering technique for raster images, great for UI elements, foliage, chain link fences, grates, and more. (Note: $DistanceAlpha is not implemented in WVT, using this Parameter a causes fallback to the DistanAlpha shader).")
 END_SHADER_PARAMS
+
+#ifdef ASWSDK
+void WVT_SetupSSAODrawNormalVars(SSAODrawNormalPass_Vars_t& SSAODrawNormalVars)
+{
+	SSAODrawNormalVars.m_bIsModel = false;
+
+	SSAODrawNormalVars.m_nBumpMap = BumpMap;
+	SSAODrawNormalVars.m_nBumpMapFrame = BumpFrame;
+	SSAODrawNormalVars.m_nBumpMapTransform = BumpTransform;
+
+	SSAODrawNormalVars.m_nBumpMap2 = BumpMap2;
+	SSAODrawNormalVars.m_nBumpMapFrame2 = BumpFrame2;
+	SSAODrawNormalVars.m_nBumpMapTransform2 = BumpTransform2;
+
+	SSAODrawNormalVars.m_nBlendModulateTexture = BlendModulateTexture;
+	SSAODrawNormalVars.m_nBlendModulateFrame = BlendMaskFrame;
+	SSAODrawNormalVars.m_nBlendModulateTransform = BlendMaskTransform;
+
+	// Need this for $BaseTextureTransform
+	SSAODrawNormalVars.BaseVars.InitVars(BaseTexture, Frame, BaseTextureTransform);
+}
+#endif
 
 SHADER_INIT_PARAMS()
 {
@@ -184,7 +212,7 @@ SHADER_INIT_PARAMS()
 		// This is a new Feature to this Shader
 		// So I'm not hacking in Support for Valve created Shenanigans.
 		// Abide by these Rules and we won't have a Spaghetti.
-		if (!(IsDefined(BumpMap) || IsDefined(BumpMap2)) && CVarDeveloper.GetInt() > 0)
+		if (!(IsDefined(BumpMap) || IsDefined(BumpMap2)) && CVarDeveloper() > 0)
 		{
 			if (IsDefined(BaseMapAlphaPhongMask) && GetBool(BaseMapAlphaPhongMask))
 			{
@@ -289,6 +317,7 @@ SHADER_INIT
 	LoadTexture(BaseTexture2, TEXTUREFLAGS_SRGB);
 	LoadBumpMap(BumpMap);
 	LoadBumpMap(BumpMap2);
+	LoadBumpMap(BumpMask);
 
 	// ~Stock-Consistency~
 	// This is no longer done?
@@ -416,11 +445,21 @@ SHADER_INIT
 // Virtual Void Override for Context Data
 WorldVertexTransitionContext* CreateMaterialContextData() override
 {
-	return new WorldVertexTransitionContext(this);
+	return new WorldVertexTransitionContext(NULL);
 }
 
 SHADER_DRAW
 {
+#ifdef ASWSDK
+	if (ShouldDrawNormalsForSSAO())
+	{
+		SSAODrawNormalPass_Vars_t Vars;
+		WVT_SetupSSAODrawNormalVars(Vars);
+		SSAONormalPass_Shader_Draw(this, pShaderShadow, pShaderAPI, Vars);
+		return;
+	}
+#endif
+
 	// Get Context Data. BaseShader handles creation for us, using the CreateMaterialContextData() virtual
 	auto* pContextData = GetMaterialContextData<WorldVertexTransitionContext>(pContextDataPtr);
 //		auto& StaticCmds = pContextData->m_StaticCmds;
@@ -495,6 +534,9 @@ SHADER_DRAW
 	bool bHasEnvMapMask2 = bHasEnvMap && IsTextureLoaded(EnvMapMask2);
 	bool bAnyEnvMapMask = bHasEnvMapMask || bHasEnvMapMask2;
 
+	// Basic Compatibility with $BumpMask so HL2 Canals and Portal aren't as broken
+	bool bHasBumpMask = !bHasPhong && bHasNormalTexture && bHasNormalTexture2 && IsTextureLoaded(BumpMask);
+
 	// The first real Feature of this Shader..
 	bool bHasBlendModulateTexture = IsTextureLoaded(BlendModulateTexture);
 
@@ -516,7 +558,7 @@ SHADER_DRAW
 		//	2 = $EnvMap + $EnvMapMask
 		//  3 = Same as 1 + PCC
 		//  4 = Same as 2 + PCC
-		int nEnvMapMode = bHasEnvMap + bAnyEnvMapMask + 2 * bPCC;
+		int nEnvMapMode = bHasEnvMap + bPCC + 2 * bAnyEnvMapMask;
 
 		// 1 = SelfIllum + SelfIllumMask
 		// 2 = $SelfIllum_EnvMapMask_Alpha
@@ -622,6 +664,9 @@ SHADER_DRAW
 			EnableSampler(SHADER_SAMPLER6, false);
 			EnableSampler(SHADER_SAMPLER7, false);
 		}
+		else if(bHasBumpMask)
+			EnableSampler(SHADER_SAMPLER6, false);
+
 
 		EnableSampler(bHasBlendModulateTexture, SHADER_SAMPLER8, false);
 
@@ -680,7 +725,8 @@ SHADER_DRAW
 			DECLARE_STATIC_PIXEL_SHADER(lux_worldvertextransition_flashlight_ps30);
 			SET_STATIC_PIXEL_SHADER_COMBO(BLENDMODULATETEXTURE, bHasBlendModulateTexture);
 			SET_STATIC_PIXEL_SHADER_COMBO(EXPONENTTEXTURE, nExponentTexture);
-			SET_STATIC_PIXEL_SHADER_COMBO(BUMPMAPPED, bAnyNormalTexture + bHasSSBump);
+			SET_STATIC_PIXEL_SHADER_COMBO(BUMPMAPPED, bAnyNormalTexture + bHasSSBump + 2 * bHasPhong);
+			SET_STATIC_PIXEL_SHADER_COMBO(BUMPMASK, bHasBumpMask);
 			SET_STATIC_PIXEL_SHADER_COMBO(DETAILTEXTURE, nDetailCombo);
 			SET_STATIC_PIXEL_SHADER_COMBO(XBYBASEALPHA, bBlendTintByBaseAlpha + 2 * bDesaturateWithBaseAlpha);
 			SET_STATIC_PIXEL_SHADER(lux_worldvertextransition_flashlight_ps30);
@@ -708,6 +754,8 @@ SHADER_DRAW
 				SET_STATIC_PIXEL_SHADER_COMBO(XBYBASEALPHA, bBlendTintByBaseAlpha + 2 * bDesaturateWithBaseAlpha);
 				SET_STATIC_PIXEL_SHADER_COMBO(DETAILTEXTURE, nDetailCombo);
 				SET_STATIC_PIXEL_SHADER_COMBO(SSBUMP, bHasSSBump);
+				SET_STATIC_PIXEL_SHADER_COMBO(BUMPMASK, bHasBumpMask);
+				SET_STATIC_PIXEL_SHADER_COMBO(LIGHTWARPTEXTURE, bHasLightWarpTexture);
 				SET_STATIC_PIXEL_SHADER(lux_worldvertextransition_bump_ps30);
 			}
 			else
@@ -718,9 +766,17 @@ SHADER_DRAW
 				SET_STATIC_PIXEL_SHADER_COMBO(SELFILLUMMODE, nSelfIllumMode);
 				SET_STATIC_PIXEL_SHADER_COMBO(XBYBASEALPHA, bBlendTintByBaseAlpha + 2 * bDesaturateWithBaseAlpha);
 				SET_STATIC_PIXEL_SHADER_COMBO(DETAILTEXTURE, nDetailCombo);
+				SET_STATIC_PIXEL_SHADER_COMBO(LIGHTWARPTEXTURE, bHasLightWarpTexture);
 				SET_STATIC_PIXEL_SHADER(lux_worldvertextransition_simple_ps30);
 			}
 		}
+
+#ifdef ASWSDK
+		// LightmapScaleFactor is passed on via IShaderShadow instead of IShaderDynamicAPI
+		// The way LUX was designed, this is passed on with some other Control Data
+		// Store it so we can pack it together later
+		pContextData->f1LightmapScaleFactor = pShaderShadow->GetLightMapScaleFactor();
+#endif
 	}
 
 	//==========================================================================//
@@ -733,12 +789,6 @@ SHADER_DRAW
 
 		// Instruct the Buffer to set an End Point
 //		StaticCmds.End();
-
-		// Set the Buffer back to its original ( Empty ) State
-		SemiStaticCmds.Reset(this);
-
-		// Instruct the Buffer to set an End Point
-		SemiStaticCmds.End();
 	}
 
 	//==========================================================================//
@@ -747,7 +797,7 @@ SHADER_DRAW
 	if(MaterialVarsChanged())
 	{
 		// Set the Buffer back to its original ( Empty ) State
-		SemiStaticCmds.Reset(this);
+		SemiStaticCmds.Reset(params);
 
 		//==========================================================================//
 		// Bind StandardTextures
@@ -844,6 +894,8 @@ SHADER_DRAW
 				SemiStaticCmds.BindTexture(SHADER_SAMPLER1, BaseTexture2, Frame);
 			else if (bHasBaseTexture2)
 				SemiStaticCmds.BindTexture(SHADER_SAMPLER1, BaseTexture2, Frame2);
+			else
+				SemiStaticCmds.BindTexture(SHADER_SAMPLER1, BaseTexture, Frame2); // Fallback for Materials with $BumpMap2 but no $BaseTexture2
 		}
 
 		if (bAnyNormalTexture)
@@ -884,6 +936,8 @@ SHADER_DRAW
 			else
 				SemiStaticCmds.BindTexture(SHADER_SAMPLER7, PhongExponentTexture, PhongExponentTextureFrame);
 		}
+		else if(bHasBumpMask)
+			SemiStaticCmds.BindTexture(SHADER_SAMPLER6, BumpMask, -1); // No Frame-Parameter to keep it simple
 
 		if(bHasBlendModulateTexture)
 			SemiStaticCmds.BindTexture(SHADER_SAMPLER8, BlendModulateTexture, BlendMaskFrame);
@@ -1042,10 +1096,11 @@ SHADER_DRAW
 		// all shadow state blocks will be re-run, so that's ok"
 		// So don't need to worry about LightmapScaleFactor,
 		// different for $color2, Proxies won't cause a Command Buffer refresh?
+		// NOTE: LightmapScaleFactor only used in ASW
 		bool bIsBrush = true;
 		bool bApplySSBumpMathFix = bHasSSBump && GetBool(SSBumpMathFix);
 		float4 f4ModulationConstant = GetModulationConstant(bIsBrush, bApplySSBumpMathFix);
-		SemiStaticCmds.SetPixelShaderConstant(LUX_PS_FLOAT_MODULATIONCONSTANTS, f4ModulationConstant);
+		SemiStaticCmds.SetPixelShaderConstant(LUX_PS_FLOAT_MODULATIONCONSTANTS, f4ModulationConstant, pContextData->f1LightmapScaleFactor);
 
 		// c11 - Camera Position
 		SemiStaticCmds.SetPixelShaderConstant_EyePos(LUX_PS_FLOAT_CAMERAPOSITION);
@@ -1235,8 +1290,6 @@ SHADER_DRAW
 			if (lux_disablefast_lightwarp.GetBool())
 				bHasLightWarpTexture = false;
 #endif
-			if(bHasLightWarpTexture)
-				BBools[LUX_PS_BOOL_LIGHTWARPTEXTURE] = true;
 		}
 
 		// b4, b5, b6, b7, b8, b9, b10, b11
@@ -1398,14 +1451,14 @@ SHADER_DRAW
 #endif
 
 #ifdef DEBUG_LUXELS
-		if (mat_luxels.GetBool())
+		if (mat_luxels())
 		{
 			BindTexture(SAMPLER_LIGHTMAP, TEXTURE_DEBUG_LUXELS);
 		}
 #endif
 
 #ifdef DEBUG_FULLBRIGHT2 
-		if (mat_fullbright.GetInt() == 2 && !HasFlag(MATERIAL_VAR_NO_DEBUG_OVERRIDE))
+		if (mat_fullbright() == 2 && !HasFlag(MATERIAL_VAR_NO_DEBUG_OVERRIDE))
 		{
 			BindTexture(SHADER_SAMPLER0, TEXTURE_GREY);
 			BindTexture(SHADER_SAMPLER1, TEXTURE_GREY);

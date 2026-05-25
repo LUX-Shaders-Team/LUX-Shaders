@@ -1,12 +1,16 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	20.01.2023 DMY
-//	Last Change :	 30.01.2026 DMY
+//	Last Change :	23.05.2026 DMY
 //
 //==========================================================================//
 
 // Commonly Shared Definitions, Defines and Data for all Shaders
 #include "../cpp_lux_shared.h"
+
+#ifdef ASWSDK
+#include "renderpasses/SSAODrawNormalPass.h"
+#endif
 
 #include "renderpasses/EmissiveBlend.h"
 
@@ -39,6 +43,7 @@ class LightmappedGenericContext : public LUXPerMaterialContextData
 public:
 	ShrinkableCommandBuilder_t<5000> m_StaticCmds;
 	CommandBuilder_t<1000> m_SemiStaticCmds;
+	float f1LightmapScaleFactor = 1.0f; // Only used on ASW
 
 	// Snapshot / Dynamic State
 	BlendType_t m_nBlendType = BT_NONE;
@@ -46,9 +51,9 @@ public:
 
 	// Everything related to constants
 
-	LightmappedGenericContext(CBaseShader* pShader)
-		: m_SemiStaticCmds(pShader),
-		m_StaticCmds(pShader)
+	LightmappedGenericContext(IMaterialVar** ppParams)
+		: m_SemiStaticCmds(ppParams),
+		m_StaticCmds(ppParams)
 	{
 	}
 };
@@ -99,6 +104,19 @@ BEGIN_SHADER_PARAMS
 	Declare_EmissiveBlendParameters()
 END_SHADER_PARAMS
 
+#ifdef ASWSDK
+void LMG_SetupSSAODrawNormalVars(SSAODrawNormalPass_Vars_t& SSAODrawNormalVars)
+{
+	SSAODrawNormalVars.m_bIsModel = false;
+	SSAODrawNormalVars.m_nBumpMap = BumpMap;
+	SSAODrawNormalVars.m_nBumpMapFrame = BumpFrame;
+	SSAODrawNormalVars.m_nBumpMapTransform = BumpTransform;
+
+	// Need this for $BaseTextureTransform
+	SSAODrawNormalVars.BaseVars.InitVars(BaseTexture, Frame, BaseTextureTransform);
+}
+#endif
+
 void LMG_SetupEmissiveBlendVars(EmissiveBlend_Vars_t &EmissiveVars)
 {
 	// Emissive Blend Params
@@ -108,7 +126,11 @@ void LMG_SetupEmissiveBlendVars(EmissiveBlend_Vars_t &EmissiveVars)
 	EmissiveVars.SelfIllum.InitVars(SelfIllumTexture, SelfIllumTextureFrame);
 
 	// DetailBlendMode 5 and 6 are handled here, since it simplifies our Shaders
-	EmissiveVars.Detail.InitVars(Detail, DetailFrame, DetailTextureTransform, DetailScale, DetailBlendMode, DetailTint, DetailBlendFactor);
+	EmissiveVars.Detail.InitVars(Detail, DetailFrame, DetailTextureTransform, DetailScale, DetailBlendMode, DetailBlendFactor);
+
+	// $DetailTint is linear on LightmappedGeneric
+	// It is GammaToLinear on VertexLitGeneric
+	EmissiveVars.Detail.m_f3DetailTint = GetFloat3(DetailTint);
 
 	// Minimum Light and Transform Fallbacks
 	EmissiveVars.Base.InitVars(BaseTexture, Frame, BaseTextureTransform);
@@ -207,7 +229,7 @@ SHADER_INIT_PARAMS()
 		// This is a new Feature to this Shader
 		// So I'm not hacking in Support for Valve created Shenanigans.
 		// Abide by these Rules and we won't have a Spaghetti.
-		if (!IsDefined(BumpMap) && CVarDeveloper.GetInt() > 0)
+		if (!IsDefined(BumpMap) && CVarDeveloper() > 0)
 		{
 			if (IsDefined(BaseMapAlphaPhongMask) && GetBool(BaseMapAlphaPhongMask))
 			{
@@ -439,11 +461,21 @@ SHADER_INIT
 // Virtual Void Override for Context Data
 LightmappedGenericContext* CreateMaterialContextData() override
 {
-	return new LightmappedGenericContext(this);
+	return new LightmappedGenericContext(NULL);
 }
 
 SHADER_DRAW
 {
+#ifdef ASWSDK
+	if (ShouldDrawNormalsForSSAO())
+	{
+		SSAODrawNormalPass_Vars_t Vars;
+		LMG_SetupSSAODrawNormalVars(Vars);
+		SSAONormalPass_Shader_Draw(this, pShaderShadow, pShaderAPI, Vars);
+		return;
+	}
+#endif
+
 	// Get Context Data. BaseShader handles creation for us, using the CreateMaterialContextData() virtual
 	auto* pContextData = GetMaterialContextData<LightmappedGenericContext>(pContextDataPtr);
 //	auto& StaticCmds = pContextData->m_StaticCmds;
@@ -513,8 +545,10 @@ SHADER_DRAW
 		// Purpose : Int to tell the Shader what Mask to use.
 		// 0 = Nothing
 		// 1 = $EnvMap - Mask determined through abs(0||1 - Mask)
-		// 2 = $EnvMap + $EnvMapMask
-		int nEnvMapMode = bHasEnvMap + bHasEnvMapMask + 2 * bPCC;
+		// 2 = $EnvMap + PCC
+		// 3 = $EnvMap + $EnvMapMask
+		// 4 = $EnvMap + $EnvMapMask + PCC
+		int nEnvMapMode = bHasEnvMap + bPCC + 2 * bHasEnvMapMask;
 
 		// 1 = SelfIllum + SelfIllumMask
 		// 2 = $SelfIllum_EnvMapMask_Alpha
@@ -601,6 +635,11 @@ SHADER_DRAW
 		// s11 - Lightmap. sRGB when LDR
 		EnableSampler(!bProjTex, SAMPLER_LIGHTMAP, !IsHDREnabled());
 
+#ifdef ASWSDK
+		// s12 - SSAO Rendertarget
+		EnableSampler(SHADER_SAMPLER12, true);
+#endif
+
 		// s13 - $SelfIllumMask. Not sRGB
 		EnableSampler(bSelfIllum && !GetBool(SelfIllum_EnvMapMask_Alpha), SAMPLER_SELFILLUM, false);
 
@@ -669,6 +708,7 @@ SHADER_DRAW
 			SET_STATIC_PIXEL_SHADER_COMBO(ENVMAPMODE, nEnvMapMode);
 			SET_STATIC_PIXEL_SHADER_COMBO(XBYBASEALPHA, bBlendTintByBaseAlpha + 2 * bDesaturateWithBaseAlpha);
 			SET_STATIC_PIXEL_SHADER_COMBO(SSBUMP, bHasSSBump);
+			SET_STATIC_PIXEL_SHADER_COMBO(LIGHTWARPTEXTURE, bHasLightWarpTexture);
 			SET_STATIC_PIXEL_SHADER(lux_lightmappedgeneric_bump_ps30);
 		}
 		else
@@ -678,8 +718,16 @@ SHADER_DRAW
 			SET_STATIC_PIXEL_SHADER_COMBO(SELFILLUMMODE, nSelfIllumMode);
 			SET_STATIC_PIXEL_SHADER_COMBO(ENVMAPMODE, nEnvMapMode);
 			SET_STATIC_PIXEL_SHADER_COMBO(XBYBASEALPHA, bBlendTintByBaseAlpha + 2 * bDesaturateWithBaseAlpha);
+			SET_STATIC_PIXEL_SHADER_COMBO(LIGHTWARPTEXTURE, bHasLightWarpTexture);
 			SET_STATIC_PIXEL_SHADER(lux_lightmappedgeneric_simple_ps30);
 		}
+
+#ifdef ASWSDK
+		// LightmapScaleFactor is passed on via IShaderShadow instead of IShaderDynamicAPI
+		// The way LUX was designed, this is passed on with some other Control Data
+		// Store it so we can pack it together later
+		pContextData->f1LightmapScaleFactor = pShaderShadow->GetLightMapScaleFactor();
+#endif
 	}
 
 	//==========================================================================//
@@ -694,7 +742,7 @@ SHADER_DRAW
 //		StaticCmds.End();
 
 		// Set the Buffer back to its original ( Empty ) State
-		SemiStaticCmds.Reset(this);
+		SemiStaticCmds.Reset(params);
 
 		// Instruct the Buffer to set an End Point
 		SemiStaticCmds.End();
@@ -706,7 +754,7 @@ SHADER_DRAW
 	SEMI_STATIC_COMMANDS
 	{
 		// Set the Buffer back to its original ( Empty ) State
-		SemiStaticCmds.Reset(this);
+		SemiStaticCmds.Reset(params);
 		
 		//==========================================================================//
 		// Bind StandardTextures
@@ -783,9 +831,10 @@ SHADER_DRAW
 		// all shadow state blocks will be re-run, so that's ok"
 		// So don't need to worry about LightmapScaleFactor,
 		// different for $color2, Proxies won't caues a Command Buffer refresh.
+		// NOTE: LightmapScaleFactor only used in ASW
 		bool bIsBrush = true;
 		bool bApplySSBumpMathFix = bHasSSBump && GetBool(SSBumpMathFix);
-		float4 f4ModulationConstant = GetModulationConstant(bIsBrush, bApplySSBumpMathFix);
+		float4 f4ModulationConstant = GetModulationConstant(bIsBrush, bApplySSBumpMathFix, pContextData->f1LightmapScaleFactor);
 		SemiStaticCmds.SetPixelShaderConstant(LUX_PS_FLOAT_MODULATIONCONSTANTS, f4ModulationConstant);
 
 		// c11 - Camera Position
@@ -834,7 +883,7 @@ SHADER_DRAW
 				f4SelfIllumFresnelTerms.y = (f1Max != 0.0f) ? (f1Min / f1Max) : 0.0f;
 				f4SelfIllumFresnelTerms.x = 1.0f - f4SelfIllumFresnelTerms.y;
 				f4SelfIllumFresnelTerms.z = f1Exp;
-				f4SelfIllumFresnelTerms.w = Max(f1Max, 0.0f);
+				f4SelfIllumFresnelTerms.w = MAX(f1Max, 0.0f);
 
 				// This saves a multiply in the Shader
 				f4SelfIllumTint_Scale.rgb *= f4SelfIllumFresnelTerms.w;
@@ -997,6 +1046,14 @@ SHADER_DRAW
 		// s14 - $EnvMap
 		BindTexture(bHasEnvMap, SAMPLER_ENVMAPTEXTURE, EnvMap, EnvMapFrame);
 
+#ifdef ASWSDK
+		ITexture* pAOTexture = pShaderAPI->GetTextureRenderingParameter(TEXTURE_RENDERPARM_AMBIENT_OCCLUSION);
+		if (pAOTexture)
+			BindTexture(SHADER_SAMPLER12, pAOTexture);
+		else
+			pShaderAPI->BindStandardTexture(SHADER_SAMPLER12, TEXTURE_WHITE);
+#endif
+
 		// Binds Textures and sends Flashlight Constants
 		// Returns bFlashlightShadows
 		bool bFlashlightShadows = SetupFlashlight();
@@ -1009,12 +1066,28 @@ SHADER_DRAW
 		if (bHasEnvMap || bDesaturateWithBaseAlpha || bHasPhong && GetBool(BaseMapLuminancePhongMask))
 			SetLuminanceGammaConstant(LUX_PS_FLOAT_LUMINANCE_GAMMA);
 
+#ifdef ASWSDK
+		pShaderAPI->SetScreenSizeForVPOS(LUX_PS_FLOAT_ASW_SCREENSIZE);
+
+		float4 cSSAOControls = 1.0f;
+
+		// Some duplicate Code here, FlashlightState has an Ambient Occlusion Factor, so we have to get it
+		if (bProjTex)
+		{
+			ITexture* pFlashlightDepthTexture;
+			FlashlightState_t FlashlightState;
+			VMatrix xmWorldToTexture;
+			FlashlightState = pShaderAPI->GetFlashlightStateEx(xmWorldToTexture, &pFlashlightDepthTexture);
+			cSSAOControls.x *= FlashlightState.m_flAmbientOcclusion;
+		}
+
+		cSSAOControls.x *= GetFloat(AmbientOcclusion);
+		cSSAOControls.x = fxsaturate(cSSAOControls.x); // Make sure this doesn't go out of Range
+		pShaderAPI->SetPixelShaderConstant(LUX_PS_FLOAT_ASW_SSAOCONTROLS, cSSAOControls);
+#endif
+
 		// Prepare boolean array, yes we need to use BOOL
 		BOOL BBools[REGISTER_BOOL_MAX] = { false };
-
-		// b1
-		if(bHasLightWarpTexture)
-			BBools[LUX_PS_BOOL_LIGHTWARPTEXTURE] = true;
 
 		// b4, b5, b6, b7, b8, b9, b10, b11
 		if (bHasPhong)
@@ -1163,14 +1236,14 @@ SHADER_DRAW
 #endif
 
 #ifdef DEBUG_LUXELS
-		if (mat_luxels.GetBool())
+		if (mat_luxels())
 		{
 			BindTexture(SAMPLER_LIGHTMAP, TEXTURE_DEBUG_LUXELS);
 		}
 #endif
 
 #ifdef DEBUG_FULLBRIGHT2 
-		if (mat_fullbright.GetInt() == 2 && !HasFlag(MATERIAL_VAR_NO_DEBUG_OVERRIDE))
+		if (mat_fullbright() == 2 && !HasFlag(MATERIAL_VAR_NO_DEBUG_OVERRIDE))
 			BindTexture(SAMPLER_BASETEXTURE, TEXTURE_GREY);
 #endif
 	}

@@ -18,3 +18,7 @@ lux_worldvertextransition_bump_ps30.fxc
 lux_worldvertextransition_flashlight_ps30.fxc
 lux_worldvertextransition_phong_ps30.fxc
 lux_worldvertextransition_simple_ps30.fxc
+
+// ASW
+lux_ssao_drawnormal_ps30.fxc
+lux_ssao_drawnormal_vs30.fxc

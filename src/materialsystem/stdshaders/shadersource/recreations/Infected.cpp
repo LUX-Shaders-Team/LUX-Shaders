@@ -6,7 +6,7 @@
 //	Purpose of this File :	'Infected' Shader for Models. Recreation of the L4D2 Shader
 //
 //==========================================================================//
-
+#if 0
 // Commonly Shared Definitions, Defines and Data for all Shaders
 #include "../../cpp_lux_shared.h"
 
@@ -836,8 +836,8 @@ SHADER_DRAW
 
 		if (!bProjectedTexture)
 		{
-			pShaderAPI->SetPixelShaderStateAmbientLightCube(REGISTER_FLOAT_013);
-			pShaderAPI->CommitPixelShaderLighting(REGISTER_FLOAT_020);
+			pShaderAPI->SetPixelShaderStateAmbientLightCube(INFECTED_AMBIENTCUBE);
+			pShaderAPI->CommitPixelShaderLighting(INFECTED_LIGHTINFO);
 		}
 
 		// Prepare boolean array, yes we need to use BOOL
@@ -910,3 +910,4 @@ SHADER_DRAW
 	Draw();
 }
 END_SHADER
+#endif

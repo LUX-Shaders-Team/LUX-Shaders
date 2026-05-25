@@ -2,7 +2,7 @@
 //
 //	Original D. :	28.02.2023 DMY
 //	Initial D.	:	12.06.2025 DMY
-//	Last Change :	 30.01.2026 DMY
+//	Last Change :	22.05.2026 DMY
 //
 //==========================================================================//
 
@@ -28,6 +28,24 @@
 //==========================================================================//
 //	Unpack Combos
 //==========================================================================//
+#if (ENVMAPMODE > 0)
+    #define ENVMAP 1
+#else
+    #define ENVMAP 0
+#endif
+
+#if (ENVMAPMODE > 2)
+    #define ENVMAPMASK 1
+#else
+    #define ENVMAPMASK 0
+#endif
+
+#if (ENVMAPMODE == 2 || ENVMAPMODE == 4)
+    #define ENVMAPPARALLAXCORRECTION 1
+#else
+    #define ENVMAPPARALLAXCORRECTION 0
+#endif
+
 #if (XBYBASEALPHA > 0)
 	#if (XBYBASEALPHA == 1)
 		#define BLENDTINTBYBASEALPHA 1
@@ -112,9 +130,6 @@
 //	Common Definitions
 //==========================================================================//
 
-// We need the BRUSH definition for PCC
-#define BRUSH
-
 //#define TONEMAP_SCALE_NONE
 #define TONEMAP_SCALE_LINEAR
 //#define TONEMAP_SCALE_GAMMA
@@ -149,9 +164,7 @@
 	#define			g_f3EnvMapSaturation			(cEnvMapSaturation_Contrast.xyz)
 	#define			g_f1EnvMapContrast				(cEnvMapSaturation_Contrast.w)
 	
-	// On brushes ENVMAPMODE > 2 is PCC
-	// On models its envmap anisotropy ( exception unlitgeneric )
-	#if (ENVMAPMODE > 2 && defined(BRUSH))
+	#if ENVMAPPARALLAXCORRECTION
 	const float3	g_f3CubeMapPos			: register(UNLITGENERIC_ENVMAP_POSITION);
 	const float4x3	g_f4x3CorrectionMatrix	: register(UNLITGENERIC_ENVMAP_MATRIX); // c7...c8
 	#endif

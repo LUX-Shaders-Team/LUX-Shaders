@@ -1,7 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	20.01.2023 DMY
-//	Last Change :	 30.01.2026 DMY
+//	Last Change :	23.05.2026 DMY
 //
 //==========================================================================//
 
@@ -42,9 +42,9 @@ public:
 
 	// Everything related to constants
 
-	RefractContext(CBaseShader* pShader)
-		: m_SemiStaticCmds(pShader),
-		m_StaticCmds(pShader)
+	RefractContext(IMaterialVar** ppParams)
+		: m_SemiStaticCmds(ppParams),
+		m_StaticCmds(ppParams)
 	{
 	}
 };
@@ -221,11 +221,20 @@ SHADER_INIT
 // Virtual Void Override for Context Data
 RefractContext* CreateMaterialContextData() override
 {
-	return new RefractContext(this);
+	return new RefractContext(NULL);
 }
 
 SHADER_DRAW
 {
+#ifdef ASWSDK
+	// Not doing this here
+	if (ShouldDrawNormalsForSSAO())
+	{
+		Draw(false); // Without this crash + "No render states in shader ".."
+		return;
+	}
+#endif
+
 	// Get Context Data. BaseShader handles creation for us, using the CreateMaterialContextData() virtual
 	auto* pContextData = GetMaterialContextData<RefractContext>(pContextDataPtr);
 //	auto& StaticCmds = pContextData->m_StaticCmds;
@@ -288,10 +297,10 @@ SHADER_DRAW
 		// Purpose : Int to tell the Shader what Mask to use.
 		// 0 = Nothing
 		// 1 = $EnvMap - Mask determined through abs(0||1 - Mask)
-		// 2 = $EnvMap + $EnvMapMask
 		// 3 = $EnvMap + PCC
-		// 4 = $EnvMap + PCC + $EnvMapMask
-		int nEnvMapMode = bHasEnvMap + bHasEnvMapMask + 2 * bPCC;
+		// 2 = $EnvMap + $EnvMapMask
+		// 4 = $EnvMap + $EnvMapMask + PCC
+		int nEnvMapMode = bHasEnvMap + bPCC + 2 * bHasEnvMapMask;
 
 		//==========================================================================//
 		// General Rendering Setup
@@ -424,7 +433,7 @@ SHADER_DRAW
 	SEMI_STATIC_COMMANDS
 	{
 		// Set the Buffer back to its original ( Empty ) State
-		SemiStaticCmds.Reset(this);
+		SemiStaticCmds.Reset(params);
 
 		//==========================================================================//
 		// Bind Textures
@@ -632,7 +641,7 @@ SHADER_DRAW
 	if(IsDynamicState())
 	{
 #ifdef DEBUG_FULLBRIGHT2 
-		if (mat_fullbright.GetInt() == 2 && !HasFlag(MATERIAL_VAR_NO_DEBUG_OVERRIDE))
+		if (mat_fullbright() == 2 && !HasFlag(MATERIAL_VAR_NO_DEBUG_OVERRIDE))
 			BindTexture(SAMPLER_BASETEXTURE, TEXTURE_GREY);
 #endif
 

@@ -28,8 +28,11 @@
 #include "shaderapi/commandbuffer.h"
 #endif
 
-#include "BaseVSShader.h"
 #include "shaderapi/ishaderapi.h"
+#include "materialsystem/imaterialvar.h"
+
+// Need this for GetShaderSystem()->GetShaderAPITextureBindHandle
+#include "../shaderlib/shaderdll_global.h"
 
 template<int N>
 class CCommandStorageBuffer
@@ -206,14 +209,18 @@ public:
 template<class S> class CCommandBufferBuilder
 {
 	IMaterialVar** m_ppParams = nullptr;
-	CBaseShader* BaseShader;
 public:
 	S m_Storage;
 
-	CCommandBufferBuilder(CBaseShader* pShader)
-		: m_ppParams(pShader->m_ppParams)
+	// Default Constructor that does nothing
+	CCommandBufferBuilder()
 	{
-		BaseShader = pShader;
+	
+	}
+
+	CCommandBufferBuilder(IMaterialVar** params)
+		: m_ppParams(params)
+	{
 	}
 
 	FORCEINLINE void End(void)
@@ -256,24 +263,24 @@ public:
 	{
 		// NOTE: This ignores negative values.
 		// Material Creators shouldn't set negative values anyways
-		return (CBaseShader::m_ppParams[var]->GetIntValue() != 0);
+		return (m_ppParams[var]->GetIntValue() != 0);
 	}
 
 	FORCEINLINE int GetInt(const int var)
 	{
-		return CBaseShader::m_ppParams[var]->GetIntValue();
+		return m_ppParams[var]->GetIntValue();
 	}
 
 	FORCEINLINE float GetFloat(const int var)
 	{
-		return CBaseShader::m_ppParams[var]->GetFloatValue();
+		return m_ppParams[var]->GetFloatValue();
 	}
 
 	// floatx interface
 	FORCEINLINE float2 GetFloat2(const int var)
 	{
 		float2 f2Result;
-		CBaseShader::m_ppParams[var]->GetVecValue(f2Result, 2);
+		m_ppParams[var]->GetVecValue(f2Result, 2);
 		return f2Result;
 	}
 
@@ -281,7 +288,7 @@ public:
 	FORCEINLINE float3 GetFloat3(const int var)
 	{
 		float3 f3Result;
-		CBaseShader::m_ppParams[var]->GetVecValue(f3Result, 3);
+		m_ppParams[var]->GetVecValue(f3Result, 3);
 		return f3Result;
 	}
 
@@ -289,8 +296,17 @@ public:
 	FORCEINLINE float4 GetFloat4(const int var)
 	{
 		float4 f4Result;
-		CBaseShader::m_ppParams[var]->GetVecValue(f4Result, 4);
+		m_ppParams[var]->GetVecValue(f4Result, 4);
 		return f4Result;
+	}
+
+	// Lifted from CBaseShader to remove the Dependency for CBaseShader
+	ShaderAPITextureHandle_t GetShaderAPITextureBindHandle(int nTextureVar, int nFrameVar)
+	{
+		IMaterialVar* pTextureVar = m_ppParams[nTextureVar];
+		IMaterialVar* pFrameVar = (nFrameVar != -1) ? m_ppParams[nFrameVar] : NULL;
+		int nFrame = pFrameVar ? pFrameVar->GetIntValue() : 0;
+		return GetShaderSystem()->GetShaderAPITextureBindHandle(pTextureVar->GetTextureValue(), nFrame);
 	}
 
 	//==================================//
@@ -512,8 +528,15 @@ public:
 	{
 		m_Storage.PutInt( CBCMD_STORE_EYE_POS_IN_PSCONST );
 		m_Storage.PutInt( nConst );
+
+		// In ASW it sets a Value for the .w
+		// I really don't care about this Value though so set it to null
+#ifdef ASWSDK
+		m_Storage.PutFloat(1.0f);
+#endif
 	}
 
+#ifndef ASWSDK
 	FORCEINLINE void CommitPixelShaderLighting( int nConst )
 	{
 		m_Storage.PutInt( CBCMD_COMMITPIXELSHADERLIGHTING );
@@ -530,6 +553,7 @@ public:
 	{
 		m_Storage.PutInt( CBCMD_SETAMBIENTCUBEDYNAMICSTATEVERTEXSHADER );
 	}
+#endif
 
 	FORCEINLINE void SetPixelShaderFogParams( int nReg )
 	{
@@ -546,6 +570,7 @@ public:
 		StoreEyePosInPixelShaderConstant(nReg);
 	}
 
+#ifndef ASWSDK
 	FORCEINLINE void SetPixelShaderConstant_Lighting(int nReg)
 	{
 		CommitPixelShaderLighting(nReg);
@@ -560,6 +585,7 @@ public:
 	{
 		SetAmbientCubeDynamicStateVertexShader();
 	}
+#endif
 
 	FORCEINLINE void SetPixelShaderConstant_FogParams(int nReg)
 	{
@@ -584,13 +610,17 @@ public:
 		{
 			m_Storage.PutInt(CBCMD_BIND_SHADERAPI_TEXTURE_HANDLE);
 			m_Storage.PutInt(nSampler);
+#ifdef ASWSDK
+			m_Storage.PutInt(hTexture);
+#else
 			m_Storage.Put(hTexture);
+#endif
 		}
 	}
 
 	FORCEINLINE void cmdBindTexture(Sampler_t nSampler, int nTextureVar, int nFrameVar)
 	{
-		ShaderAPITextureHandle_t hTexture = BaseShader->GetShaderAPITextureBindHandle(nTextureVar, nFrameVar);
+		ShaderAPITextureHandle_t hTexture = GetShaderAPITextureBindHandle(nTextureVar, nFrameVar);
 		cmdBufferBindTexture(nSampler, hTexture);
 	}
 
@@ -614,7 +644,7 @@ public:
 		// Stock Function here requires CBaseVSShader*
 		// Previously I saw an instance where it uses CBaseShader::m_ppParams
 		// Well, GetShaderAPITextureBindHandle turns out to be a CBaseShader Function. So we don't need the BaseVSShader Reference!
-		ShaderAPITextureHandle_t hTexture = BaseShader->GetShaderAPITextureBindHandle(nTextureVar, nFrameVar);
+		ShaderAPITextureHandle_t hTexture = GetShaderAPITextureBindHandle(nTextureVar, nFrameVar);
 		cmdBufferBindTexture(nSampler, hTexture);
 
 		// ShiroDkxtro2: This is kinda odd?
@@ -658,6 +688,110 @@ public:
 	}
 
 	//==================================//
+	// Functions for ASW Per-Instance (PI) CommandBuffer
+	//==================================//
+
+#ifdef ASWSDK
+	FORCEINLINE void CBICMD_SetPixelShaderLocalLighting(int nConst)
+	{
+		m_Storage.PutInt(CBICMD_SETPIXELSHADERLOCALLIGHTING);
+		m_Storage.PutInt(nConst);
+	}
+
+	FORCEINLINE void CBICMD_SetPixelShaderAmbientLightCube(int nConst)
+	{
+		m_Storage.PutInt(CBICMD_SETPIXELSHADERAMBIENTLIGHTCUBE);
+		m_Storage.PutInt(nConst);
+	}
+
+	FORCEINLINE void CBICMD_SetVertexShaderLocalLighting()
+	{
+		m_Storage.PutInt(CBICMD_SETVERTEXSHADERLOCALLIGHTING);
+	}
+
+	FORCEINLINE void CBICMD_SetVertexShaderAmbientLightCube(void)
+	{
+		m_Storage.PutInt(CBICMD_SETVERTEXSHADERAMBIENTLIGHTCUBE);
+	}
+
+	FORCEINLINE void CBICMD_SetSkinningMatrices(void)
+	{
+		m_Storage.PutInt(CBICMD_SETSKINNINGMATRICES);
+	}
+
+	FORCEINLINE void CBICMD_SetPixelShaderAmbientLightCubeLuminance(int nConst)
+	{
+		m_Storage.PutInt(CBICMD_SETPIXELSHADERAMBIENTLIGHTCUBELUMINANCE);
+		m_Storage.PutInt(nConst);
+	}
+
+	FORCEINLINE void CBICMD_SetPixelShaderGlintDamping(int nConst)
+	{
+		m_Storage.PutInt(CBICMD_SETPIXELSHADERGLINTDAMPING);
+		m_Storage.PutInt(nConst);
+	}
+
+	FORCEINLINE void CBICMD_SetModulationPixelShaderDynamicState_LinearColorSpace_LinearScale(int nConst, const Vector& vecGammaSpaceColor2Factor, float scale)
+	{
+		m_Storage.PutInt(CBICMD_SETMODULATIONPIXELSHADERDYNAMICSTATE_LINEARCOLORSPACE_LINEARSCALE);
+		m_Storage.PutInt(nConst);
+		m_Storage.Put(vecGammaSpaceColor2Factor);
+		m_Storage.PutFloat(scale);
+	}
+
+	FORCEINLINE void CBICMD_SetModulationPixelShaderDynamicState_LinearScale(int nConst, const Vector& vecGammaSpaceColor2Factor, float scale)
+	{
+		m_Storage.PutInt(CBICMD_SETMODULATIONPIXELSHADERDYNAMICSTATE_LINEARSCALE);
+		m_Storage.PutInt(nConst);
+		m_Storage.Put(vecGammaSpaceColor2Factor);
+		m_Storage.PutFloat(scale);
+	}
+
+	FORCEINLINE void CBICMD_SetModulationPixelShaderDynamicState_LinearScale_ScaleInW(int nConst, const Vector& vecGammaSpaceColor2Factor, float scale)
+	{
+		m_Storage.PutInt(CBICMD_SETMODULATIONPIXELSHADERDYNAMICSTATE_LINEARSCALE_SCALEINW);
+		m_Storage.PutInt(nConst);
+		m_Storage.Put(vecGammaSpaceColor2Factor);
+		m_Storage.PutFloat(scale);
+	}
+
+	FORCEINLINE void CBICMD_SetModulationPixelShaderDynamicState_LinearColorSpace(int nConst, const Vector& vecGammaSpaceColor2Factor)
+	{
+		m_Storage.PutInt(CBICMD_SETMODULATIONPIXELSHADERDYNAMICSTATE_LINEARCOLORSPACE);
+		m_Storage.PutInt(nConst);
+		m_Storage.Put(vecGammaSpaceColor2Factor);
+	}
+
+	FORCEINLINE void CBICMD_SetModulationPixelShaderDynamicState(int nConst, const Vector& vecGammaSpaceColor2Factor)
+	{
+		m_Storage.PutInt(CBICMD_SETMODULATIONPIXELSHADERDYNAMICSTATE);
+		m_Storage.PutInt(nConst);
+		m_Storage.Put(vecGammaSpaceColor2Factor);
+	}
+
+	FORCEINLINE void CBICMD_SetModulationPixelShaderDynamicState_Identity(int nConst)
+	{
+		m_Storage.PutInt(CBICMD_SETMODULATIONPIXELSHADERDYNAMICSTATE_IDENTITY);
+		m_Storage.PutInt(nConst);
+	}
+
+	FORCEINLINE void CBICMD_SetModulationVertexShaderDynamicState(int nConst, const Vector& vecGammaSpaceColor2Factor)
+	{
+		m_Storage.PutInt(CBICMD_SETMODULATIONVERTEXSHADERDYNAMICSTATE);
+		m_Storage.PutInt(nConst);
+		m_Storage.Put(vecGammaSpaceColor2Factor);
+	}
+
+	FORCEINLINE void CBICMD_SetModulationVertexShaderDynamicState_LinearScale(int nConst, const Vector& vecGammaSpaceColor2Factor, float flScale)
+	{
+		m_Storage.PutInt(CBICMD_SETMODULATIONVERTEXSHADERDYNAMICSTATE_LINEARSCALE);
+		m_Storage.PutInt(nConst);
+		m_Storage.Put(vecGammaSpaceColor2Factor);
+		m_Storage.PutFloat(flScale);
+	}
+#endif
+
+	//==================================//
 	// Remaining Stock Functions
 	//==================================//
 
@@ -692,9 +826,9 @@ public:
 		m_Storage.PutPtr( pCmdBuf );
 	}
 
-	FORCEINLINE void Reset( CBaseShader* pShader )
+	FORCEINLINE void Reset( IMaterialVar** params )
 	{
-		BaseShader = pShader;
+		m_ppParams = params;
 		m_Storage.Reset();
 	}
 

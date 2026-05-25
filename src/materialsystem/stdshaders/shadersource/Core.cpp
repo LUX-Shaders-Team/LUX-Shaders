@@ -1,7 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	01.01.2024 DMY
-//	Last Change :	 30.01.2026 DMY
+//	Last Change :	18.05.2026 DMY
 //
 //==========================================================================//
 
@@ -130,6 +130,14 @@ SHADER_INIT
 
 SHADER_DRAW
 {
+	// FIXME: ASW SSAO Support ?
+	// Might be tricky! Default Pass does not support the FlowMap and the second Layer on this Shader is translucent
+	// For now not supported, not a Concern
+#ifdef ASWSDK
+	if (ShouldDrawNormalsForSSAO())
+		return;
+#endif
+
 	// If we are using a flashlight
 	// ( which this shader doesn't support )
 	// Just don't draw anything for both passes
@@ -233,7 +241,7 @@ SHADER_DRAW
 
 			DECLARE_STATIC_PIXEL_SHADER(lux_core_ps30);
 			SET_STATIC_PIXEL_SHADER_COMBO(FLOWMAPPING, bHasFlowMap);
-			SET_STATIC_PIXEL_SHADER_COMBO(ENVMAPMODE, bHasEnvMap);
+			SET_STATIC_PIXEL_SHADER_COMBO(ENVMAP, bHasEnvMap);
 			SET_STATIC_PIXEL_SHADER_COMBO(CORECOLOR, bHasColorTexture);
 			SET_STATIC_PIXEL_SHADER_COMBO(REFRACTION, bHasRefract);
 			SET_STATIC_PIXEL_SHADER(lux_core_ps30);

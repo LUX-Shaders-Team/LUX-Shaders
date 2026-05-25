@@ -2,17 +2,36 @@
 //
 //	Original D.	:	26.03.2025 DMY
 //	Initial D.	:	28.09.2025 DMY
-//	Last Change :	 30.01.2026 DMY
+//	Last Change :	18.05.2026 DMY
 //
 //==========================================================================//
 
 // Commonly Shared Definitions, Defines and Data for all Shaders
 #include "Triplanar.h"
 
+#ifdef ASWSDK
+#include "../renderpasses/SSAODrawNormalPass.h"
+#endif
+
 // Includes for Shaderfiles...
 #include "lux_displacement_vs30.inc"
 #include "lux_triplanar_displacement_ps30.inc"
 #include "lux_triplanar_displacement_flashlight_ps30.inc"
+
+//==========================================================================//
+// CommandBuffer Setup
+//==========================================================================//
+class TriplanarDisplacementContext : public LUXPerMaterialContextData
+{
+public:
+	float f1LightmapScaleFactor = 1.0f; // Only used on ASW
+
+	// Everything related to constants
+
+	TriplanarDisplacementContext(IMaterialVar** ppParams)
+	{
+	}
+};
 
 //==========================================================================//
 // Triplanar for Model based Geometry
@@ -69,6 +88,10 @@ void HandleFallback()
 		// **Not on VLG**. It demands you use $Seamless_Base instead
 		if (!bModelShader && IsDefined(Seamless_Scale) && GetFloat(Seamless_Scale) != 0.0f)
 		{
+			// The Consistency from above
+			SetBool(Seamless_Base, true);
+
+			// Enable all the default Behaviour
 			SetBool(TriPlanar_Base, true);
 			SetBool(TriPlanar_Bump, true);
 			SetBool(TriPlanar_EnvMapMask, true);
@@ -162,6 +185,15 @@ void HandleFallback()
 	DefaultFloat3(TriPlanar_Offset_BlendModulate, 0.0f, 0.0f, 0.0f);
 }
 
+#ifdef ASWSDK
+void Triplanar_SetupSSAODrawNormalVars(SSAODrawNormalPass_Vars_t& SSAODrawNormalVars)
+{
+	SSAODrawNormalVars.m_bIsModel = false;
+
+	// FIXME: SSAO Draw Pass does not support Triplanar, I set up no other Vars here so it at least draws a flat Normal
+}
+#endif
+
 void SetTriplanarDisplacementFlags()
 {
 	// Always needed for the Flashlight
@@ -169,9 +201,9 @@ void SetTriplanarDisplacementFlags()
 	SetFlag2(MATERIAL_VAR2_NEEDS_TANGENT_SPACES); 
 
 	// We always want access to regular Lightmaps
-	// If we have a $BumpMap, we wanted the Bumped ones with the regular ones as Fallback 
+	// If we have a $BumpMap or $BumpMap2, we wanted the Bumped ones with the regular ones as Fallback 
 	SetFlag2(MATERIAL_VAR2_LIGHTING_LIGHTMAP);
-	if (g_pConfig->UseBumpmapping() && IsDefined(BumpMap))
+	if (g_pConfig->UseBumpmapping() && (IsDefined(BumpMap) || IsDefined(BumpMap2)))
 	{
 		SetFlag2(MATERIAL_VAR2_LIGHTING_BUMPED_LIGHTMAP);
 	}
@@ -210,8 +242,8 @@ SHADER_INIT_PARAMS()
 		ClearFlag(MATERIAL_VAR_ALPHATEST);
 	}
 
-	// Stock-Consistency : Flip $BaseAlphaEnvMapMask when not using $Phong or $BumpMap
-	bool b1 = !IsDefined(BumpMap);
+	// Stock-Consistency : Flip $BaseAlphaEnvMapMask when not using $Phong, $BumpMap or $BumpMap2
+	bool b1 = !IsDefined(BumpMap) && !IsDefined(BumpMap2);
 	bool b2 = !IsDefined(EnvMapMaskFlip);
 	bool b3 = HasFlag(MATERIAL_VAR_BASEALPHAENVMAPMASK);
 	if (b1 && b2 && b3)
@@ -318,8 +350,27 @@ SHADER_INIT
 	LoadTexture(BlendModulateTexture);
 }
 
+// Virtual Void Override for Context Data
+TriplanarDisplacementContext* CreateMaterialContextData() override
+{
+	return new TriplanarDisplacementContext(NULL);
+}
+
 SHADER_DRAW
 {
+#ifdef ASWSDK
+	if (ShouldDrawNormalsForSSAO())
+	{
+		SSAODrawNormalPass_Vars_t Vars;
+		Triplanar_SetupSSAODrawNormalVars(Vars);
+		SSAONormalPass_Shader_Draw(this, pShaderShadow, pShaderAPI, Vars);
+		return;
+	}
+#endif
+
+	// Get Context Data. BaseShader handles creation for us, using the CreateMaterialContextData() virtual
+	auto* pContextData = GetMaterialContextData<TriplanarDisplacementContext>(pContextDataPtr);
+
 	bool bProjTex = HasFlashlight();
 
 	// $BaseTexture, $BaseTexture2
@@ -390,14 +441,11 @@ SHADER_DRAW
 		// Just always ask for Normal... You pretty much need it 99% of the time
 		unsigned int nFlags = VERTEX_POSITION;
 
-		// *sigh* Another Hammer specific Issue
-		// Vertex Colors are used for Shaded Texture Polygons..
-		if (HasFlag(MATERIAL_VAR_VERTEXCOLOR))
-			nFlags |= VERTEX_COLOR;
+		// Always ask for this Flag, we need it for the Texture Blend Factor
+		nFlags |= VERTEX_COLOR;
 
-		// EnvMap wants Tangents, ProjTex always needs Normals
-		if(bProjTex || bHasEnvMap)
-			nFlags |= VERTEX_NORMAL;
+		// Always ask for this Flag, we need it for Seamless Weights
+		nFlags |= VERTEX_NORMAL;
 
 		// Normal Maps don't require the TBN Matrix actually.
 		// ( Due to how Radiosity Normal Mapping works )
@@ -440,20 +488,20 @@ SHADER_DRAW
 		bool bsRGBDetail = IsGammaDetailMode(nDetailBlendMode);
 		EnableSampler(bHasDetail1, SHADER_SAMPLER4, bsRGBDetail);
 
-		// s5 - $Detail2
-		EnableSampler(bHasDetail2, SHADER_SAMPLER5, bsRGBDetail);
+		// s5 - $EnvMapMask. Not sRGB
+		EnableSampler(bAnyEnvMapMask, SAMPLER_ENVMAPMASK, false);
 
-		// s6 - $EnvMapMask. Not sRGB
-		EnableSampler(bAnyEnvMapMask, SHADER_SAMPLER6, false);
+		// s9 - $EnvMapMask2. Not sRGB
+		EnableSampler(bAnyEnvMapMask, SHADER_SAMPLER9, false);
 
-		// s7 - $EnvMapMask. Not sRGB
-		EnableSampler(bAnyEnvMapMask, SHADER_SAMPLER7, false);
-
-		// s8 - $BlendModulateTexture. Not sRGB
-		EnableSampler(bHasBlendModulate, SHADER_SAMPLER8, false);
+		// s10 - $Detail2
+		EnableSampler(bHasDetail2, SHADER_SAMPLER10, bsRGBDetail);
 
 		// s11 - Lightmap. sRGB on LDR
 		EnableSampler(!bProjTex, SAMPLER_LIGHTMAP, !IsHDREnabled());
+
+		// s12 - $BlendModulateTexture. Not sRGB
+		EnableSampler(bHasBlendModulate, SAMPLER_BLENDMODULATE, false);
 
 		// s14 - $EnvMap. sRGB when LDR
 		EnableSampler(bHasEnvMap, SAMPLER_ENVMAPTEXTURE, !IsHDREnabled());
@@ -473,7 +521,7 @@ SHADER_DRAW
 		nNeededTexCoords += bTriplanarBump;
 		nNeededTexCoords += bTriplanarEnvMapMask;
 		nNeededTexCoords += bTriplanarDetail;
-		nNeededTexCoords = Clamp(nNeededTexCoords, 0, 3);
+		nNeededTexCoords = clamp(nNeededTexCoords, 0, 3);
 
 		// Allow disabling Normal Mapping for Diffuse
 		bool bNeedsBumpedLightmaps = !bProjTex && bAnyBump && !GetBool(NoDiffuseBumpLighting);
@@ -486,10 +534,11 @@ SHADER_DRAW
 		SET_STATIC_VERTEX_SHADER_COMBO(BUMPED_LIGHTMAP, bNeedsBumpedLightmaps);
 		SET_STATIC_VERTEX_SHADER(lux_displacement_vs30);
 
+		bool bSSBump = bAnyBump && GetBool(SSBump);
 		if (bProjTex)
 		{
 			DECLARE_STATIC_PIXEL_SHADER(lux_triplanar_displacement_flashlight_ps30);
-			SET_STATIC_PIXEL_SHADER_COMBO(MODE_BUMP, bAnyBump + bAnyBump && GetBool(SSBump));					
+			SET_STATIC_PIXEL_SHADER_COMBO(MODE_BUMP, bAnyBump + bSSBump);
 			SET_STATIC_PIXEL_SHADER_COMBO(TRIPLANAR_BUMP, bTriplanarBump);			
 			SET_STATIC_PIXEL_SHADER_COMBO(DETAILTEXTURES, bHasDetail1 + bHasDetail2);			
 			SET_STATIC_PIXEL_SHADER_COMBO(TRIPLANAR_DETAIL, bTriplanarDetail);			
@@ -502,7 +551,7 @@ SHADER_DRAW
 		{
 			int nEnvMapMode = bHasEnvMap + bAnyEnvMapMask;
 			DECLARE_STATIC_PIXEL_SHADER(lux_triplanar_displacement_ps30);
-			SET_STATIC_PIXEL_SHADER_COMBO(MODE_BUMP, bAnyBump + bAnyBump && GetBool(SSBump));					
+			SET_STATIC_PIXEL_SHADER_COMBO(MODE_BUMP, bAnyBump + bSSBump);
 			SET_STATIC_PIXEL_SHADER_COMBO(TRIPLANAR_BUMP, bTriplanarBump);			
 			SET_STATIC_PIXEL_SHADER_COMBO(DETAILTEXTURES, bHasDetail1 + bHasDetail2);			
 			SET_STATIC_PIXEL_SHADER_COMBO(TRIPLANAR_DETAIL, bTriplanarDetail);			
@@ -513,6 +562,13 @@ SHADER_DRAW
 			SET_STATIC_PIXEL_SHADER_COMBO(ENVMAPMODE, nEnvMapMode);
 			SET_STATIC_PIXEL_SHADER(lux_triplanar_displacement_ps30);
 		}
+
+#ifdef ASWSDK
+		// LightmapScaleFactor is passed on via IShaderShadow instead of IShaderDynamicAPI
+		// The way LUX was designed, this is passed on with some other Control Data
+		// Store it so we can pack it together later
+		pContextData->f1LightmapScaleFactor = pShaderShadow->GetLightMapScaleFactor();
+#endif
 	}
 	
 	//==========================================================================//
@@ -581,27 +637,26 @@ SHADER_DRAW
 		// s4 - $Detail
 		BindTexture(bHasDetail1, SHADER_SAMPLER4, Detail, DetailFrame);
 
-		// s5 - $Detail2
-		BindTexture(bHasDetail2, SHADER_SAMPLER5, Detail2, DetailFrame2);
-
-		// s6 - $EnvMapMask
+		// s5 - $EnvMapMask
 		if(bHasEnvMapMask1)
-			BindTexture(SHADER_SAMPLER6, EnvMapMask, EnvMapMaskFrame);
+			BindTexture(SAMPLER_ENVMAPMASK, EnvMapMask, EnvMapMaskFrame);
 		else if(bHasEnvMapMask2)
-			BindTexture(SHADER_SAMPLER6, EnvMapMask2, EnvMapMaskFrame2);
+			BindTexture(SAMPLER_ENVMAPMASK, EnvMapMask2, EnvMapMaskFrame2);
 
-		// s6 - $EnvMapMask
+		// s9 - $EnvMapMask2
 		if(bHasEnvMapMask2)
-			BindTexture(SHADER_SAMPLER7, EnvMapMask2, EnvMapMaskFrame2);
+			BindTexture(SHADER_SAMPLER9, EnvMapMask2, EnvMapMaskFrame2);
 		else if(bHasEnvMapMask1)
-			BindTexture(SHADER_SAMPLER7, EnvMapMask, EnvMapMaskFrame);
+			BindTexture(SHADER_SAMPLER9, EnvMapMask, EnvMapMaskFrame);
 
-		// s8 - $BlendModulateTexture
-		if(bHasBlendModulate)
-			BindTexture(SHADER_SAMPLER8, BlendModulateTexture, BlendMaskFrame);
+		// s10 - $Detail2
+		BindTexture(bHasDetail2, SHADER_SAMPLER10, Detail2, DetailFrame2);
 
 		// s11 - Lightmap
 		BindTexture(!bProjTex, SAMPLER_LIGHTMAP, TEXTURE_LIGHTMAP);
+		
+		// s12 - $BlendModulateTexture
+		BindTexture(bHasBlendModulate, SAMPLER_BLENDMODULATE, BlendModulateTexture, BlendMaskFrame);
 
 		// s14 - $EnvMap
 		BindTexture(bHasEnvMap, SAMPLER_ENVMAPTEXTURE, EnvMap, EnvMapFrame);
@@ -615,6 +670,19 @@ SHADER_DRAW
 		//==========================================================================//
 
 		// VS Registers
+
+		// Hammer Blendmodulation Fix
+		// 13.01.2026: H++ does it's own Shenanigans to fix the BlendFactor on stock Shaders
+		// Previously it would also fix it for Custom Shaders but it has since been disabled.
+		// This should now work for both Stock and H++!
+		bool bHammerBlendFix = /*!g_bHammerPlusPlus &&*/ pShaderAPI->InEditorMode();
+		bool bFlipBlendFactor = bHammerBlendFix;
+		if (GetBool(FlipBlendFactor))
+			bFlipBlendFactor = !bFlipBlendFactor;
+
+		float4 f4Editor = float(bFlipBlendFactor);
+		pShaderAPI->SetVertexShaderConstant(LUX_VS_FLOAT_SET0_0, f4Editor);
+
 		int nTexCoordShift = 0;
 		bool bTransform2 = !bTriplanarBase && HasTransform(bHasBase2, BaseTextureTransform2);
 		if(!bTriplanarBase)
@@ -712,7 +780,7 @@ SHADER_DRAW
 
 		// c1 - Modulation Constant
 		// Function above, handles LightmapScaleFactor and Alpha Modulation
-		SetModulationConstant(bAnyBump && GetBool(SSBumpMathFix));
+		SetModulationConstant(bAnyBump && GetBool(SSBumpMathFix), true, pContextData->f1LightmapScaleFactor);
 
 		// c11 - Camera Position
 		SetPixelShaderCameraPosition(LUX_PS_FLOAT_CAMERAPOSITION);
@@ -744,9 +812,6 @@ SHADER_DRAW
 			float4 f4EnvMapTint_LightScale;
 			f4EnvMapTint_LightScale.rgb = GetFloat3(EnvMapTint);
 			f4EnvMapTint_LightScale.w = GetFloat(EnvMapLightScale);
-
-			// Stock Consistency - Convert from Gamma to Linear
-			f4EnvMapTint_LightScale.rgb = GammaToLinearTint(f4EnvMapTint_LightScale.rgb);
 			pShaderAPI->SetPixelShaderConstant(LUX_PS_FLOAT_ENVMAP_TINT, f4EnvMapTint_LightScale);
 
 			float4 f4EnvMapSaturation_Contrast;
@@ -820,20 +885,13 @@ SHADER_DRAW
 			float4 Triplanar_Offset_BlendMod = 0.0f;
 			Triplanar_Scales_BlendMod.xyz = GetFloat3(TriPlanar_Scale_BlendModulate);
 			Triplanar_Offset_BlendMod.xyz = GetFloat3(TriPlanar_Offset_BlendModulate);
-			pShaderAPI->SetPixelShaderConstant(REGISTER_FLOAT_058, Triplanar_Scales_BlendMod);
-			pShaderAPI->SetPixelShaderConstant(REGISTER_FLOAT_059, Triplanar_Offset_BlendMod);
+			pShaderAPI->SetPixelShaderConstant(REGISTER_FLOAT_060, Triplanar_Scales_BlendMod);
+			pShaderAPI->SetPixelShaderConstant(REGISTER_FLOAT_061, Triplanar_Offset_BlendMod);
 		}
 
 		// Prepare boolean array, yes we need to use BOOL
 		BOOL BBools[REGISTER_BOOL_MAX] = { false };
 		
-		// b0
-		if(HasFlag(MATERIAL_VAR_HALFLAMBERT))
-			BBools[LUX_PS_BOOL_HALFLAMBERT] = true;
-
-		if(HasFlag(MATERIAL_VAR_VERTEXCOLOR) || HasFlag(MATERIAL_VAR_VERTEXALPHA))
-			BBools[LUX_PS_BOOL_VERTEXCOLOR] = true;
-
 		// b13, b14, b15
 		BBools[LUX_PS_BOOL_HEIGHTFOG] = WriteWaterFogToDestAlpha(bIsFullyOpaque);
 		BBools[LUX_PS_BOOL_RADIALFOG] = HasRadialFog();
@@ -867,7 +925,7 @@ SHADER_DRAW
 	if(IsDynamicState())
 	{
 #ifdef DEBUG_FULLBRIGHT2 
-		if (mat_fullbright.GetInt() == 2 && !HasFlag(MATERIAL_VAR_NO_DEBUG_OVERRIDE))
+		if (mat_fullbright() == 2 && !HasFlag(MATERIAL_VAR_NO_DEBUG_OVERRIDE))
 		{
 			BindTexture(SHADER_SAMPLER0, TEXTURE_GREY);
 			BindTexture(SHADER_SAMPLER1, TEXTURE_GREY);
@@ -895,7 +953,7 @@ SHADER_DRAW
 #endif
 
 #ifdef DEBUG_LUXELS
-		if (mat_luxels.GetBool())
+		if (mat_luxels())
 			BindTexture(SAMPLER_LIGHTMAP, TEXTURE_DEBUG_LUXELS);
 #endif
 	}

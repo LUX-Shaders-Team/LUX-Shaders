@@ -1,12 +1,16 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	20.01.2023 DMY
-//	Last Change :	 30.01.2026 DMY
+//	Last Change :	25.05.2026 DMY
 //
 //==========================================================================//
 
 // Commonly Shared Definitions, Defines and Data for all Shaders
 #include "../cpp_lux_shared.h"
+
+#ifdef ASWSDK
+#include "renderpasses/SSAODrawNormalPass.h"
+#endif
 
 #include "renderpasses/Cloak.h"
 #include "renderpasses/EmissiveBlend.h"
@@ -152,7 +156,9 @@ bool IsTranslucent(IMaterialVar** params) const override
 			return true;
 	}
 
-	return IS_FLAG_SET(MATERIAL_VAR_TRANSLUCENT);
+	bool bIsTranslucent = params[Flags]->GetIntValue() & MATERIAL_VAR_TRANSLUCENT;
+	bool bPretendTranslucent = params[PretendTranslucent]->GetIntValue() != 0;
+	return bIsTranslucent || bPretendTranslucent;
 }
 
 // Set Up Vars here
@@ -223,7 +229,7 @@ SHADER_INIT
 
 SHADER_DRAW
 {
-	
+	// FIXME: Draw flat Normals for SSAO
 }
 END_SHADER
 
@@ -271,6 +277,15 @@ BEGIN_SHADER_PARAMS
 	// Cloak Blended Pass Support
 	Declare_CloakParameters()
 END_SHADER_PARAMS
+
+#ifdef ASWSDK
+void Eyes_SetupSSAODrawNormalVars(SSAODrawNormalPass_Vars_t& SSAODrawNormalVars)
+{
+	SSAODrawNormalVars.m_bIsModel = true;
+
+	// Shader supports nothing else here
+}
+#endif
 
 void Eyes_SetupCloakVars(Cloak_Vars_t& CloakVars)
 {
@@ -325,7 +340,9 @@ bool IsTranslucent(IMaterialVar** params) const override
 			return true;
 	}
 
-	return IS_FLAG_SET(MATERIAL_VAR_TRANSLUCENT);
+	bool bIsTranslucent = params[Flags]->GetIntValue() & MATERIAL_VAR_TRANSLUCENT;
+	bool bPretendTranslucent = params[PretendTranslucent]->GetIntValue() != 0;
+	return bIsTranslucent || bPretendTranslucent;
 }
 
 // Set Up Vars here
@@ -456,6 +473,20 @@ void DrawEyes(IShaderShadow* pShaderShadow, IShaderDynamicAPI* pShaderAPI, CBase
 		DECLARE_STATIC_PIXEL_SHADER(lux_eyes_ps30);
 		SET_STATIC_PIXEL_SHADER_COMBO(PROJTEX, bProjTex);
 		SET_STATIC_PIXEL_SHADER(lux_eyes_ps30);
+
+#ifdef ASWSDK
+		//==========================================================================//
+		// Per-Instance Command Buffer
+		//==========================================================================//
+		PI_BeginCommandBuffer();
+
+		if (!bProjTex)
+			PI_SetVertexShaderAmbientLightCube();
+
+		PI_SetPixelShaderGlintDamping(REGISTER_FLOAT_000);
+
+		PI_EndCommandBuffer();
+#endif
 	}
 
 	//==========================================================================//
@@ -496,9 +527,11 @@ void DrawEyes(IShaderShadow* pShaderShadow, IShaderDynamicAPI* pShaderAPI, CBase
 			SetVertexShaderConstant(LUX_VS_FLOAT_SET1_5, GlintV);		
 		}
 
+#ifndef ASWSDK
 		// c0
 		// Stock-Consistency: Replicating this 1:1 to avoid visual Disparities
-		float f1GlintDamping = max(0.0f, min(pShaderAPI->GetAmbientLightCubeLuminance(), 1.0f));
+		float f1AmbientCubeLuminance = pShaderAPI->GetAmbientLightCubeLuminance();
+		float f1GlintDamping = MAX(0.0f, MIN(f1AmbientCubeLuminance, 1.0f));
 		const float f1DimGlint = 0.01f;
 
 		// "Remap so that glint damping smooth steps to zero for low luminances"
@@ -508,6 +541,7 @@ void DrawEyes(IShaderShadow* pShaderShadow, IShaderDynamicAPI* pShaderAPI, CBase
 		else
 			cEyeGlint = f1GlintDamping * SimpleSplineRemapVal(f1GlintDamping, 0.0f, f1DimGlint, 0.0f, 1.0f);
 		pShaderAPI->SetPixelShaderConstant(REGISTER_FLOAT_000, cEyeGlint);
+#endif
 
 		// c26 - Camera Position
 		SetPixelShaderCameraPosition(LUX_PS_FLOAT_CAMERAPOSITION);
@@ -565,8 +599,10 @@ void DrawEyes(IShaderShadow* pShaderShadow, IShaderDynamicAPI* pShaderAPI, CBase
 			bHasDynamicPropLighting = (LightState.m_bAmbientLight || (LightState.m_nNumLights > 0)) ? 1 : 0;
 
 			// Need to send this to the Vertex Shader manually in this scenario
+#ifndef ASWSDK
 			if (bHasDynamicPropLighting)
 				pShaderAPI->SetVertexShaderStateAmbientLightCube();
+#endif
 		}
 
 		DECLARE_DYNAMIC_VERTEX_SHADER(lux_eyes_vs30);
@@ -586,6 +622,16 @@ void DrawEyes(IShaderShadow* pShaderShadow, IShaderDynamicAPI* pShaderAPI, CBase
 
 SHADER_DRAW
 {
+#ifdef ASWSDK
+	if (ShouldDrawNormalsForSSAO())
+	{
+		SSAODrawNormalPass_Vars_t Vars;
+		Eyes_SetupSSAODrawNormalVars(Vars);
+		SSAONormalPass_Shader_Draw(this, pShaderShadow, pShaderAPI, Vars);
+		return;
+	}
+#endif
+
 	bool bDrawBasePass = true;
 
 	Cloak_Vars_t CloakVars;

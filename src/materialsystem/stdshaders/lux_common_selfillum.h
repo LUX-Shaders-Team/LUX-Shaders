@@ -47,7 +47,7 @@
 			// Consistent with Stock VLG Bump & Phong
 			// NOTE: If SelfIllumFresnel is NOT enabled, Bias will be 1.0f and it will saturate.
 			// Saves us a bool
-			float f1Fresnel = pow(f1NdotV, g_f1SelfIllumFresnelExponent) * g_f1SelfIllumFresnelScale + g_f1SelfIllumFresnelBias;
+			float f1Fresnel = pow(max(0.0f, f1NdotV), g_f1SelfIllumFresnelExponent) * g_f1SelfIllumFresnelScale + g_f1SelfIllumFresnelBias;
 				
 			// Avoid >1
 			return saturate(f1Fresnel);

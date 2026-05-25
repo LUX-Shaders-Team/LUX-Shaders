@@ -1,7 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	20.01.2023 DMY
-//	Last Change :	 30.01.2026 DMY
+//	Last Change :	18.05.2026 DMY
 //
 //==========================================================================//
 
@@ -39,6 +39,21 @@ DEFINE_FALLBACK_SHADER(Water_DX60,		LUX_Water)
 
 // TF2C
 DEFINE_FALLBACK_SHADER(WaterFlow, LUX_Water)
+
+//==========================================================================//
+// CommandBuffer Setup
+//==========================================================================//
+class WaterContext : public LUXPerMaterialContextData
+{
+public:
+	float f1LightmapScaleFactor = 1.0f; // Only used on ASW
+
+	// Everything related to constants
+
+	WaterContext(IMaterialVar** ppParams)
+	{
+	}
+};
 
 BEGIN_VS_SHADER(LUX_Water, "Water Surface Rendering." LUX_DEFAULT_DESCRIPTION)
 
@@ -293,7 +308,7 @@ SHADER_INIT_PARAMS()
 	if (IsDefined(BaseTexture) || GetBool(LightmapWaterFog))
 		SetFlag2(MATERIAL_VAR2_LIGHTING_LIGHTMAP);
 
-	// We replicate Valve Behaviour here, in ASW it does this....:
+	// We replicate Valve Behavior here, in ASW it does this....:
 	if (IsDefined(BaseTexture) && g_pConfig->UseBumpmapping())
 		SetFlag2(MATERIAL_VAR2_LIGHTING_BUMPED_LIGHTMAP);
 
@@ -348,7 +363,7 @@ SHADER_INIT
 	LoadTexture(FlowMap, 0);
 	LoadTexture(Flow_Noise_Texture, 0);
 
-	if (!IsDefined(NormalTexture) && CVarDeveloper.GetInt() > 0)
+	if (!IsDefined(NormalTexture) && CVarDeveloper() > 0)
 		ShaderDebugMessage("Water Material %s has no Normal Map? Might be unintentional.\n");
 
 	// According to Ficool2 ( aka Engine Code knowledge we shouldn't have or need ),
@@ -368,7 +383,7 @@ SHADER_INIT
 }
 
 // BaseVSShader allows us to strip most Inputs from the Draw Function
-void DrawExpensive(IShaderShadow* pShaderShadow, IShaderDynamicAPI* pShaderAPI, bool bReflection)
+void DrawExpensive(IShaderShadow* pShaderShadow, IShaderDynamicAPI* pShaderAPI, bool bReflection, WaterContext* pContextData)
 {
 	bool bHasRefractTexture = IsTextureLoaded(RefractTexture);
 	bool bHasBlurRefract = bHasRefractTexture && GetBool(BlurRefract);
@@ -525,6 +540,13 @@ void DrawExpensive(IShaderShadow* pShaderShadow, IShaderDynamicAPI* pShaderAPI, 
 		SET_STATIC_PIXEL_SHADER_COMBO(ABOVEWATER, GetBool(AboveWater));
 		SET_STATIC_PIXEL_SHADER_COMBO(PROJTEX, bHasFlashlight);
 		SET_STATIC_PIXEL_SHADER(lux_water_expensive_ps30);
+
+#ifdef ASWSDK
+		// LightmapScaleFactor is passed on via IShaderShadow instead of IShaderDynamicAPI
+		// The way LUX was designed, this is passed on with some other Control Data
+		// Store it so we can pack it together later
+		pContextData->f1LightmapScaleFactor = pShaderShadow->GetLightMapScaleFactor();
+#endif
 	}
 
 	//==========================================================================//
@@ -609,7 +631,7 @@ void DrawExpensive(IShaderShadow* pShaderShadow, IShaderDynamicAPI* pShaderAPI, 
 
 		// c1 - Modulation Constant
 		if (bUsingLightmap)
-			SetModulationConstant(false);
+			SetModulationConstant(false, true, pContextData->f1LightmapScaleFactor);
 
 		// c11 - Camera Position
 		SetPixelShaderCameraPosition(LUX_PS_FLOAT_CAMERAPOSITION);
@@ -802,7 +824,7 @@ void DrawExpensive(IShaderShadow* pShaderShadow, IShaderDynamicAPI* pShaderAPI, 
 	Draw();
 }
 
-void DrawCheap(IShaderShadow* pShaderShadow, IShaderDynamicAPI* pShaderAPI, bool bInEditor, bool bExpensiveWaterEditorPreview)
+void DrawCheap(IShaderShadow* pShaderShadow, IShaderDynamicAPI* pShaderAPI, bool bInEditor, bool bExpensiveWaterEditorPreview, WaterContext* pContextData)
 {
 	bool bBlend = !bInEditor; // Stock-Consistency
 	bool bHasRefractTexture = bBlend && IsTextureLoaded(RefractTexture);
@@ -820,7 +842,6 @@ void DrawCheap(IShaderShadow* pShaderShadow, IShaderDynamicAPI* pShaderAPI, bool
 	// HasEnvMap = Should enable the Feature
 	// UseEnvMap = Should actually use the Feature
 	bool bHasEnvMap = IsTextureLoaded(EnvMap);
-	bool bUseEnvMap = mat_specular.GetBool() && bHasEnvMap;
 	bool bPCC = bHasEnvMap && GetBool(EnvMapParallax);
 
 	// ShiroDkxtro2 :
@@ -956,9 +977,16 @@ void DrawCheap(IShaderShadow* pShaderShadow, IShaderDynamicAPI* pShaderAPI, bool
 		SET_STATIC_PIXEL_SHADER_COMBO(BASETEXTURELAYER, bHasBaseTexture + bHasSurfaceBumpMap);
 		SET_STATIC_PIXEL_SHADER_COMBO(LIGHTMAPWATERFOG, bHasLightmapFog);
 		SET_STATIC_PIXEL_SHADER_COMBO(BLEND, bBlend + bHasRefractTexture);
-		SET_STATIC_PIXEL_SHADER_COMBO(PARALLAXCORRECT, bPCC);
+		SET_STATIC_PIXEL_SHADER_COMBO(ENVMAPPARALLAXCORRECTION, bPCC);
 		SET_STATIC_PIXEL_SHADER_COMBO(PRETTYHAMMER, bInEditor && bExpensiveWaterEditorPreview);
 		SET_STATIC_PIXEL_SHADER(lux_water_cheap_ps30);
+
+#ifdef ASWSDK
+		// LightmapScaleFactor is passed on via IShaderShadow instead of IShaderDynamicAPI
+		// The way LUX was designed, this is passed on with some other Control Data
+		// Store it so we can pack it together later
+		pContextData->f1LightmapScaleFactor = pShaderShadow->GetLightMapScaleFactor();
+#endif
 	}
 
 	//==========================================================================//
@@ -997,14 +1025,14 @@ void DrawCheap(IShaderShadow* pShaderShadow, IShaderDynamicAPI* pShaderAPI, bool
 		BindTexture(bUsingLightmap, SAMPLER_LIGHTMAP, TEXTURE_LIGHTMAP);
 
 		// s14
-		BindTexture(bUseEnvMap, SAMPLER_ENVMAPTEXTURE, EnvMap, EnvMapFrame);
+		BindTexture(bHasEnvMap, SAMPLER_ENVMAPTEXTURE, EnvMap, EnvMapFrame);
 
 		//==========================================================================//
 		// Setup Constant Registers
 		//==========================================================================//
 
 		if (bUsingLightmap)
-			SetModulationConstant(false);
+			SetModulationConstant(false, true, pContextData->f1LightmapScaleFactor);
 
 		if (bHasBaseTexture)
 		{
@@ -1094,7 +1122,7 @@ void DrawCheap(IShaderShadow* pShaderShadow, IShaderDynamicAPI* pShaderAPI, bool
 
 		// c35, c38, c39, c40, c41, c42
 		// c46, c51
-		if (bUseEnvMap)
+		if (bHasEnvMap)
 		{
 			// $EnvMapTint, $EnvMapLightScale
 			float4 f4EnvMapTint_LightScale;
@@ -1192,7 +1220,7 @@ void DrawCheap(IShaderShadow* pShaderShadow, IShaderDynamicAPI* pShaderAPI, bool
 		float f1EndDistance = GetFloat(CheapWaterEndDistance);
 		float4 c56;
 		c56.x = bNoFresnel ? 0.0f : 1.0f;									// f1NoFresnelMul, set to 0 for no Fresnel
-		c56.y = bNoFresnel ? saturate(GetFloat(ReflectBlendFactor)) : 0.0f; // Forces Fresnel Values despite $NoFresnel
+		c56.y = bNoFresnel ? fxsaturate(GetFloat(ReflectBlendFactor)) : 0.0f; // Forces Fresnel Values despite $NoFresnel
 		c56.z = 1.0f / (f1EndDistance - f1StartDistance);					// f1DeltaRecip
 		c56.w = f1StartDistance / (f1EndDistance - f1StartDistance);		// f1StartDivDelta
 		pShaderAPI->SetPixelShaderConstant(REGISTER_FLOAT_056, c56);
@@ -1288,8 +1316,26 @@ void DrawCheap(IShaderShadow* pShaderShadow, IShaderDynamicAPI* pShaderAPI, bool
 	Draw();
 }
 
+// Virtual Void Override for Context Data
+WaterContext* CreateMaterialContextData() override
+{
+	return new WaterContext(NULL);
+}
+
 SHADER_DRAW
 {
+#ifdef ASWSDK
+	// Not doing this here
+	if (ShouldDrawNormalsForSSAO())
+	{
+		Draw(false); // Without this crash + "No render states in shader ".."
+		return;
+	}
+#endif
+
+	// Get Context Data. BaseShader handles creation for us, using the CreateMaterialContextData() virtual
+	WaterContext* pContextData = GetMaterialContextData<WaterContext>(pContextDataPtr);
+
 	// Stock-Consistency
 	// We need to Draw Expensive first, then Cheap. ( Unless bReflection )
 	// Its a Multipass Shader which is not obvious at first glance!!
@@ -1360,7 +1406,7 @@ SHADER_DRAW
 	if (!bForceCheap && !bInEditor && (bRefraction || bReflection))
 	{
 		bDrewSomething = true;
-		DrawExpensive(pShaderShadow, pShaderAPI, bReflection);
+		DrawExpensive(pShaderShadow, pShaderAPI, bReflection, pContextData);
 	}
 
 	// "Use $decal to see if we are a decal or not. . if we are, then don't bother
@@ -1376,7 +1422,7 @@ SHADER_DRAW
 	if (!bReflection && !HasFlag(MATERIAL_VAR_DECAL) && !HasFlashlight()) // NOTE: never do cheap projected Texture Water
 	{
 		bDrewSomething = true;
-		DrawCheap(pShaderShadow, pShaderAPI, bInEditor, bExpensiveEditorPreview);
+		DrawCheap(pShaderShadow, pShaderAPI, bInEditor, bExpensiveEditorPreview, pContextData);
 	}
 
 	if (!bDrewSomething)

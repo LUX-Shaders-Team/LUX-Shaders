@@ -2,7 +2,7 @@
 //
 //	Original D. :	20.01.2023 DMY
 //	Initial D.	:	10.12.2025 DMY
-//	Last Change :	 30.01.2026 DMY
+//	Last Change :	18.05.2026 DMY
 //
 //==========================================================================//
 
@@ -142,6 +142,15 @@ SHADER_INIT
 
 SHADER_DRAW
 {
+#ifdef ASWSDK
+	// Not doing this here
+	if (ShouldDrawNormalsForSSAO())
+	{
+		Draw(false); // Without this crash + "No render states in shader ".."
+		return;
+	}
+#endif
+
 	//==========================================================================//
 	// Static Snapshot of the Shader Settings
 	//==========================================================================//
@@ -260,7 +269,7 @@ SHADER_DRAW
 			// Fudge-Bilinear
 			if(nFilter == 0)
 			{
-				float Fudge = 0.01f / max(w, h); // 'per ATI' wonder if thats still needed
+				float Fudge = 0.01f / MAX(w, h); // 'per ATI' wonder if thats still needed
 
 				float4 f4Data;
 				f4Data.x = 0.5f / (w - Fudge);

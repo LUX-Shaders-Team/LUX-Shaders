@@ -2,18 +2,37 @@
 //
 //	Original D.	:	26.03.2025 DMY
 //	Initial D.	:	28.09.2025 DMY
-//	Last Change :	 30.01.2026 DMY
+//	Last Change :	23.05.2026 DMY
 //
 //==========================================================================//
 
 // Commonly Shared Definitions, Defines and Data for all Shaders
 #include "Triplanar.h"
 
+#ifdef ASWSDK
+#include "../renderpasses/SSAODrawNormalPass.h"
+#endif
+
 // Includes for Shaderfiles...
 #include "lux_brush_simplified_vs30.inc"
 #include "lux_brush_vs30.inc"
 #include "lux_triplanar_brush_ps30.inc"
 #include "lux_triplanar_brush_flashlight_ps30.inc"
+
+//==========================================================================//
+// CommandBuffer Setup
+//==========================================================================//
+class TriplanarBrushContext : public LUXPerMaterialContextData
+{
+public:
+	float f1LightmapScaleFactor = 1.0f; // Only used on ASW
+
+	// Everything related to constants
+
+	TriplanarBrushContext(IMaterialVar** ppParams)
+	{
+	}
+};
 
 //==========================================================================//
 // Triplanar for Model based Geometry
@@ -63,6 +82,9 @@ void HandleFallback()
 		// **Not on VLG**. It demands you use $Seamless_Base instead
 		if (!bModelShader && IsDefined(Seamless_Scale) && GetFloat(Seamless_Scale) != 0.0f)
 		{
+			// The Consistency from above
+			SetBool(Seamless_Base, true);
+
 			SetBool(TriPlanar_Base, true);
 			SetBool(TriPlanar_Bump, true);
 			SetBool(TriPlanar_EnvMapMask, true);
@@ -149,6 +171,16 @@ void HandleFallback()
 		DefaultFloat3(TriPlanar_Offset_EnvMapMask, 0.0f, 0.0f, 0.0f);
 	}
 }
+
+#ifdef ASWSDK
+void Triplanar_SetupSSAODrawNormalVars(SSAODrawNormalPass_Vars_t& SSAODrawNormalVars)
+{
+	SSAODrawNormalVars.m_bIsModel = false;
+
+	// FIXME: SSAO Draw Pass does not support Triplanar, I set up no other Vars here so it at least draws a flat Normal
+}
+#endif
+
 
 void SetTriplanarBrushFlags()
 {
@@ -289,8 +321,27 @@ SHADER_INIT
 	}
 }
 
+// Virtual Void Override for Context Data
+TriplanarBrushContext* CreateMaterialContextData() override
+{
+	return new TriplanarBrushContext(NULL);
+}
+
 SHADER_DRAW
 {
+#ifdef ASWSDK
+	if (ShouldDrawNormalsForSSAO())
+	{
+		SSAODrawNormalPass_Vars_t Vars;
+		Triplanar_SetupSSAODrawNormalVars(Vars);
+		SSAONormalPass_Shader_Draw(this, pShaderShadow, pShaderAPI, Vars);
+		return;
+	}
+#endif
+
+	// Get Context Data. BaseShader handles creation for us, using the CreateMaterialContextData() virtual
+	auto* pContextData = GetMaterialContextData<TriplanarBrushContext>(pContextDataPtr);
+
 	bool bProjTex = HasFlashlight();
 
 	// Texture related Boolean. Check for existing booleans first!
@@ -354,9 +405,8 @@ SHADER_DRAW
 		if (HasFlag(MATERIAL_VAR_VERTEXCOLOR))
 			nFlags |= VERTEX_COLOR;
 
-		// EnvMap wants Tangents, ProjTex always needs Normals
-		if(bProjTex || bHasEnvMap)
-			nFlags |= VERTEX_NORMAL;
+		// Always ask for this Flag, we need it for Seamless Weights
+		nFlags |= VERTEX_NORMAL;
 
 		// Normal Maps don't require the TBN Matrix actually.
 		// ( Due to how Radiosity Normal Mapping works )
@@ -416,7 +466,7 @@ SHADER_DRAW
 		nNeededTexCoords += bTriplanarBump;
 		nNeededTexCoords += bTriplanarEnvMapMask;
 		nNeededTexCoords += bTriplanarDetail;
-		nNeededTexCoords = Clamp(nNeededTexCoords, 0, 3);
+		nNeededTexCoords = clamp(nNeededTexCoords, 0, 3);
 
 		bool bHasVertexColors = HasFlag(MATERIAL_VAR_VERTEXCOLOR) || HasFlag(MATERIAL_VAR_VERTEXALPHA);
 		if(bProjTex)
@@ -451,7 +501,7 @@ SHADER_DRAW
 		}
 		else
 		{
-			int nEnvMapMode = bHasEnvMap + bHasEnvMapMask + 2 * bPCC;
+			int nEnvMapMode = bHasEnvMap + bPCC + 2 * bHasEnvMapMask;
 			DECLARE_STATIC_PIXEL_SHADER(lux_triplanar_brush_ps30);
 			SET_STATIC_PIXEL_SHADER_COMBO(TRIPLANAR_BASE, bTriplanarBase);
 			SET_STATIC_PIXEL_SHADER_COMBO(MODE_BUMP, bHasNormalMap + bTriplanarBump);
@@ -461,6 +511,13 @@ SHADER_DRAW
 			SET_STATIC_PIXEL_SHADER_COMBO(ENVMAPMODE, nEnvMapMode);
 			SET_STATIC_PIXEL_SHADER(lux_triplanar_brush_ps30);
 		}
+
+#ifdef ASWSDK
+		// LightmapScaleFactor is passed on via IShaderShadow instead of IShaderDynamicAPI
+		// The way LUX was designed, this is passed on with some other Control Data
+		// Store it so we can pack it together later
+		pContextData->f1LightmapScaleFactor = pShaderShadow->GetLightMapScaleFactor();
+#endif
 	}
 	
 	//==========================================================================//
@@ -539,7 +596,7 @@ SHADER_DRAW
 
 		// c1 - Modulation Constant
 		// Function above, handles LightmapScaleFactor and Alpha Modulation
-		SetModulationConstant(bHasNormalMap && GetBool(SSBumpMathFix));
+		SetModulationConstant(bHasNormalMap && GetBool(SSBumpMathFix), true, pContextData->f1LightmapScaleFactor);
 
 		// c11 - Camera Position
 		SetPixelShaderCameraPosition(LUX_PS_FLOAT_CAMERAPOSITION);
@@ -571,9 +628,6 @@ SHADER_DRAW
 			float4 f4EnvMapTint_LightScale;
 			f4EnvMapTint_LightScale.rgb = GetFloat3(EnvMapTint);
 			f4EnvMapTint_LightScale.w = GetFloat(EnvMapLightScale);
-
-			// Stock Consistency - Convert from Gamma to Linear
-			f4EnvMapTint_LightScale.rgb = GammaToLinearTint(f4EnvMapTint_LightScale.rgb);
 			pShaderAPI->SetPixelShaderConstant(LUX_PS_FLOAT_ENVMAP_TINT, f4EnvMapTint_LightScale);
 
 			float4 f4EnvMapSaturation_Contrast;
@@ -659,10 +713,6 @@ SHADER_DRAW
 		// Prepare boolean array, yes we need to use BOOL
 		BOOL BBools[REGISTER_BOOL_MAX] = { false };
 		
-		// b0
-		if(HasFlag(MATERIAL_VAR_HALFLAMBERT))
-			BBools[LUX_PS_BOOL_HALFLAMBERT] = true;
-
 		if(HasFlag(MATERIAL_VAR_VERTEXCOLOR) || HasFlag(MATERIAL_VAR_VERTEXALPHA))
 			BBools[LUX_PS_BOOL_VERTEXCOLOR] = true;
 
@@ -709,7 +759,7 @@ SHADER_DRAW
 	if(IsDynamicState())
 	{
 #ifdef DEBUG_FULLBRIGHT2 
-		if (mat_fullbright.GetInt() == 2 && !HasFlag(MATERIAL_VAR_NO_DEBUG_OVERRIDE))
+		if (mat_fullbright() == 2 && !HasFlag(MATERIAL_VAR_NO_DEBUG_OVERRIDE))
 			BindTexture(SAMPLER_BASETEXTURE, TEXTURE_GREY);
 #endif
 
@@ -728,7 +778,7 @@ SHADER_DRAW
 #endif
 
 #ifdef DEBUG_LUXELS
-		if (mat_luxels.GetBool())
+		if (mat_luxels())
 			BindTexture(SAMPLER_LIGHTMAP, TEXTURE_DEBUG_LUXELS);
 #endif
 	}

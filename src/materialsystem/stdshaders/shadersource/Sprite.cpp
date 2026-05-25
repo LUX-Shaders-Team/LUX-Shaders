@@ -1,9 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	20.01.2023 DMY
-//	Last Change :	 30.01.2026 DMY
-//
-//	Purpose of this File :	Shader for Sprite objects, this doesn't include some particles.
+//	Last Change :	18.05.2026 DMY
 //
 //==========================================================================//
 
@@ -11,7 +9,22 @@
 #include "../cpp_lux_shared.h"
 
 // const.h has an enum for sprite Renderingmodes
-#include "const.h"
+enum RenderMode_t
+{
+	kRenderNormal = 0,		// src
+	kRenderTransColor,		// c*a+dest*(1-a)
+	kRenderTransTexture,	// src*a+dest*(1-a)
+	kRenderGlow,			// src*a+dest -- No Z buffer checks -- Fixed size in screen space
+	kRenderTransAlpha,		// src*srca+dest*(1-srca)
+	kRenderTransAdd,		// src*a+dest
+	kRenderEnvironmental,	// not drawn, used for environmental effects
+	kRenderTransAddFrameBlend, // use a fractional frame value to blend between animation frames
+	kRenderTransAlphaAdd,	// src + dest*(1-a)
+	kRenderWorldGlow,		// Same as kRenderGlow but not fixed size in screen space
+	kRenderNone,			// Don't render.
+
+	kRenderModeCount,		// must be last
+};
 
 // Includes for Shaderfiles...
 #include "lux_sprite_ps30.inc"
@@ -274,6 +287,15 @@ void Sprite_DetermineBools(int nRenderMode, SpriteSettings_t &Settings)
 
 SHADER_DRAW
 {
+#ifdef ASWSDK
+	// Not doing this here
+	if (ShouldDrawNormalsForSSAO())
+	{
+		Draw(false); // Without this crash + "No render states in shader ".."
+		return;
+	}
+#endif
+
 	//	bool bsRGB = !GetBool(info.m_nNoSRGB);
 	int nRenderMode = GetInt(SpriteRenderMode);
 
@@ -416,7 +438,7 @@ SHADER_DRAW
 
 			// s0
 			// Magic
-			int nFrame = (int)f1FrameBlendAlpha;
+			int nFrame = (int)f1FrameVar;
 
 			// ShiroDkxtro2: IMPORTANT, this is NOT BaseVSShader's BindTexture
 			// This has to give *the actual* Frame Number not a Parameter Index

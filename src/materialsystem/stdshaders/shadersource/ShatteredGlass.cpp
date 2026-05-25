@@ -1,9 +1,9 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	20.01.2023 DMY
-//	Last Change :	 30.01.2026 DMY
+//	Last Change :	23.05.2026 DMY
 //
-//	Shader Reference taken from Alien Swarm's Materialsystem
+//	Shader based on the Alien Swarm Version ( before TF2SDK was out )
 //
 //==========================================================================//
 
@@ -22,6 +22,21 @@ DEFINE_FALLBACK_SHADER(SDK_ShatteredGlass, LUX_ShatteredGlass)
 #ifdef REPLACE_SHATTEREDGLASS
 DEFINE_FALLBACK_SHADER(ShatteredGlass, LUX_ShatteredGlass)
 #endif
+
+//==========================================================================//
+// CommandBuffer Setup
+//==========================================================================//
+class ShatteredGlassContext : public LUXPerMaterialContextData
+{
+public:
+	float f1LightmapScaleFactor = 1.0f; // Only used on ASW
+
+	// Everything related to constants
+
+	ShatteredGlassContext(IMaterialVar** ppParams)
+	{
+	}
+};
 
 //==========================================================================//
 // Shader Start
@@ -158,8 +173,26 @@ SHADER_INIT
 	}
 }
 
+// Virtual Void Override for Context Data
+ShatteredGlassContext* CreateMaterialContextData() override
+{
+	return new ShatteredGlassContext(NULL);
+}
+
 SHADER_DRAW
 {
+#ifdef ASWSDK
+	// Not doing this here
+	if (ShouldDrawNormalsForSSAO())
+	{
+		Draw(false); // Without this crash + "No render states in shader ".."
+		return;
+	}
+#endif
+
+	// Get Context Data. BaseShader handles creation for us, using the CreateMaterialContextData() virtual
+	auto* pContextData = GetMaterialContextData<ShatteredGlassContext>(pContextDataPtr);
+
 	bool bHasBaseTexture = IsTextureLoaded(BaseTexture);
 	bool bHasDetailTexture = IsTextureLoaded(Detail);
 	bool bHasEnvMap = IsTextureLoaded(EnvMap);
@@ -273,12 +306,19 @@ SHADER_DRAW
 		SET_STATIC_VERTEX_SHADER(lux_shatteredglass_vs30);
 
 		bool bHasVertexColors = HasFlag(MATERIAL_VAR_VERTEXCOLOR);
-		int nEnvMapMode = bPCC * 2 + bHasEnvMapMask + bHasEnvMap;
+		int nEnvMapMode = bHasEnvMap + bPCC + 2 * bHasEnvMapMask;
 		DECLARE_STATIC_PIXEL_SHADER(lux_shatteredglass_ps30);
 		SET_STATIC_PIXEL_SHADER_COMBO(DETAILTEXTURE, bHasDetailTexture);
 		SET_STATIC_PIXEL_SHADER_COMBO(ENVMAPMODE, nEnvMapMode);
 		SET_STATIC_PIXEL_SHADER_COMBO(VERTEXCOLORS, bHasVertexColors);
 		SET_STATIC_PIXEL_SHADER(lux_shatteredglass_ps30);
+
+#ifdef ASWSDK
+		// LightmapScaleFactor is passed on via IShaderShadow instead of IShaderDynamicAPI
+		// The way LUX was designed, this is passed on with some other Control Data
+		// Store it so we can pack it together later
+		pContextData->f1LightmapScaleFactor = pShaderShadow->GetLightMapScaleFactor();
+#endif
 	}
 
 	//==========================================================================//
@@ -343,7 +383,7 @@ SHADER_DRAW
 
 		// c1 - Modulation Constant
 		// Function above, handles LightmapScaleFactor and Alpha Modulation
-		SetModulationConstant();
+		SetModulationConstant(false, true, pContextData->f1LightmapScaleFactor);
 			
 		// c11 - Camera Position
 		SetPixelShaderCameraPosition(LUX_PS_FLOAT_CAMERAPOSITION);
@@ -444,7 +484,7 @@ SHADER_DRAW
 	{
 		// mat_fullbright 2 binds a standard grey Texture...
 #ifdef DEBUG_FULLBRIGHT2 
-		if (mat_fullbright.GetInt() == 2 && !HasFlag(MATERIAL_VAR_NO_DEBUG_OVERRIDE))
+		if (mat_fullbright() == 2 && !HasFlag(MATERIAL_VAR_NO_DEBUG_OVERRIDE))
 		{
 			BindTexture(SAMPLER_BASETEXTURE, TEXTURE_GREY);
 		}
@@ -468,7 +508,7 @@ SHADER_DRAW
 #endif
 
 #ifdef DEBUG_LUXELS
-		if (mat_luxels.GetBool())
+		if (mat_luxels())
 		{
 			BindTexture(SAMPLER_LIGHTMAP, TEXTURE_DEBUG_LUXELS);
 		}

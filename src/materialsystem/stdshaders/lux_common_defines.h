@@ -1,7 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	20.01.2023 DMY
-//	Last Change :	 30.01.2026 DMY
+//	Last Change :	18.05.2026 DMY
 //
 //	Purpose of this File :	Define what features should be used
 //							Define If we use sdk2013 MP or SP
@@ -19,7 +19,13 @@
 
 // #define SDK2013SP
 #define TF2SDK
-// #define ASW - Not supported
+// #define ASWSDK
+// #define SFM_COMPATIBILITY
+
+// Current SFM Shaderloader is based on ASW, therefore ASWSDK must be used with this Directive
+#if defined(SFM_COMPATIBILITY)
+	#define ASWSDK
+#endif
 
 // This is only required for Parabellum
 // #define PARABELLUM
@@ -71,13 +77,6 @@
 #define REPLACE_WATER
 #define REPLACE_REFRACT
 #define REPLACE_EYES
-
-// !!! TF2C RELEASE !!! +FIXME:
-// ShiroDkxtro2: If something goes horribly wrong and you have to disable this Shader,
-// I used ifdef NOLUX for TF2C Engine Post to get rid of unused ConVars with regular Engine Post.
-// If you comment this to use the Fallback YOU MUST ALSO remove the ifdef NOLUX in tf2c_engine_post.cpp !!!
-// The FIXME for this is to remove tf2c_engine_post after release ( if nothing goes wrong )
-// AND to clean-up both this comment + the cpp_convars from the stock engine_post convars
 #define REPLACE_ENGINE_POST
 
 // This is a very safe 'replace'
@@ -115,7 +114,7 @@
 // This will make Ropes use the Spline Shader instead.
 // Mapbase used to force splineropes, if you're on MP Mapbase and your Ropes are broken, comment this!
 // -- Changing this does NOT require a Shader recompile
-#define SPLINEROPES
+// #define SPLINEROPES
 
 // Makes the Shaders use the Alien Swarm HeightFogFactor Code ( which is much simpler and cheaper )
 // The resulting Mask does not look 1:1 with the SDK.
@@ -142,10 +141,12 @@
 // -- Changing this does NOT require a Shader recompile
 #define DEBUG_FULLBRIGHT2
 
+#if defined(TF2SDK)
 // Only on SDK2013MP, if you define this and use SP it will automatically be undefined later.
 // Displays Debug Luxel Texture for models and brushes.
 // -- Changing this does NOT require a Shader recompile
 #define DEBUG_LUXELS
+#endif
 
 //==========================================================================//
 // Everything here must use #if defined() !!

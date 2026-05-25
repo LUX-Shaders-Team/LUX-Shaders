@@ -1,7 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	16.12.2023 DMY
-//	Last Change :	 30.01.2026 DMY
+//	Last Change :	19.03.2026 DMY
 //
 //	Purpose of this File :	Allows Users to write custom Shaders and use them. ( with limited Functionality )
 // 							'Recently' it was discovered that Screenspace_General can be used to write custom Shaders.
@@ -24,6 +24,21 @@
 #include "lux_custom_ps30.inc"
 #include "lux_custom_particle_ps30.inc"
 #include "lux_custom_projtex_ps30.inc"
+
+//==========================================================================//
+// CommandBuffer Setup
+//==========================================================================//
+class CustomShaderContext : public LUXPerMaterialContextData
+{
+public:
+	float f1LightmapScaleFactor = 1.0f; // Only used on ASW
+
+	// Everything related to constants
+
+	CustomShaderContext(IMaterialVar** ppParams)
+	{
+	}
+};
 
 //==========================================================================//
 // Shader Start LUX_Custom
@@ -298,6 +313,8 @@ BEGIN_SHADER_PARAMS
 	SHADER_PARAM(Shader_Particle_ExtractGreenAlpha, SHADER_PARAM_TYPE_BOOL, "", "Use Factors to blend Green/Alpha Channels.")
 	SHADER_PARAM(Shader_Particle_AddBaseTexture2,	SHADER_PARAM_TYPE_BOOL, "", "Enables second Texture blend Path. Float must be set manually to a Register.")
 
+	SHADER_PARAM(Shader_ShatteredGlass,				SHADER_PARAM_TYPE_BOOL, "", "Enables second & third TexCoord for ShatteredGlass Materials.")
+	
 	// Not adapting a new Name since I don't know where this usually gets set. ( I don't make Particles. )
 	// I was told it happens 'in the renderer', I'm not taking any chances that it'll be impossible set the Orientation Mode in the Particle Editor..
 	// There is technically a third mode of Orientation that aligns a Particle with a Control Point
@@ -426,6 +443,23 @@ SHADER_INIT_PARAMS()
 	{
 		SetFlag2((MaterialVarFlags2_t)GetInt(Shader_Flags2));
 	}
+	
+	// Can't check IsDefined() during Shadowstate, need to set this here
+	// Defaulted to this since that's what other Shaders usually do
+	if(IsDefined(Shader_AlphaTestFunc))
+	{
+		ShaderAlphaFunc_t nAlphaFunc = (ShaderAlphaFunc_t)GetInt(Shader_AlphaTestFunc);
+
+		// Clamp this just in case someone does something they really shouldn't
+		if (nAlphaFunc <= SHADER_ALPHAFUNC_NEVER || nAlphaFunc >= SHADER_ALPHAFUNC_ALWAYS)
+		{
+			nAlphaFunc = SHADER_ALPHAFUNC_GEQUAL;
+			ShaderDebugMessage("has Invalid AlphaFunc, defaulting to Greater or Equal.");
+			SetInt(Shader_AlphaTestFunc, SHADER_ALPHAFUNC_GEQUAL);
+		}
+	}
+	else
+		SetInt(Shader_AlphaTestFunc, SHADER_ALPHAFUNC_GEQUAL);
 }
 
 SHADER_FALLBACK
@@ -484,8 +518,42 @@ SHADER_INIT
 		DefaultBool(EnvMapParallax, true);
 }
 
+// Virtual Void Override for Context Data
+CustomShaderContext* CreateMaterialContextData() override
+{
+	return new CustomShaderContext(NULL);
+}
+
 SHADER_DRAW
 {
+	// FIXME: Draw Normals for SSAO on ASW somehow? Bit of a Problem here
+	// Lets start with some IDEAS:
+	/*
+		- Particles don't get a Normal, just NOPE and return for those.
+		- Translucent SUrfaces are also easy to detect, those can just NOPE as well ( ShatteredGlass, $Translucent )
+			- What about AlphaTesting ? Should maybe be allowed?
+		- Fallback to default Draw Normal Pass *unless*
+		- Parameter specified for VS and PS that can draw the Normals the way the Shader is using them
+			- Instant Problem with this : Need a new Template File for the Pass or Combo on every existing Template File
+				- New Template would be dirty
+				- Combo should be ok but creates new Problem for non-ASW Projects
+				- Combo increases Filesize for all Custom Shader
+		- Don't Draw Normal and SSAO Factor.. "Good luck, not my Problem" basically
+			-> Lazy
+
+		For now:
+			- Let whoever forks LUX for a ASW based Project ( dead Branch ) worry about this Problem if they want to support SSAO *and* the CSS
+			- Not a concern for other Branches
+			- Pointless for SFM
+	*/
+#ifdef ASWSDK
+	if (ShouldDrawNormalsForSSAO())
+		return;
+
+	// Get Context Data. BaseShader handles creation for us, using the CreateMaterialContextData() virtual
+	auto* pContextData = GetMaterialContextData<CustomShaderContext>(pContextDataPtr);
+#endif
+
 	bool bParticle = GetBool(Shader_Particle);
 	bool bParticleDepthBlend = bParticle && GetBool(Shader_Particle_DepthBlend);
 
@@ -540,6 +608,101 @@ SHADER_DRAW
 	bool bPCC = !bIsModel && !bParticle && bHasEnvMap && GetBool(EnvMapParallax);
 
 	//==========================================================================//
+	// Compute Alphawrites ( needed in both States )
+	//==========================================================================//
+
+	// Defaults
+	bool bAlphaWrites = !GetBool(Shader_Disable_AlphaWrites);
+	bool bDepthWrites = !GetBool(Shader_Disable_DepthWrites);
+
+	bool bEnableBlending = false;
+	ShaderBlendFactor_t SrcFactor = SHADER_BLEND_ONE;
+	ShaderBlendFactor_t DstFactor = SHADER_BLEND_ONE;
+
+	if (GetBool(Shader_AlphaBlending_Enable))
+	{
+		bEnableBlending = true;
+		SrcFactor = (ShaderBlendFactor_t)GetInt(Shader_AlphaBlending_Src);
+		DstFactor = (ShaderBlendFactor_t)GetInt(Shader_AlphaBlending_Dst);
+
+		bAlphaWrites = false;
+		bDepthWrites = false;
+	}
+	else
+	{
+		// Projected Textures override the Behavior..
+		// This should really be exposed just in case..
+		if (bProjectedTexture)
+		{
+			bEnableBlending = true;
+
+			// Always Additive, with $Translucent we need to multiply by BaseAlpha first
+			if (bTranslucent)
+			{
+				// BT_BLENDADD
+				SrcFactor = SHADER_BLEND_SRC_ALPHA;
+				DstFactor = SHADER_BLEND_ONE;
+			}
+			else
+			{
+				// BT_ADD
+				SrcFactor = SHADER_BLEND_ONE;
+				DstFactor = SHADER_BLEND_ONE;
+			}
+
+			bAlphaWrites = false;
+			bDepthWrites = false;
+		}
+		else if (bTranslucent)
+		{
+			bEnableBlending = true;
+
+			if (bAdditive)
+			{
+				// BT_BLENDADD
+				SrcFactor = SHADER_BLEND_SRC_ALPHA;
+				DstFactor = SHADER_BLEND_ONE;
+			}
+			else
+			{
+				// BT_BLEND
+				SrcFactor = SHADER_BLEND_SRC_ALPHA;
+				DstFactor = SHADER_BLEND_ONE_MINUS_SRC_ALPHA;
+			}
+
+			bAlphaWrites = false;
+			bDepthWrites = false;
+		}
+		else if (bAdditive)
+		{
+			bEnableBlending = true;
+
+			// BT_ADD
+			SrcFactor = SHADER_BLEND_ONE;
+			DstFactor = SHADER_BLEND_ONE;
+
+			bAlphaWrites = false;
+			bDepthWrites = false;
+		}
+		else if (bAlphaTest)
+		{
+			// We do allow Depth Writes with AlphaTest since there is no sorting Issues!
+			bAlphaWrites = false;
+		}
+	}
+
+	// Clamp Blendmodes in case someone does something they really shouldn't.
+	if(bEnableBlending)
+	{
+		// Clamp this just in case someone does something they really shouldn't
+		if (SrcFactor < SHADER_BLEND_ZERO || SrcFactor > SHADER_BLEND_ONE_MINUS_SRC_COLOR)
+			SrcFactor = SHADER_BLEND_ZERO;
+
+		if (DstFactor < 0 || DstFactor > 10)
+			DstFactor = SHADER_BLEND_ONE;
+	}
+
+	//==========================================================================//
 	// Static Snapshot of Shader Setup
 	//==========================================================================//
 	if (IsSnapshotting())
@@ -550,74 +713,19 @@ SHADER_DRAW
 
 		// This handles : $IgnoreZ, $Decal, $Nocull, $Znearer, $Wireframe, $AllowAlphaToCoverage
 		SetInitialShadowState();
-
-		bool bAlphaWrites = !GetBool(Shader_Disable_AlphaWrites);
-		bool bDepthWrites = !GetBool(Shader_Disable_DepthWrites);
 	
-		// This overrides over Blending Modes ( read: Flags like $Additive )
-		if (GetBool(Shader_AlphaBlending_Enable))
+		// Enable Opacity Behaviors
+		if (bEnableBlending)
 		{
-			ShaderBlendFactor_t SrcFactor = (ShaderBlendFactor_t)GetInt(Shader_AlphaBlending_Src);
-			ShaderBlendFactor_t DstFactor = (ShaderBlendFactor_t)GetInt(Shader_AlphaBlending_Dst);
-
-			// Clamp this just in case someone does something they really shouldn't
-			if (SrcFactor < SHADER_BLEND_ZERO || SrcFactor > SHADER_BLEND_ONE_MINUS_SRC_COLOR)
-				SrcFactor = SHADER_BLEND_ZERO;
-
-			if (DstFactor < 0 || DstFactor > 10)
-				DstFactor = SHADER_BLEND_ONE;
-
 			EnableAlphaBlending(SrcFactor, DstFactor);
-
-			bAlphaWrites = false;
-			bDepthWrites = false;
 		}
-		else
+		else if (bAlphaTest)
 		{
-			// Replicating Behaviour of Stock Shaders
-			if (bProjectedTexture)
-			{
-				// Always Additive
-				EnableAlphaBlending(SHADER_BLEND_ONE, SHADER_BLEND_ONE); // BT_ADD
+			pShaderShadow->EnableAlphaTest(true);
 
-				bAlphaWrites = false;
-				bDepthWrites = false;
-			}
-			else if (bTranslucent)
-			{
-				if (bAdditive)
-					EnableAlphaBlending(SHADER_BLEND_SRC_ALPHA, SHADER_BLEND_ONE); // BT_BLENDADD
-				else
-					EnableAlphaBlending(SHADER_BLEND_SRC_ALPHA, SHADER_BLEND_ONE_MINUS_SRC_ALPHA); // BT_BLEND
-
-				bAlphaWrites = false;
-				bDepthWrites = false;
-			}
-			else if (bAdditive)
-			{
-				EnableAlphaBlending(SHADER_BLEND_ONE, SHADER_BLEND_ONE); // BT_ADD
-
-				bAlphaWrites = false;
-				bDepthWrites = false;
-			}
-			else if (bAlphaTest)
-			{
-				pShaderShadow->EnableAlphaTest(true);
-
-				float f1AlphaTestRef = GetFloat(Shader_AlphaTestReference);
-				if (f1AlphaTestRef > 0.0f) // 0 is the default
-				{
-					ShaderAlphaFunc_t nAlphaFunc = SHADER_ALPHAFUNC_GEQUAL;
-
-					// User Picked AlphaFunc
-					if (IsDefined(Shader_AlphaTestFunc))
-						nAlphaFunc = (ShaderAlphaFunc_t)GetInt(Shader_AlphaTestFunc);
-
-					// Clamp this just in case someone does something they really shouldn't
-					if (nAlphaFunc >= SHADER_ALPHAFUNC_NEVER && nAlphaFunc <= SHADER_ALPHAFUNC_ALWAYS)
-						pShaderShadow->AlphaFunc(nAlphaFunc, f1AlphaTestRef);
-				}
-			}
+			ShaderAlphaFunc_t nAlphaFunc = (ShaderAlphaFunc_t)GetInt(Shader_AlphaTestFunc);
+			float f1AlphaTestRef = GetFloat(Shader_AlphaTestReference);
+			pShaderShadow->AlphaFunc(nAlphaFunc, f1AlphaTestRef);
 		}
 
 		// Projected Texture gets it's own FogMode
@@ -628,9 +736,6 @@ SHADER_DRAW
 		// Never do Alpha or DepthWrites for Projected Textures
 		if (bProjectedTexture)
 		{
-			bAlphaWrites = false;
-			bDepthWrites = false;
-
 			nFogMode = GetInt(Shader_FogMode_ProjTex);
 		}
 		else
@@ -792,6 +897,8 @@ SHADER_DRAW
 			int nTexCoords = 1;
 			if (GetBool(Shader_Model_SecondTexCoord))
 				nTexCoords = 2;
+			else if(GetBool(Shader_ShatteredGlass))
+				nTexCoords = 3;
 
 			pShaderShadow->VertexShaderVertexFormat(nFlags, nTexCoords, NULL, nUserDataSize);
 		}
@@ -817,6 +924,13 @@ SHADER_DRAW
 			// TEXCOORD1 = Lightmap UV
 			// TEXCOORD2 = Lightmap UV .x Offset for Directional Lightmaps
 			int nTexCoords = 2 + (bBumpMapped);
+
+			// Shader always asks for 3 TexCoords
+			// TEXCOORD0 = Fractured Glass BaseTexture UV ( Per Panel )
+			// TEXCOORD1 = Lightmap UV
+			// TEXCOORD2 = Actual UV ( Across the Surface )
+			if (GetBool(Shader_ShatteredGlass))
+				nTexCoords = 3;
 
 			pShaderShadow->VertexShaderVertexFormat(nFlags, nTexCoords, NULL, nUserDataSize);
 		}
@@ -1136,6 +1250,29 @@ SHADER_DRAW
 			pShaderShadow->SetVertexShader(strStaticVS.c_str(), nIndexVS);
 			pShaderShadow->SetPixelShader(strStaticPS.c_str(), nIndexPS);
 		}
+
+#ifdef ASWSDK
+		//==========================================================================//
+		// Per-Instance Command Buffer
+		//==========================================================================//
+		PI_BeginCommandBuffer();
+
+		if (bIsModel && !bBumpMapped)
+			PI_SetVertexShaderAmbientLightCube();
+
+		if (bIsModel && GetBool(Shader_WorldLightData))
+			PI_SetPixelShaderLocalLighting(REGISTER_FLOAT_014);
+
+		if (GetBool(Shader_AmbientData))
+			PI_SetPixelShaderAmbientLightCube(REGISTER_FLOAT_020);
+
+		PI_EndCommandBuffer();
+
+		// LightmapScaleFactor is passed on via IShaderShadow instead of IShaderDynamicAPI
+		// The way LUX was designed, this is passed on with some other Control Data
+		// Store it so we can pack it together later
+		pContextData->f1LightmapScaleFactor = pShaderShadow->GetLightMapScaleFactor();		
+#endif
 	}
 
 	//==========================================================================//
@@ -1260,7 +1397,9 @@ SHADER_DRAW
 			// Models get LightData, Brushes get 2-6 more Constants or PCC
 			if (bIsModel && GetBool(Shader_WorldLightData))
 			{
+#ifndef ASWSDK
 				pShaderAPI->CommitPixelShaderLighting(REGISTER_FLOAT_014);
+#endif
 			}
 			else
 			{
@@ -1288,8 +1427,10 @@ SHADER_DRAW
 			}
 
 			// c20 - c25
+#ifndef ASWSDK
 			if(GetBool(Shader_AmbientData))
 				pShaderAPI->SetPixelShaderStateAmbientLightCube(REGISTER_FLOAT_020);
+#endif
 		}
 
 		// c26
@@ -1314,7 +1455,7 @@ SHADER_DRAW
 		// c29 is (apparently) set automatically ( FogColor and OO_DESTALPHA_DEPTH_RANGE )
 
 		// c30 is (apparently) set automatically ( cLightScale )
-
+		
 		// c31
 		if (bParticleDepthBlend)
 		{
@@ -1354,15 +1495,22 @@ SHADER_DRAW
 			pShaderAPI->GetLightmapDimensions(&nWidth, &nHeight);
 			cSingleConstant.x = 1.0f / (float)nWidth;
 			cSingleConstant.y = 1.0f / (float)nHeight;
+#ifndef ASWSDK
 			cSingleConstant.z = pShaderAPI->GetLightMapScaleFactor();
+#else
+			cSingleConstant.z = pContextData->f1LightmapScaleFactor;
+#endif
 			cSingleConstant.w = 0.0f; // Free
 			pShaderAPI->SetPixelShaderConstant(REGISTER_FLOAT_031, cSingleConstant);
+
 		}
 
 		// If this isn't supported and you try to set >c31,
 		// the game *will* crash *if* the registers aren't enabled in the ShaderAPI
 		// It doesn't matter for setting .vcs, they will just be invisible apparently
+#ifndef ASWSDK
 		if (g_pHardwareConfig->SupportsShaderModel_3_0())
+#endif
 		{
 			// 32 Parameters, Size of 4
 			float4 cPixelConstants[32] = { 0.0f };
@@ -1548,17 +1696,6 @@ SHADER_DRAW
 		if (bHasEnvMap)
 			BindTexture(SHADER_SAMPLER14, EnvMap, EnvMapFrame);
 
-		// Need to recompute AlphaWrites here.
-		// All of these Things disable AlphaWrites
-		int nAlphaDisable = 0;
-		nAlphaDisable += GetBool(Shader_AlphaBlending_Enable);
-		nAlphaDisable += bProjectedTexture;
-		nAlphaDisable += bTranslucent;
-		nAlphaDisable += bAdditive;
-		nAlphaDisable += bAlphaTest;
-		nAlphaDisable += GetBool(Shader_Disable_AlphaWrites);
-
-		bool bAlphaWrites = (nAlphaDisable == 0) ? true : false;
 		bool bWriteDepthToAlpha = false;
 		bool bWriteWaterFogToAlpha = false;
 
@@ -1638,19 +1775,21 @@ SHADER_DRAW
 				bHasStaticPropLighting = StaticLightVertex(LightState); // Name of the Constant different between SDK's
 				bHasDynamicPropLighting = LightState.HasDynamicLight();
 
+#ifndef ASWSDK
 				// Need to send this to the Vertex Shader manually in this Scenario
 				if (bHasDynamicPropLighting)
 					pShaderAPI->SetVertexShaderStateAmbientLightCube();
+#endif
 			}
 		}
 
 		//==========================================================================//
 		// Set Dynamic Shaders
 		//==========================================================================//
+#ifdef TF2SDK
 		int nDecalMode = HasFlag(MATERIAL_VAR_DECAL);
 
 		// Overlays require some extra logic on the TF2SDK due to Lightmap Padding
-#ifdef TF2SDK
 		nDecalMode = nDecalMode * 2;
 #endif
 

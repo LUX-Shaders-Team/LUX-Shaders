@@ -1,7 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	23.11.2024 DMY
-//	Last Change :	 30.01.2026 DMY
+//	Last Change :	22.05.2026 DMY
 //
 //==========================================================================//
 
@@ -24,11 +24,29 @@
 // NONE
 
 //==========================================================================//
+//	Unpack Combos
+//==========================================================================//
+#if (ENVMAPMODE > 0)
+    #define ENVMAP 1
+#else
+    #define ENVMAP 0
+#endif
+
+#if (ENVMAPMODE > 2)
+    #define ENVMAPMASK 1
+#else
+    #define ENVMAPMASK 0
+#endif
+
+#if (ENVMAPMODE == 2 || ENVMAPMODE == 4)
+    #define ENVMAPPARALLAXCORRECTION 1
+#else
+    #define ENVMAPPARALLAXCORRECTION 0
+#endif
+
+//==========================================================================//
 //	Constants, Functions, Includes
 //==========================================================================//
-
-// Using Brushes, need this for PCC
-#define BRUSH
 
 //#define TONEMAP_SCALE_NONE
 #define TONEMAP_SCALE_LINEAR
@@ -37,16 +55,9 @@
 // Include for all Pixel Shaders
 #include "lux_common_ps_fxc.h"
 
-// Surface gets a Lightmap
 #include "lux_common_lightmapped.h"
-
-#if DETAILTEXTURE
 #include "lux_common_detailtexture.h"
-#endif
-
-#if (ENVMAPMODE > 0)
 #include "lux_common_envmap.h"
-#endif
 
 // Custom Constant for overbright
 const float3 g_OverbrightFactor : register(c0);
@@ -131,7 +142,7 @@ float4 main(PS_INPUT i) : COLOR
 
 	// Stock-Consistency
 	// 1.0f Alpha on $BaseAlphaEnvMapMask
-	#if (ENVMAPMODE == 1 || ENVMAPMODE == 3)
+	#if (ENVMAP && !ENVMAPMASK)
 		f4FractureTexture.a = lerp(f4FractureTexture.a, 1.0f, g_f1LerpBaseAlpha);
 	#endif
 	

@@ -2,12 +2,16 @@
 //
 //	Original D.	:	26.03.2025 DMY
 //	Initial D.	:	28.09.2025 DMY
-//	Last Change :	 30.01.2026 DMY
+//	Last Change :	18.05.2026 DMY
 //
 //==========================================================================//
 
 // Commonly Shared Definitions, Defines and Data for all Shaders
 #include "Triplanar.h"
+
+#ifdef ASWSDK
+#include "../renderpasses/SSAODrawNormalPass.h"
+#endif
 
 // Includes for Shaderfiles...
 #include "lux_model_simplified_vs30.inc"
@@ -170,6 +174,15 @@ void SetTriplanarModelFlags()
 	}
 }
 
+#ifdef ASWSDK
+void Triplanar_SetupSSAODrawNormalVars(SSAODrawNormalPass_Vars_t& SSAODrawNormalVars)
+{
+	SSAODrawNormalVars.m_bIsModel = false;
+
+	// FIXME: SSAO Draw Pass does not support Triplanar, I set up no other Vars here so it at least draws a flat Normal
+}
+#endif
+
 SHADER_INIT_PARAMS()
 {
 	SetTriplanarModelFlags();
@@ -262,6 +275,16 @@ SHADER_INIT
 
 SHADER_DRAW
 {
+#ifdef ASWSDK
+	if (ShouldDrawNormalsForSSAO())
+	{
+		SSAODrawNormalPass_Vars_t Vars;
+		Triplanar_SetupSSAODrawNormalVars(Vars);
+		SSAONormalPass_Shader_Draw(this, pShaderShadow, pShaderAPI, Vars);
+		return;
+	}
+#endif
+
 	bool bProjTex = HasFlashlight();
 
 	// Texture related Boolean. Check for existing booleans first!
@@ -312,12 +335,11 @@ SHADER_DRAW
 		// Vertex Shader - Vertex Format
 		//==========================================================================//
 
-		unsigned int nFlags = VERTEX_POSITION | VERTEX_NORMAL | VERTEX_FORMAT_COMPRESSED;
+		unsigned int nFlags = VERTEX_POSITION | VERTEX_FORMAT_COMPRESSED;
 		int nTexCoords = 1;
-		// This doesn't actually support VertexColors
-		// Should it? The only usecase I can imagine is Detail Props
-//		if (HasFlag(MATERIAL_VAR_VERTEXCOLOR) || HasFlag(MATERIAL_VAR_VERTEXALPHA))
-//			nFlags |= VERTEX_COLOR;
+
+		// Always ask for this Flag, we need it for Seamless Weights
+		nFlags |= VERTEX_NORMAL;
 
 		// This enables Tangent Data apparently
 		int nUserDataSize = (bProjTex || bHasNormalMap) ? 4 : 0;
@@ -361,7 +383,7 @@ SHADER_DRAW
 //		nNeededTexCoords += bTriplanarBump; // Bumped Model Shader always has 2 TexCoords
 		nNeededTexCoords += bTriplanarEnvMapMask;
 		nNeededTexCoords += bTriplanarDetail;
-		nNeededTexCoords = Clamp(nNeededTexCoords, 0, 3);
+		nNeededTexCoords = clamp(nNeededTexCoords, 0, 3);
 
 		bool bHasVertexColors = HasFlag(MATERIAL_VAR_VERTEXCOLOR) || HasFlag(MATERIAL_VAR_VERTEXALPHA);
 		if(bProjTex)
@@ -411,6 +433,24 @@ SHADER_DRAW
 			SET_STATIC_PIXEL_SHADER_COMBO(ENVMAPMODE, nEnvMapMode);
 			SET_STATIC_PIXEL_SHADER(lux_triplanar_model_ps30);
 		}
+
+#ifdef ASWSDK
+		//==========================================================================//
+		// Per-Instance Command Buffer
+		//==========================================================================//
+		PI_BeginCommandBuffer();
+
+		if (!bProjTex && bHasNormalMap)
+			PI_SetPixelShaderLocalLighting(LUX_PS_FLOAT_LIGHTDATA);
+
+		if (!bProjTex && bHasNormalMap)
+			PI_SetPixelShaderAmbientLightCube(LUX_PS_FLOAT_AMBIENTCUBE);
+
+		if (!bProjTex && !bHasNormalMap)
+			PI_SetVertexShaderAmbientLightCube();
+
+		PI_EndCommandBuffer();
+#endif
 	}
 	
 	//==========================================================================//
@@ -489,6 +529,7 @@ SHADER_DRAW
 		// c12 - Fog Params
 		pShaderAPI->SetPixelShaderFogParams(LUX_PS_FLOAT_FOGPARAMETERS);
 
+#ifndef ASWSDK
 		// c13, c14, c15, c16, c17, c18
 		if (!bProjTex && bHasNormalMap)
 			pShaderAPI->SetPixelShaderStateAmbientLightCube(LUX_PS_FLOAT_AMBIENTCUBE, !LightState.m_bAmbientLight);
@@ -496,6 +537,7 @@ SHADER_DRAW
 		// c20, c21, c22, c23, c24, c25
 		if (!bProjTex && bHasNormalMap)
 			pShaderAPI->CommitPixelShaderLighting(LUX_PS_FLOAT_LIGHTDATA);
+#endif
 
 		// c32 - $Color, $Color2, $sRGBTint
 		float4 f4Tint = ComputeTint(!GetBool(NoTint) && GetBool(AllowDiffuseModulation), Alpha);
@@ -633,9 +675,11 @@ SHADER_DRAW
 			bHasStaticPropLighting = StaticLightVertex(LightState);
 			bHasDynamicPropLighting = LightState.m_bAmbientLight || (LightState.m_nNumLights > 0) ? 1 : 0;
 
+#ifndef ASWSDK
 			// Need to send this to the Vertex Shader manually in this scenario
 			if (bHasDynamicPropLighting)
 				pShaderAPI->SetVertexShaderStateAmbientLightCube();
+#endif
 		}
 
 		if(bProjTex)
@@ -682,7 +726,7 @@ SHADER_DRAW
 	if(IsDynamicState())
 	{
 #ifdef DEBUG_FULLBRIGHT2 
-		if (mat_fullbright.GetInt() == 2 && !HasFlag(MATERIAL_VAR_NO_DEBUG_OVERRIDE))
+		if (mat_fullbright() == 2 && !HasFlag(MATERIAL_VAR_NO_DEBUG_OVERRIDE))
 			BindTexture(SAMPLER_BASETEXTURE, TEXTURE_GREY);
 #endif
 

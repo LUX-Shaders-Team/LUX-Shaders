@@ -85,7 +85,9 @@ const int			cLightCountRegister			: register(i0);
 //					Default Constants Pragma Above	: register(c0);
 const float4		cConstants1						: register(c1);
 const float4		cEyePosWaterZ					: register(c2);
+#if !defined(ASWSDK)
 const float4		cFlexScale						: register(c3); // Only cFlexScale.x used. Binary value for toggling addition of the flex delta stream.
+#endif
 const float4x4		cModelViewProj					: register(c4);
 //					cModelViewProj[1]				: register(c5);
 //					cModelViewProj[2]				: register(c6);
@@ -95,7 +97,11 @@ const float4x4		cViewProj						: register(c8);
 //					cViewProj[2]					: register(c10); // 10
 //					cViewProj[3]					: register(c11);
 const float4		cModelViewProjZ					: register(c12); // "Used to compute projPosZ without skinning. Using cModelViewProj with FastClip generates incorrect results"
+#if (defined(ASWSDK) && !defined(SFM_COMPATIBILITY))
+const float4		cFlexScale						: register(c13); // Only cFlexScale.x used. Binary value for toggling addition of the flex delta stream.
+#else
 const float4		cViewProjZ						: register(c13); // "More constants working back from the top..."
+#endif
 const float4		cHPOFixValues					: register(LUX_VS_FLOAT_HPOFIX); // Viewport Data for fixing the D3D9 Half Pixel Offset Issue
 //					LUX_VS_FLOAT_SET0_0
 const float4		cFogParams						: register(c16);
@@ -160,6 +166,9 @@ const float4x3		cModel[53]						: register(c58);
 //
 //					LUX_VS_TEXTURETRANSFORM_02	c225
 //
+#if (defined(ASWSDK) && defined(SFM_COMPATIBILITY))
+const float4 cFlexScale : register(c225); // Only cFlexScale.x used. Binary value for toggling addition of the flex delta stream.
+#endif
 //					LUX_VS_TEXTURETRANSFORM_03	c227
 //
 //					LUX_VS_TEXTURETRANSFORM_04	c229

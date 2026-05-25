@@ -1,7 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	31.03.2025 DMY
-//	Last Change :	 30.01.2026 DMY
+//	Last Change :	08.02.2026 DMY
 //
 //==========================================================================//
 
@@ -339,20 +339,20 @@ float4 main(PS_INPUT i) : COLOR
 	//	Lighting
 	//==========================================================================//
 	#if BUMPMAPPING
-		float3 f3NormalTS = f4NormalTS.xyz;
+		float3 f3NormalTS;
 	
 		// If we used an SSBump we must convert it or bad Things happen to our Cubemaps...
 		// ShiroDkxtro2: This does not appear to be affected by the SSBumpMathIssue
 		#if SSBUMP
 			// Use the original f4 for the math, as the f3 is being overwritten
-			f3NormalTS  = mxBumpBasis[0] * f4NormalTS.xxx;
-			f3NormalTS += mxBumpBasis[1] * f4NormalTS.yyy;
-			f3NormalTS += mxBumpBasis[2] * f4NormalTS.zzz;
+			f3NormalTS  = mxBumpBasis[0] * f4BlendedNormal.xxx;
+			f3NormalTS += mxBumpBasis[1] * f4BlendedNormal.yyy;
+			f3NormalTS += mxBumpBasis[2] * f4BlendedNormal.zzz;
 			f3NormalTS  = normalize(f3NormalTS);
 		#else
 			// Regular Tangent Space Normal Maps get perturbed
 			// This scales the Normal Map to [-1..+1] Range
-			f3NormalTS = f4NormalTS.xyz * 2.0f - 1.0f;
+			f3NormalTS = f4BlendedNormal.xyz * 2.0f - 1.0f;
 		#endif
 
 		// Convert from Tangent Space to World Space, using the Tangent Matrix
