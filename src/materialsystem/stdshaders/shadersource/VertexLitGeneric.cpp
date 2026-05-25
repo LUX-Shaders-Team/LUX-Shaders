@@ -167,7 +167,7 @@ SHADER_INFO_D3D			(LUX_SHADERINFO_SM30)
 BEGIN_SHADER_PARAMS
 	Declare_NormalTextureParameters()
 #ifdef ASWSDK
-	SHADER_PARAM(TF2Compatability, SHADER_PARAM_TYPE_BOOL, "", "Makes the Shader favor TF2 Behavior over ASW Behavior ( Makes the Shader account for TF2 Quirks )")
+	SHADER_PARAM(TF2Compatibility, SHADER_PARAM_TYPE_BOOL, "", "Makes the Shader favor TF2 Behavior over ASW Behavior ( Makes the Shader account for TF2 Quirks )")
 #endif
 
 	Declare_SelfIlluminationParameters()
@@ -711,7 +711,7 @@ SHADER_INIT_PARAMS()
 			// By Default, $BaseMapAlphaPhongMask forces a flat Normal even when $BumpMap is used.
 			// Not on ASW, but we allow it with this Parameter so SFM can render the Materials correctly
 			#ifdef ASWSDK
-			if(GetBool(TF2Compatability))
+			if(GetBool(TF2Compatibility))
 			#endif
 			{	
 				if (!GetBool(PhongNewBehaviour) && GetBool(BaseMapAlphaPhongMask))
@@ -742,7 +742,7 @@ SHADER_INIT_PARAMS()
 				// NOTE: ASW does 1.0 - .r + .r * 150.0f
 				// The 1.0-r isn't replicated here but the 150* IS
 				#ifdef ASWSDK
-				if (!GetBool(TF2Compatability))
+				if (!GetBool(TF2Compatibility))
 				{
 					DefaultFloat(PhongExponent, 0.0f);
 					DefaultFloat(PhongExponentFactor, 150.0f);
@@ -764,7 +764,7 @@ SHADER_INIT_PARAMS()
 				// In ASW when $PhongExponent == 0.0f ( which is the default Value there )
 				// It will use the $PhongExponentTexture, if you don't have one, a White one will be assigned
 				// Since it does 1-r+r*150, the equivalent for LUX will be setting a $PhongExponent of 150
-				if(!GetBool(TF2Compatability))
+				if(!GetBool(TF2Compatibility))
 					DefaultFloat(PhongExponent, 150.0f);
 				else
 				#endif
@@ -1658,7 +1658,7 @@ void LuxVertexLitGeneric_Shader_Draw(IMaterialVar** ppParams, IShaderShadow* pSh
 #ifdef ASWSDK
 			// In ASW the untinted BaseTexture is used for SelfIllum, that is not the case in TF2
 			// I try to hack it back in here by multiplying the SelfIllumTint with the actual Tint
-			if (GetBool(TF2Compatability))
+			if (GetBool(TF2Compatibility))
 				f4SelfIllumTint_Scale.rgb *= f4BaseTextureTint.rgb;
 #endif
 			float4 f4SelfIllumFresnelTerms = 0.0f;
