@@ -635,6 +635,11 @@ SHADER_DRAW
 		// s11 - Lightmap. sRGB when LDR
 		EnableSampler(!bProjTex, SAMPLER_LIGHTMAP, !IsHDREnabled());
 
+#ifdef ASWSDK
+		// s12 - SSAO Rendertarget
+		EnableSampler(SHADER_SAMPLER12, true);
+#endif
+
 		// s13 - $SelfIllumMask. Not sRGB
 		EnableSampler(bSelfIllum && !GetBool(SelfIllum_EnvMapMask_Alpha), SAMPLER_SELFILLUM, false);
 
@@ -1041,6 +1046,14 @@ SHADER_DRAW
 		// s14 - $EnvMap
 		BindTexture(bHasEnvMap, SAMPLER_ENVMAPTEXTURE, EnvMap, EnvMapFrame);
 
+#ifdef ASWSDK
+		ITexture* pAOTexture = pShaderAPI->GetTextureRenderingParameter(TEXTURE_RENDERPARM_AMBIENT_OCCLUSION);
+		if (pAOTexture)
+			BindTexture(SHADER_SAMPLER12, pAOTexture);
+		else
+			pShaderAPI->BindStandardTexture(SHADER_SAMPLER12, TEXTURE_WHITE);
+#endif
+
 		// Binds Textures and sends Flashlight Constants
 		// Returns bFlashlightShadows
 		bool bFlashlightShadows = SetupFlashlight();
@@ -1052,6 +1065,26 @@ SHADER_DRAW
 		// Need Luminance Weights in this Scenario
 		if (bHasEnvMap || bDesaturateWithBaseAlpha || bHasPhong && GetBool(BaseMapLuminancePhongMask))
 			SetLuminanceGammaConstant(LUX_PS_FLOAT_LUMINANCE_GAMMA);
+
+#ifdef ASWSDK
+		pShaderAPI->SetScreenSizeForVPOS(LUX_PS_FLOAT_ASW_SCREENSIZE);
+
+		float4 cSSAOControls = 1.0f;
+
+		// Some duplicate Code here, FlashlightState has an Ambient Occlusion Factor, so we have to get it
+		if (bProjTex)
+		{
+			ITexture* pFlashlightDepthTexture;
+			FlashlightState_t FlashlightState;
+			VMatrix xmWorldToTexture;
+			FlashlightState = pShaderAPI->GetFlashlightStateEx(xmWorldToTexture, &pFlashlightDepthTexture);
+			cSSAOControls.x *= FlashlightState.m_flAmbientOcclusion;
+		}
+
+		cSSAOControls.x *= GetFloat(AmbientOcclusion);
+		cSSAOControls.x = fxsaturate(cSSAOControls.x); // Make sure this doesn't go out of Range
+		pShaderAPI->SetPixelShaderConstant(LUX_PS_FLOAT_ASW_SSAOCONTROLS, cSSAOControls);
+#endif
 
 		// Prepare boolean array, yes we need to use BOOL
 		BOOL BBools[REGISTER_BOOL_MAX] = { false };
