@@ -102,6 +102,11 @@ BEGIN_SHADER_PARAMS
 	Declare_NoDiffuseBumpLighting()
 	SHADER_PARAM(LinearWrite,		SHADER_PARAM_TYPE_BOOL,	"", "Disables SRGB conversion of Shader Results.")
 	Declare_EmissiveBlendParameters()
+
+#ifdef ASWSDK
+	// Parameter Name predetermined by SFM
+	SHADER_PARAM(AmbientOcclusion, SHADER_PARAM_TYPE_FLOAT, "", "Default 1.0f - The Strength of the AO Effect")
+#endif
 END_SHADER_PARAMS
 
 #ifdef ASWSDK
@@ -282,6 +287,10 @@ SHADER_INIT_PARAMS()
 		// Using Seamless_Scale will enable Seamless_Base
 		SetBool(Seamless_Base, true);
 	}
+
+#ifdef ASWSDK
+	DefaultFloat(AmbientOcclusion, 1.0f);
+#endif
 }
 
 SHADER_FALLBACK	
