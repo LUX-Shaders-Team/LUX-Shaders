@@ -1,7 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	20.01.2023 DMY
-//	Last Change :	18.05.2026 DMY
+//	Last Change :	25.05.2026 DMY
 //
 //==========================================================================//
 
@@ -156,7 +156,9 @@ bool IsTranslucent(IMaterialVar** params) const override
 			return true;
 	}
 
-	return IS_FLAG_SET(MATERIAL_VAR_TRANSLUCENT);
+	bool bIsTranslucent = params[Flags]->GetIntValue() & MATERIAL_VAR_TRANSLUCENT;
+	bool bPretendTranslucent = params[PretendTranslucent]->GetIntValue() != 0;
+	return bIsTranslucent || bPretendTranslucent;
 }
 
 // Set Up Vars here
@@ -338,7 +340,9 @@ bool IsTranslucent(IMaterialVar** params) const override
 			return true;
 	}
 
-	return IS_FLAG_SET(MATERIAL_VAR_TRANSLUCENT);
+	bool bIsTranslucent = params[Flags]->GetIntValue() & MATERIAL_VAR_TRANSLUCENT;
+	bool bPretendTranslucent = params[PretendTranslucent]->GetIntValue() != 0;
+	return bIsTranslucent || bPretendTranslucent;
 }
 
 // Set Up Vars here

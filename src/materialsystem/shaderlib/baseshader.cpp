@@ -390,6 +390,15 @@ static ShaderParamInfo_t s_StandardParams[NUM_SHADER_MATERIAL_VARS] =
 		0
 	},
 
+	// Causes the CBaseShader::IsTranslucent() to return true, even when the Material is not using $Translucent
+	{
+		"$PretendTranslucent",
+		"Causes other Systems to think the Material is $Translucent when it's not. When set, will not cast Shadows from projected Textures.",
+		SHADER_PARAM_TYPE_BOOL,
+		"0",
+		0
+	},
+
 	// Parameter for debugging SPECIFIC Materials.
 	// Use lux_debug_material to specify a Keyword foudn in the Materials Name.
 	// Then set a breakpoint in an if-Statement that checks the boolean Value of this Parameter
@@ -1193,7 +1202,8 @@ bool CBaseShader::TextureIsTranslucent( int textureVar, bool isBaseTexture )
 			if (!bSelfIllum && !bBaseAlphaEnvMapMask)
 			{
 				// Check if the Material has $Translucent or $AlphaTest.
-				if (HasFlag(MATERIAL_VAR_TRANSLUCENT) || HasFlag(MATERIAL_VAR_ALPHATEST))
+				bool bTranslucent = HasFlag(MATERIAL_VAR_TRANSLUCENT) && !GetBool(PretendTranslucent);
+				if (bTranslucent || HasFlag(MATERIAL_VAR_ALPHATEST))
 				{
 					// Make sure the Texture has an Alpha Channel.
 					// ( This is potentially unreliable )
@@ -1350,7 +1360,9 @@ bool CBaseShader::IsTranslucent( IMaterialVar **params ) const
 {
 	// This is a Virtual Function called by Client Code ( Particle System to name an Example ) 
 	// So use the manual Method or we get a crash since m_ppParams is nullptr
-	return (params[Flags]->GetIntValue() & MATERIAL_VAR_TRANSLUCENT) != 0;
+	bool bActualTranslucent = (params[Flags]->GetIntValue() & MATERIAL_VAR_TRANSLUCENT) != 0;
+	bool bFakeTranslucent = params[PretendTranslucent]->GetIntValue() != 0;
+	return bFakeTranslucent || bActualTranslucent;
 }
 
 //-----------------------------------------------------------------------------

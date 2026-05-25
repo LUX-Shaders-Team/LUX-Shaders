@@ -1,7 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	18.05.2026 DMY
-//	Last Change :	18.05.2026 DMY
+//	Last Change :	25.05.2026 DMY
 //
 //==========================================================================//
 
@@ -23,7 +23,8 @@ void SSAONormalPass_Shader_Draw(CBaseVSShader* pShader, IShaderShadow* pShaderSh
 	// We cannot Mask this Pass by Opacity since AlphaWrites are already used. Any non-Opaque Surface has to draw nothing
 	// AlphaTested Materials could theoratically use Clip() to make use of Opacity while having AlphaWrites.
 	// I'm worried about the previously written Results though.. Probably better not to do this
-	if(pShader->HasFlag(MATERIAL_VAR_TRANSLUCENT) || pShader->HasFlag(MATERIAL_VAR_ALPHATEST) || pShader->HasFlag(MATERIAL_VAR_ADDITIVE))
+	bool bTranslucent = pShader->HasFlag(MATERIAL_VAR_TRANSLUCENT) && !pShader->GetBool(PretendTranslucent);
+	if(bTranslucent || pShader->HasFlag(MATERIAL_VAR_ALPHATEST) || pShader->HasFlag(MATERIAL_VAR_ADDITIVE))
 	{
 		pShader->Draw(false);
 		return;

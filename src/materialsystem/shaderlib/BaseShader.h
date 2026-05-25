@@ -95,6 +95,7 @@ enum ShaderMaterialVars_t
 	AllowDiffuseModulation,
 	NoTint,
 	DynamicNoDraw,
+	PretendTranslucent,
 	Debug_True,
 
 	NUM_SHADER_MATERIAL_VARS
