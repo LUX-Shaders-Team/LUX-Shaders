@@ -155,7 +155,7 @@ $Project
 				$File "$STDSHADERS/lux_refract_ps30.fxc"
 				$File "$STDSHADERS/lux_refract_vs30.fxc"
 				$File "$STDSHADERS/lux_rimlightpass_ps30.fxc"
-				$File "$STDSHADERS/lux_rimlightpass_registermap.fxc"
+				$File "$STDSHADERS/lux_rimlightpass_registermap.h"
 				$File "$STDSHADERS/lux_rimlightpass_vs30.fxc"
 				$File "$STDSHADERS/lux_screenspace_ps30.fxc"
 				$File "$STDSHADERS/lux_screenspace_vs30.fxc"
