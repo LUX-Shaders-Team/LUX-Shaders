@@ -77,7 +77,7 @@ float3 ComputeDirectDiffuseLight(float3 f3LightDir, float3 f3LightColor, float3 
 		f1NdL = saturate(f1NdL * 0.5f + 0.5f);
 
 		// Square Curve
-		#if LIGHTWARPTEXTURE
+		#if !LIGHTWARPTEXTURE
 			f1NdL *= f1NdL;
 		#endif
 	}
