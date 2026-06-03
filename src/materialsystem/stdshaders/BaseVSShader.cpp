@@ -1602,7 +1602,9 @@ BlendType_t CBaseVSShader::ComputeBlendType(int nBaseTextureVar, bool bIsBaseTex
 		{
 			nBlendType = BT_BLENDADD;
 		}
-		else
+		// There are existing Materials that already ask for BLENDADD ( ( c_invasion_wrangler/c_invasion_wrangler_laser.vmt for Example )
+		// Don't overwrite!
+		else if (nBlendType != BT_BLENDADD)
 		{
 			nBlendType = BT_ADD;
 		}
