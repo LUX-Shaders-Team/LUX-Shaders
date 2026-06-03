@@ -1604,7 +1604,7 @@ void LuxVertexLitGeneric_Shader_Draw(IMaterialVar** ppParams, IShaderShadow* pSh
 		// Setup Constant Registers
 		//==========================================================================//
 
-		// c1 - Modulation Constant
+		// c28 - Modulation Constant
 		bool bIsBrush = false;
 		bool bApplySSBumpMathFix = false;
 		float4 f4ModulationConstant = GetModulationConstant(bIsBrush, bApplySSBumpMathFix);
@@ -1850,11 +1850,32 @@ void LuxVertexLitGeneric_Shader_Draw(IMaterialVar** ppParams, IShaderShadow* pSh
 				BindTexture(SAMPLER_LIGHTMAP, TEXTURE_BLACK);
 		}
 #else
-		ITexture* pAOTexture = pShaderAPI->GetTextureRenderingParameter(TEXTURE_RENDERPARM_AMBIENT_OCCLUSION);
-		if (pAOTexture)
-			BindTexture(SHADER_SAMPLER11, pAOTexture);
+		// Ambient occlusion
+		// NOTE: If an Object is not opaque it should not have AO ( it will get the AO of the Surfaces behind it )
+		// Projected Textures are additive by Nature ( bIsFullyOpaque will be false )
+		// In that Case, we have to determine if the Original Pass was additive or translucent.
+		bool bBasePassNotOpaque;
+		if (bProjTex)
+		{
+			// $Translucent will put us on BT_BLENDADD so we can check that
+			// Otherwise we need to see if $Additive is set
+			bBasePassNotOpaque = pContextData->m_nBlendType == BT_BLENDADD || HasFlag(MATERIAL_VAR_ADDITIVE);
+		}
 		else
+			bBasePassNotOpaque = !pContextData->m_bIsFullyOpaque;
+
+		if (bBasePassNotOpaque)
+		{
 			pShaderAPI->BindStandardTexture(SHADER_SAMPLER11, TEXTURE_WHITE);
+		}
+		else
+		{
+			ITexture* pAOTexture = pShaderAPI->GetTextureRenderingParameter(TEXTURE_RENDERPARM_AMBIENT_OCCLUSION);
+			if (pAOTexture)
+				BindTexture(SHADER_SAMPLER11, pAOTexture);
+			else
+				pShaderAPI->BindStandardTexture(SHADER_SAMPLER11, TEXTURE_WHITE);
+		}
 #endif
 
 		// s14 - $EnvMap

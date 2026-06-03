@@ -1056,11 +1056,32 @@ SHADER_DRAW
 		BindTexture(bHasEnvMap, SAMPLER_ENVMAPTEXTURE, EnvMap, EnvMapFrame);
 
 #ifdef ASWSDK
-		ITexture* pAOTexture = pShaderAPI->GetTextureRenderingParameter(TEXTURE_RENDERPARM_AMBIENT_OCCLUSION);
-		if (pAOTexture)
-			BindTexture(SHADER_SAMPLER12, pAOTexture);
+		// Ambient occlusion
+		// NOTE: If an Object is not opaque it should not have AO ( it will get the AO of the Surfaces behind it )
+		// Projected Textures are additive by Nature ( bIsFullyOpaque will be false )
+		// In that Case, we have to determine if the Original Pass was additive or translucent.
+		bool bBasePassNotOpaque;
+		if (bProjTex)
+		{
+			// $Translucent will put us on BT_BLENDADD so we can check that
+			// Otherwise we need to see if $Additive is set
+			bBasePassNotOpaque = pContextData->m_nBlendType == BT_BLENDADD || HasFlag(MATERIAL_VAR_ADDITIVE);
+		}
 		else
+			bBasePassNotOpaque = !pContextData->m_bIsFullyOpaque;
+
+		if (bBasePassNotOpaque)
+		{
 			pShaderAPI->BindStandardTexture(SHADER_SAMPLER12, TEXTURE_WHITE);
+		}
+		else
+		{
+			ITexture* pAOTexture = pShaderAPI->GetTextureRenderingParameter(TEXTURE_RENDERPARM_AMBIENT_OCCLUSION);
+			if (pAOTexture)
+				BindTexture(SHADER_SAMPLER12, pAOTexture);
+			else
+				pShaderAPI->BindStandardTexture(SHADER_SAMPLER12, TEXTURE_WHITE);
+		}
 #endif
 
 		// Binds Textures and sends Flashlight Constants
