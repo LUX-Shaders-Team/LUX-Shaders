@@ -83,7 +83,7 @@ SHADER_INFO_D3D			(LUX_SHADERINFO_SM30)
 BEGIN_SHADER_PARAMS
 	SHADER_PARAM(BaseTexture2, SHADER_PARAM_TYPE_STRING, "", "(FALLBACK) This Parameter will cause the Shader to fallback to WorldVertexTransition.")
 	SHADER_PARAM(BumpMap2, SHADER_PARAM_TYPE_STRING, "", "(FALLBACK) This Parameter will cause the Shader to fallback to WorldVertexTransition.")
-	Declare_NormalTextureParameters()
+	Declare_NormalMapParameters()
 	Declare_SelfIlluminationParameters()
 	Declare_PhongParameters()
 

@@ -72,7 +72,7 @@ BEGIN_SHADER_PARAMS
 	// Keep support for $NormalMap
 	// But sneakily add $BumpMap support
 	// also all the other Bumpmap Stuff, because.. why not
-	Declare_NormalTextureParameters()
+	Declare_NormalMapParameters()
 	SHADER_PARAM(NormalMap, SHADER_PARAM_TYPE_TEXTURE, "", "[RGB] Same as $BumpMap.\n[A] Per-Texel Normal Mapping Scale for Reflections and Refractions.")
 
 	Declare_DetailTextureParameters()

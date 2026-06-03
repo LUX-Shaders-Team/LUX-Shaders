@@ -457,11 +457,10 @@ struct TreeSway_Vars_t
 // Parameter Declarations. Used on Shader Params to allow for certain Features
 //==========================================================================//
 
-#define Declare_NormalTextureParameters()\
+#define Declare_NormalMapParameters()\
 SHADER_PARAM(BumpMap,					SHADER_PARAM_TYPE_TEXTURE,	"",		"[RGB] Bump Map or Normal Map.\n[A] $NormalMapAlphaEnvMapMask, Default Mask for $Phong, etc.")\
 SHADER_PARAM(BumpFrame,					SHADER_PARAM_TYPE_INTEGER,	"0",	"Frame Number for $BumpMap.")\
 SHADER_PARAM(BumpTransform,				SHADER_PARAM_TYPE_MATRIX,	"",		"Transforms the $BumpMap Texture. Must include all Values!")\
-SHADER_PARAM(NormalTexture,				SHADER_PARAM_TYPE_TEXTURE,	"",		"(INTERNAL PARAMETER) Carrier Parameter to avoid some Issues.")\
 SHADER_PARAM(SSBump,					SHADER_PARAM_TYPE_BOOL,		"0",	"If 1, $BumpMap is Self-Shadowing. Note that if you enable this, both BumpMaps for BlendTextures will be SS-Bumps!") \
 SHADER_PARAM(SSBumpMathFix,				SHADER_PARAM_TYPE_BOOL,		"0",	"Fixes Brightness of uncorrected SSBump's (See VDC for more Information).")\
 SHADER_PARAM(LightWarpTexture,			SHADER_PARAM_TYPE_TEXTURE,	"",		"[RGB] Tints texels depending on their brightness (See VDC for more Information).\n[A] Unused.")\

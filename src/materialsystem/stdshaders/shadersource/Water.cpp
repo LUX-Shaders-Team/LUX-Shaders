@@ -128,7 +128,7 @@ BEGIN_SHADER_PARAMS
 	// The same goes for $BumpMap, there are occassionally people wondering why it doesn't work so lets add it for easy use
 	// To avoid DuDv Maps being used on old VMT's, $NormalMap has Priority over $BumpMap
 	SHADER_PARAM(NormalMap,				SHADER_PARAM_TYPE_TEXTURE,	"", "[RGB] Normal Map.\n[A] Scaling Factor for Refract and Reflect Intensity.")
-	Declare_NormalTextureParameters()
+	Declare_NormalMapParameters()
 	SHADER_PARAM(Time,					SHADER_PARAM_TYPE_FLOAT,	"", "Custom Time Variable for the Shader. This is optional. Used when > 0.000")
 	// ShiroDkxtro2: These two used to be Color parameters.
 	// For Reasons unknown, they decided to do the exact opposite of $PhongTint here.
@@ -201,15 +201,7 @@ SHADER_INIT_PARAMS()
 	// But we also don't like $BumpMap, and $NormalMap is even worse
 	// So we will be using $NormalTexture, in secret!
 	if (IsDefined(NormalMap))
-		SetString(NormalTexture, GetString(NormalMap));
-	else if (IsDefined(BumpMap))
-		SetString(NormalTexture, GetString(BumpMap));
-
-	// Set NormalMap and BumpMap to the same String!!
-	// This is necessary for the above because of the AnimatedTexture Proxy.
-	// It checks for a specific Texture Parameter for the Texture Data
-	SetString(BumpMap, GetString(NormalTexture));
-	SetString(NormalMap, GetString(NormalTexture));
+		SetString(BumpMap, GetString(NormalMap));
 
 	if (!IsDefined(AboveWater))
 	{
@@ -356,14 +348,13 @@ SHADER_INIT
 	// Loading all these fixes the Texture-Scaling Issue I've been chasing FOR TWO YEARS
 	// I figured this out when looking at Textures not Animating ( AnimatedTexture looks for specific Params )
 	// Just.. Load all of them, all we need is the Texture Reference on these Params.
-	LoadBumpMap(NormalTexture);
 	LoadBumpMap(BumpMap);
 	LoadBumpMap(NormalMap);
 
 	LoadTexture(FlowMap, 0);
 	LoadTexture(Flow_Noise_Texture, 0);
 
-	if (!IsDefined(NormalTexture) && CVarDeveloper() > 0)
+	if (!IsDefined(BumpMap) && CVarDeveloper() > 0)
 		ShaderDebugMessage("Water Material %s has no Normal Map? Might be unintentional.\n");
 
 	// According to Ficool2 ( aka Engine Code knowledge we shouldn't have or need ),
@@ -404,7 +395,7 @@ void DrawExpensive(IShaderShadow* pShaderShadow, IShaderDynamicAPI* pShaderAPI, 
 	bool bForceFresnel = bHasReflectTexture && GetFloat(ForceFresnel) != -1.0f;
 	bool bNoFresnel = !bForceFresnel && GetBool(NoFresnel);
 
-	bool bHasNormalTexture = IsTextureLoaded(NormalTexture);
+	bool bHasNormalTexture = IsTextureLoaded(BumpMap);
 	bool bHasSurfaceBumpMap = bHasBaseTexture && IsTextureLoaded(Surface_BumpMap);
 
 	// ShiroDkxtro2 :
@@ -575,7 +566,7 @@ void DrawExpensive(IShaderShadow* pShaderShadow, IShaderDynamicAPI* pShaderAPI, 
 		BindTexture(bHasRefractTexture, SHADER_SAMPLER3, RefractTexture, -1);
 
 		// s4
-		BindTexture(bHasNormalTexture, SHADER_SAMPLER4, NormalTexture, BumpFrame, TEXTURE_NORMALMAP_FLAT);
+		BindTexture(bHasNormalTexture, SHADER_SAMPLER4, BumpMap, BumpFrame, TEXTURE_NORMALMAP_FLAT);
 
 		// s5 & s6
 		BindTexture(bHasFlowTexture, SHADER_SAMPLER5, FlowMap, FlowMapFrame);
@@ -836,7 +827,7 @@ void DrawCheap(IShaderShadow* pShaderShadow, IShaderDynamicAPI* pShaderAPI, bool
 	bool bHasLightmapFog = GetBool(LightmapWaterFog);
 	bool bNoFresnel = GetBool(NoFresnel);
 
-	bool bHasNormalTexture = IsTextureLoaded(NormalTexture);
+	bool bHasNormalTexture = IsTextureLoaded(BumpMap);
 	bool bHasSurfaceBumpMap = bHasBaseTexture && IsTextureLoaded(Surface_BumpMap);
 
 	// HasEnvMap = Should enable the Feature
@@ -1014,7 +1005,7 @@ void DrawCheap(IShaderShadow* pShaderShadow, IShaderDynamicAPI* pShaderAPI, bool
 		BindTexture(bHasRefractTexture, SHADER_SAMPLER3, RefractTexture, -1);
 
 		// s4
-		BindTexture(bHasNormalTexture, SHADER_SAMPLER4, NormalTexture, BumpFrame, TEXTURE_NORMALMAP_FLAT);
+		BindTexture(bHasNormalTexture, SHADER_SAMPLER4, BumpMap, BumpFrame, TEXTURE_NORMALMAP_FLAT);
 
 		// s5 & s6
 		BindTexture(bHasFlowTexture, SHADER_SAMPLER5, FlowMap, FlowMapFrame);

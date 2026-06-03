@@ -84,7 +84,7 @@ SHADER_INFO_WEBLINKS	(WEBLINK_VDC
 SHADER_INFO_D3D			(LUX_SHADERINFO_SM30)
 
 BEGIN_SHADER_PARAMS
-	Declare_NormalTextureParameters();
+	Declare_NormalMapParameters();
 	Declare_EnvironmentMapParameters();
 	Declare_EnvMapMaskParameters();
 	Declare_PhongParameters();
@@ -102,7 +102,7 @@ END_SHADER_PARAMS
 void Teeth_SetupSSAODrawNormalVars(SSAODrawNormalPass_Vars_t& SSAODrawNormalVars)
 {
 	SSAODrawNormalVars.m_bIsModel = true;
-	SSAODrawNormalVars.m_nBumpMap = NormalTexture;
+	SSAODrawNormalVars.m_nBumpMap = BumpMap;
 	SSAODrawNormalVars.m_nBumpMapFrame = BumpFrame;
 	SSAODrawNormalVars.m_nBumpMapTransform = BumpTransform;
 

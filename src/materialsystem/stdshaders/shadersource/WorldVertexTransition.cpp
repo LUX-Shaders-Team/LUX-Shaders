@@ -90,7 +90,7 @@ BEGIN_SHADER_PARAMS
 	SHADER_PARAM(BaseTexture2Tint, SHADER_PARAM_TYPE_COLOR, "", "Tints $BaseTexture2 specifically.\nWhen used, $BaseTexture2 will not be affected by $Color.\n However it will be affected by $Color2 unless $AllowDiffuseModulation or $NoTint is used.")
 
 	// Bump
-	Declare_NormalTextureParameters()
+	Declare_NormalMapParameters()
 	Declare_DisplacementBump()
 	Declare_NoDiffuseBumpLighting()
 	SHADER_PARAM(BumpMask, SHADER_PARAM_TYPE_TEXTURE, "", "[RGB] Third Normal Map that is blended from using the Alpha Channel of this Texture.\n[A] Blendfactor for $BumpMap and $BumpMap2 & default SpecularMask without other EnvMapMask Parameters.\n")

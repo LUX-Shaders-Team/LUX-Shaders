@@ -165,7 +165,7 @@ SHADER_INFO_WEBLINKS	(WEBLINK_VDC
 SHADER_INFO_D3D			(LUX_SHADERINFO_SM30)
 
 BEGIN_SHADER_PARAMS
-	Declare_NormalTextureParameters()
+	Declare_NormalMapParameters()
 #ifdef ASWSDK
 	SHADER_PARAM(LightWarpOnProjectedTextures, SHADER_PARAM_TYPE_BOOL, "", "Enables $LightWarpTexture's under proj. Textures.\nN.L < 0.0 must be darker than > 0.0 for this to look correct.")
 	SHADER_PARAM(TF2Compatibility, SHADER_PARAM_TYPE_BOOL, "", "Makes the Shader favor TF2 Behavior over ASW Behavior ( Makes the Shader account for TF2 Quirks )")
@@ -221,7 +221,7 @@ END_SHADER_PARAMS
 void VLG_SetupSSAODrawNormalVars(SSAODrawNormalPass_Vars_t &SSAODrawNormalVars)
 {
 	SSAODrawNormalVars.m_bIsModel = true;
-	SSAODrawNormalVars.m_nBumpMap = NormalTexture;
+	SSAODrawNormalVars.m_nBumpMap = BumpMap;
 	SSAODrawNormalVars.m_nBumpMapFrame = BumpFrame;
 	SSAODrawNormalVars.m_nBumpMapTransform = BumpTransform;
 
@@ -265,7 +265,7 @@ void VLG_SetupEmissiveBlendVars(EmissiveBlend_Vars_t& EmissiveVars)
 
 void VLG_SetupSheenPassVars(SheenPass_Vars_t& SheenVars)
 {
-	SheenVars.InitVars(SheenPassEnabled, NormalTexture, BumpFrame, BumpTransform);
+	SheenVars.InitVars(SheenPassEnabled, BumpMap, BumpFrame, BumpTransform);
 }
 
 void VLG_SetupRimLightPassVars(RimLightPass_Vars_t& RimlightVars)
@@ -319,7 +319,7 @@ void LuxVertexLitGeneric_ParamsDebugger()
 
 	// All Textures
 	bool bHasBaseTexture = IsDefined(BaseTexture);
-	bool bHasNormalTexture = IsDefined(BumpMap) || IsDefined(NormalTexture);
+	bool bHasNormalTexture = IsDefined(BumpMap) || IsDefined(BumpMap);
 	bool bHasDetailTexture = IsDefined(Detail);
 	bool bHasLightWarpTexture = IsDefined(LightWarpTexture);
 	bool bHasLightWarpNoBump = GetBool(LightWarpNoBump);
@@ -602,24 +602,12 @@ SHADER_INIT_PARAMS()
 		SetBool(UsesBumpMap, true);
 
 		bHasBumpMap = true;
-		// If you have both $BumpMap and $normaltexture we use that as an indicator that you want model lightmapping
-		if (IsDefined(NormalTexture))
-		{
-			SetString(NormalTexture, GetString(BumpMap));
-
-			// 12.02.2023 ShiroDkxtro2 : NOTE, if you don't have data on $BumpMap, the engine will not send WorldLight data to the model!!! 
-			SetUndefined(BumpMap);
-		}
-		else
-		{
-			SetString(NormalTexture, GetString(BumpMap));
-		}
 	}
 	else
 	{
 		// If someone uses $NormalTexture now instead of $BumpMap, make sure $BumpMap has some kind of data, so we can actually get WorldLight data!
 		// Note that Phong can be used with $BaseMapAlphaPhongMask and a default BumpMap is used for $LightWarpTexture without $LightWarpNoBump
-		if (IsDefined(NormalTexture) || GetBool(Phong) && GetBool(BaseMapAlphaPhongMask) || IsDefined(LightWarpTexture) && !GetBool(LightWarpNoBump))
+		if (IsDefined(BumpMap) || GetBool(Phong) && GetBool(BaseMapAlphaPhongMask) || IsDefined(LightWarpTexture) && !GetBool(LightWarpNoBump))
 		{
 			SetString(BumpMap, "..."); // Whats on $Bumpmap doesn't matter, it just has to... exist...
 		}
@@ -646,7 +634,7 @@ SHADER_INIT_PARAMS()
 		// We ignore DiffuseModulation
 		// So we only need to ensure that by default Lighting gets multiplied with the Sample
 		// Set $EnvMapLightScale to 1.0f!!
-		if (!IsDefined(NormalTexture) && !GetBool(Phong) && HasFlag(MATERIAL_VAR_ENVMAPSPHERE))
+		if (!IsDefined(BumpMap) && !GetBool(Phong) && HasFlag(MATERIAL_VAR_ENVMAPSPHERE))
 		{
 			DefaultFloat(EnvMapLightScale, 1.0f);
 		}
@@ -911,7 +899,7 @@ SHADER_INIT
 	if (GetBool(UsesBumpMap))
 		LoadBumpMap(BumpMap);
 
-	LoadBumpMap(NormalTexture);
+	LoadBumpMap(BumpMap);
 
 	if (IsDefined(Compress) && IsDefined(Stretch))
 	{
@@ -919,7 +907,7 @@ SHADER_INIT
 		LoadTexture(Stretch);
 	}
 	
-	if (IsTextureLoaded(NormalTexture) && IsDefined(BumpStretch) && IsDefined(BumpCompress))
+	if (IsTextureLoaded(BumpMap) && IsDefined(BumpStretch) && IsDefined(BumpCompress))
 	{
 		LoadTexture(BumpCompress);
 		LoadTexture(BumpStretch);
@@ -942,7 +930,7 @@ SHADER_INIT
 	// Orange Box Code does this.
 	// Unfortunately, it will result in Missing Textures when using "env_cubemap"
 	// The 7th Face on a Cubemap will not end up here :/
-	if (!IsDefined(NormalTexture) && !GetBool(Phong) && HasFlag(MATERIAL_VAR_ENVMAPSPHERE))
+	if (!IsDefined(BumpMap) && !GetBool(Phong) && HasFlag(MATERIAL_VAR_ENVMAPSPHERE))
 		LoadTexture(EnvMap, 0);
 	else
 		LoadCubeMap(EnvMap, 0);
@@ -962,9 +950,9 @@ SHADER_INIT
 		else
 		{
 			// NormalMapAlphaEnvMapMask takes priority, because its the go to one
-			if (IsDefined(NormalTexture) && HasFlag(MATERIAL_VAR_NORMALMAPALPHAENVMAPMASK))
+			if (IsDefined(BumpMap) && HasFlag(MATERIAL_VAR_NORMALMAPALPHAENVMAPMASK))
 			{
-				if (GetTexture(NormalTexture)->IsError())
+				if (GetTexture(BumpMap)->IsError())
 					ClearFlag(MATERIAL_VAR_NORMALMAPALPHAENVMAPMASK); // No normal map, no masking.
 
 				ClearFlag(MATERIAL_VAR_BASEALPHAENVMAPMASK); // If we use normal map alpha, don't use basetexture alpha.
@@ -1026,7 +1014,7 @@ void LuxVertexLitGeneric_Shader_Draw(IMaterialVar** ppParams, IShaderShadow* pSh
 	bool bDesaturateWithBaseAlpha = !bBlendTintByBaseAlpha && GetBool(DesaturateWithBaseAlpha);
 
 	// Normal Map Variables
-	bool bHasNormalTexture = IsTextureLoaded(NormalTexture);
+	bool bHasNormalTexture = IsTextureLoaded(BumpMap);
 
 	// Detail Texture Variables
 	// 5 & 6 are now an additive Pass and will no longer be handled here.
@@ -1552,7 +1540,7 @@ void LuxVertexLitGeneric_Shader_Draw(IMaterialVar** ppParams, IShaderShadow* pSh
 		// Note that we use NormalTexture here, not $BumpMap.
 		// This will be important later if we get an open-source Bumped Model Lightmapping Implementation
 		if (bHasNormalTexture)
-			SemiStaticCmds.BindTexture(SAMPLER_NORMALMAP, NormalTexture, BumpFrame);
+			SemiStaticCmds.BindTexture(SAMPLER_NORMALMAP, BumpMap, BumpFrame);
 
 		// s3 - $Stretch
 		if (bWrinkleMappingBase)
@@ -1586,13 +1574,13 @@ void LuxVertexLitGeneric_Shader_Draw(IMaterialVar** ppParams, IShaderShadow* pSh
 		if (bWrinkleMappingBump)
 			SemiStaticCmds.BindTexture(SHADER_SAMPLER9, BumpCompress, BumpFrame);
 		else if (bWrinkleMappingBase)
-			SemiStaticCmds.BindTexture(SHADER_SAMPLER9, NormalTexture, BumpFrame); // Fallback
+			SemiStaticCmds.BindTexture(SHADER_SAMPLER9, BumpMap, BumpFrame); // Fallback
 
 		// s10 - $BumpStretch
 		if (bWrinkleMappingBump)
 			SemiStaticCmds.BindTexture(SHADER_SAMPLER10, BumpStretch, BumpFrame);
 		else if(bWrinkleMappingBase)
-			SemiStaticCmds.BindTexture(SHADER_SAMPLER10, NormalTexture, BumpFrame); // Fallback
+			SemiStaticCmds.BindTexture(SHADER_SAMPLER10, BumpMap, BumpFrame); // Fallback
 
 		// s11
 		// Lightmap needs to be bound dynamically, Instancing is done dynamically ( terrible ).

@@ -49,7 +49,7 @@ SHADER_INFO_WEBLINKS	(WEBLINK_VDC)
 SHADER_INFO_D3D			(LUX_SHADERINFO_SM30)
 
 BEGIN_SHADER_PARAMS
-	Declare_NormalTextureParameters()
+	Declare_NormalMapParameters()
 	Declare_SelfIlluminationParameters()
 	Declare_DetailTextureParameters()
 	Declare_SelfIllumTextureParameters()

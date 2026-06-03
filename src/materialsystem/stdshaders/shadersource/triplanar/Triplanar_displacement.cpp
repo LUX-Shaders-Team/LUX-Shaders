@@ -56,7 +56,7 @@ BEGIN_SHADER_PARAMS
 	Declare_DisplacementBase()
 	Declare_DisplacementBlend()
 	SHADER_PARAM(FlipBlendFactor, SHADER_PARAM_TYPE_BOOL, "", "Automatically flips the blend factor in editor mode (e.g., when Hammer is running).")
-	Declare_NormalTextureParameters()
+	Declare_NormalMapParameters()
 	Declare_DisplacementBump()
 	Declare_NoDiffuseBumpLighting()
 	Declare_DetailTextureParameters()
