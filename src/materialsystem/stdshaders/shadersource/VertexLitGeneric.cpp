@@ -167,6 +167,7 @@ SHADER_INFO_D3D			(LUX_SHADERINFO_SM30)
 BEGIN_SHADER_PARAMS
 	Declare_NormalTextureParameters()
 #ifdef ASWSDK
+	SHADER_PARAM(LightWarpOnProjectedTextures, SHADER_PARAM_TYPE_BOOL, "", "Enables $LightWarpTexture's under proj. Textures.\nN.L < 0.0 must be darker than > 0.0 for this to look correct.")
 	SHADER_PARAM(TF2Compatibility, SHADER_PARAM_TYPE_BOOL, "", "Makes the Shader favor TF2 Behavior over ASW Behavior ( Makes the Shader account for TF2 Quirks )")
 #endif
 
@@ -1038,7 +1039,7 @@ void LuxVertexLitGeneric_Shader_Draw(IMaterialVar** ppParams, IShaderShadow* pSh
 
 	// LightWarpTexture allowed with proj. Texture in ASW/SFM
 	#ifdef ASWSDK
-	bool bHasLightWarpTexture = IsTextureLoaded(LightWarpTexture);
+	bool bHasLightWarpTexture = IsTextureLoaded(LightWarpTexture) && (bProjTex ? GetBool(LightWarpOnProjectedTextures) : true);
 	#else
 	bool bHasLightWarpTexture = !bProjTex && IsTextureLoaded(LightWarpTexture); // No Lightwarp under the flashlight
 	#endif
