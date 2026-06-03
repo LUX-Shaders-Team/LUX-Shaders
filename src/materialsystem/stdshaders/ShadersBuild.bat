@@ -73,8 +73,6 @@ set SrcDirBase=%~5
 REM ** use the -game parameter to tell us where to put the files
 set targetdir=%~3\shaders
 
-if not exist "%~3\gameinfo.txt" goto InvalidGameDirectory
-
 if not exist "%inputbase%.txt" goto InvalidInputFile
 
 goto build_shaders
@@ -82,11 +80,6 @@ goto build_shaders
 REM ****************
 REM ERRORS
 REM ****************
-:InvalidGameDirectory
-echo Error: "%~3" is not a valid game directory.
-echo (The -game directory must have a gameinfo.txt file)
-goto end
-
 :InvalidInputFile
 echo Error: "%inputbase%.txt" is not a valid file.
 goto end
