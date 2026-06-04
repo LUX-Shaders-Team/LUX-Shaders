@@ -367,7 +367,7 @@ SHADER_DRAW
 		//==========================================================================//
 		unsigned int nFlags = VERTEX_POSITION | VERTEX_FORMAT_COMPRESSED;
 
-		if (bHasEnvMap)
+		if (bHasEnvMap || bProjTex)
 			nFlags |= VERTEX_NORMAL;
 
 		if (bHasVertexRGBA)
