@@ -1,7 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	20.01.2023 DMY
-//	Last Change :	23.05.2026 DMY
+//	Last Change :	04.06.2026 DMY
 //
 //==========================================================================//
 
@@ -16,7 +16,11 @@
 #include "lux_model_vs30.inc"
 #include "lux_model_simplified_vs30.inc"
 #include "lux_unlitgeneric_ps30.inc"
-#include "lux_vertexlitgeneric_flashlight_ps30.inc"
+#ifdef ASWSDK
+	#include "lux_vertexlitgeneric_asw_flashlight_ps30.inc"
+#else
+	#include "lux_vertexlitgeneric_flashlight_ps30.inc"
+#endif
 
 // Register Map for this Shader
 #include "../lux_unlitgeneric_registermap.h"
@@ -259,7 +263,6 @@ SHADER_INIT
 		else
 		{
 			// Can only Output Alpha if one of these Blendmodes
-			int nDetailBlendMode = GetInt(DetailBlendMode);
 			if (nDetailBlendMode != 3 && nDetailBlendMode != 8 && nDetailBlendMode != 9)
 			{
 				ClearFlag(MATERIAL_VAR_ALPHATEST);
@@ -424,12 +427,22 @@ SHADER_DRAW
 			SET_STATIC_VERTEX_SHADER(lux_model_simplified_vs30);
 
 			// No Normals so LightCombo 0
-			DECLARE_STATIC_PIXEL_SHADER(lux_vertexlitgeneric_flashlight_ps30);
-			SET_STATIC_PIXEL_SHADER_COMBO(LIGHTCOMBO, 0);
-			SET_STATIC_PIXEL_SHADER_COMBO(WRINKLEMAPS, 0);
-			SET_STATIC_PIXEL_SHADER_COMBO(XBYBASEALPHA, bBlendTintByBaseAlpha + 2 * bDesaturateWithBaseAlpha);
-			SET_STATIC_PIXEL_SHADER_COMBO(DETAILTEXTURE, bHasDetailTexture);
-			SET_STATIC_PIXEL_SHADER(lux_vertexlitgeneric_flashlight_ps30);
+			#ifdef ASWSDK
+				DECLARE_STATIC_PIXEL_SHADER(lux_vertexlitgeneric_asw_flashlight_ps30);
+				SET_STATIC_PIXEL_SHADER_COMBO(LIGHTCOMBO, 0);
+				SET_STATIC_PIXEL_SHADER_COMBO(WRINKLEMAPS, 0);
+				SET_STATIC_PIXEL_SHADER_COMBO(XBYBASEALPHA, bBlendTintByBaseAlpha + 2 * bDesaturateWithBaseAlpha);
+				SET_STATIC_PIXEL_SHADER_COMBO(DETAILTEXTURE, bHasDetailTexture);
+				SET_STATIC_PIXEL_SHADER_COMBO(LIGHTWARPTEXTURE, 0);
+				SET_STATIC_PIXEL_SHADER(lux_vertexlitgeneric_asw_flashlight_ps30);
+			#else
+				DECLARE_STATIC_PIXEL_SHADER(lux_vertexlitgeneric_flashlight_ps30);
+				SET_STATIC_PIXEL_SHADER_COMBO(LIGHTCOMBO, 0);
+				SET_STATIC_PIXEL_SHADER_COMBO(WRINKLEMAPS, 0);
+				SET_STATIC_PIXEL_SHADER_COMBO(XBYBASEALPHA, bBlendTintByBaseAlpha + 2 * bDesaturateWithBaseAlpha);
+				SET_STATIC_PIXEL_SHADER_COMBO(DETAILTEXTURE, bHasDetailTexture);
+				SET_STATIC_PIXEL_SHADER(lux_vertexlitgeneric_flashlight_ps30);
+			#endif
 		}
 		else
 		{
@@ -1023,7 +1036,12 @@ SHADER_DRAW
 
 		// Binds Textures and sends Flashlight Constants
 		// Returns bFlashlightShadows
-		bool bFlashlightShadows = SetupFlashlight();
+		#ifdef ASWSDK
+			bool bUberLight = false;
+			bool bProjTexShadows = SetupFlashlight(&bUberLight);
+		#else
+			bool bProjTexShadows = SetupFlashlight();
+		#endif
 
 		//==========================================================================//
 		// Setup Constant Registers
@@ -1126,9 +1144,16 @@ SHADER_DRAW
 			SET_DYNAMIC_VERTEX_SHADER_COMBO(COMPRESSION, HasVertexCompression());
 			SET_DYNAMIC_VERTEX_SHADER(lux_model_simplified_vs30);
 
-			DECLARE_DYNAMIC_PIXEL_SHADER(lux_vertexlitgeneric_flashlight_ps30);
-			SET_DYNAMIC_PIXEL_SHADER_COMBO(PROJTEXSHADOWS, bFlashlightShadows);
-			SET_DYNAMIC_PIXEL_SHADER(lux_vertexlitgeneric_flashlight_ps30);
+			#ifdef ASWSDK
+				DECLARE_DYNAMIC_PIXEL_SHADER(lux_vertexlitgeneric_asw_flashlight_ps30);
+				SET_DYNAMIC_PIXEL_SHADER_COMBO(UBERLIGHT, bUberLight);
+				SET_DYNAMIC_PIXEL_SHADER_COMBO(PROJTEXSHADOWS, bProjTexShadows);
+				SET_DYNAMIC_PIXEL_SHADER(lux_vertexlitgeneric_asw_flashlight_ps30);			
+			#else
+				DECLARE_DYNAMIC_PIXEL_SHADER(lux_vertexlitgeneric_flashlight_ps30);
+				SET_DYNAMIC_PIXEL_SHADER_COMBO(PROJTEXSHADOWS, bProjTexShadows);
+				SET_DYNAMIC_PIXEL_SHADER(lux_vertexlitgeneric_flashlight_ps30);
+			#endif
 		}
 		else
 		{
