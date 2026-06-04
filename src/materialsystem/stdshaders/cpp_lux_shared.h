@@ -162,7 +162,6 @@ struct Vars_NormalMap_t
 	int m_nBumpMap;
 	int m_nBumpFrame;
 	int m_nBumpTransform;
-	int m_nNormalTexture;
 	int m_nSSBump;
 	int m_nSSBumpMathFix;
 	int m_nLightWarpTexture;
@@ -178,12 +177,11 @@ struct Vars_NormalMap_t
 		m_nBumpMap = nBumpMap;
 		m_nBumpFrame = nBumpMap + 1;
 		m_nBumpTransform = nBumpMap + 2;
-		m_nNormalTexture = nBumpMap + 3;
-		m_nSSBump = nBumpMap + 4;
-		m_nSSBumpMathFix = nBumpMap + 5;
-		m_nLightWarpTexture = nBumpMap + 6;
-		m_nLightWarpTextureFrame = nBumpMap + 7;
-		m_nLightWarpNoBump = nBumpMap + 8;	
+		m_nSSBump = nBumpMap + 3;
+		m_nSSBumpMathFix = nBumpMap + 4;
+		m_nLightWarpTexture = nBumpMap + 5;
+		m_nLightWarpTextureFrame = nBumpMap + 6;
+		m_nLightWarpNoBump = nBumpMap + 7;
 	}
 };
 

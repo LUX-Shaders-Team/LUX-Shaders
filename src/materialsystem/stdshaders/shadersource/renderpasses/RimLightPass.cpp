@@ -156,7 +156,7 @@ void RimLightPass_Shader_Draw(CBaseVSShader* pShader, IShaderShadow* pShaderShad
 			pShader->BindTexture(SHADER_SAMPLER1, info.m_nMask, info.m_nMaskFrame);
 
 		if (bHasNormalMap)
-			pShader->BindTexture(SHADER_SAMPLER2, info.Normal.m_nNormalTexture, info.Normal.m_nBumpFrame);
+			pShader->BindTexture(SHADER_SAMPLER2, info.Normal.m_nBumpMap, info.Normal.m_nBumpFrame);
 
 		if (bHasCubemap)
 			pShader->BindTexture(SHADER_SAMPLER3, info.m_nCubemap, info.m_nCubemapFrame);
