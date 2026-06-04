@@ -180,6 +180,8 @@ struct PS_INPUT
 	float3 Binormal					: BINORMAL;
 	float4 Normal					: NORMAL;
 #endif
+
+	float vFace						: VFACE;
 };
 
 //==========================================================================//
@@ -221,6 +223,9 @@ float4 main(PS_INPUT i) : COLOR
 
 		// NORMAL
 		float3 f3NormalWS = i.Normal.xyz;
+
+		// Fix inverted Normals with $NoCull
+		f3NormalWS *= i.vFace;
 	#else
 		// TEXC00RD1
 		float2 f2BaseUV = i.TexCoords1.xy;
@@ -341,6 +346,9 @@ float4 main(PS_INPUT i) : COLOR
 		// Convert from Tangent Space to World Space, using the Tangent Matrix
 		// NOTE: Matrix Vector Components are aligned horizontally, so Matrix goes into the mul() last
 		float3 f3NormalWS = normalize(mul(f3NormalTS, TBN_Matrix));
+
+		// Fix inverted Normals with $NoCull
+		f3NormalWS *= i.vFace;
 
 		// Special Path for proj. Tex.'s
 		#if PROJTEX
