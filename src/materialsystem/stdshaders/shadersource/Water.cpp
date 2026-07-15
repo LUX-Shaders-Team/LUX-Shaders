@@ -617,7 +617,7 @@ void DrawExpensive(IShaderShadow* pShaderShadow, IShaderDynamicAPI* pShaderAPI, 
 			f4Scrolls.xy = GetFloat2(Scroll1);
 			f4Scrolls.zw = GetFloat2(Scroll2);
 			f4Scrolls = f4Scrolls * f1CurrentTime;
-			pShaderAPI->SetVertexShaderConstant(53, f4Scrolls);
+			pShaderAPI->SetVertexShaderConstant(LUX_VS_TEXTURETRANSFORM_03, f4Scrolls);
 		}
 
 		// c1 - Modulation Constant
