@@ -206,7 +206,11 @@ BEGIN_SHADER_PARAMS
 
 	Declare_MiscParameters()
 	SHADER_PARAM(DistanceAlpha, SHADER_PARAM_TYPE_BOOL, "", "(FALLBACK) This Parameter will cause the Shader to fallback to LUX_DistanceAlpha_Model.")
+
+	// FIXME: Cloak and other Passes cannot consider this Parameter!
 	SHADER_PARAM(UsesBumpMap, SHADER_PARAM_TYPE_BOOL, "", "(INTERNAL PARAMETER) keeps track of whether or not $BumpMap is VMT Defined or not.")
+	SHADER_PARAM(UsesPhong, SHADER_PARAM_TYPE_BOOL, "", "(INTERNAL PARAMETER) keeps track of whether $Phong can ACTUALLY be used by the Shader.")
+	SHADER_PARAM(UsesBumpedPath, SHADER_PARAM_TYPE_BOOL, "", "(INTERNAL PARAMETER) keeps track of whether or not a bumpmapped Shader is going to be used for this Material.")
 
 	// We can't replicate this Parameter but we can at least make Materials from L4D1 not utterly broken
 	SHADER_PARAM(ShinyBlood, SHADER_PARAM_TYPE_BOOL, "", "(INTERNAL PARAMETER) Disables Phong to unbreak some L4D1 Materials.")
@@ -594,30 +598,57 @@ SHADER_INIT_PARAMS()
 	// Always dealing with a Model!
 	SetFlag(MATERIAL_VAR_MODEL);
 
-	// We trick the engine into thinking we don't have a normal map. This is required for Model Lightmapping ( with BumpMaps )
+	// Determine whether we have an actual $BumpMap
 	bool bHasBumpMap = false;
 	if (IsDefined(BumpMap))
 	{
-		// Needs this for ShaderInit
-		SetBool(UsesBumpMap, true);
-
 		bHasBumpMap = true;
+		SetBool(UsesBumpMap, true);
 	}
-	else
+
+	// Determine if we have a LightWarpTexture
+	bool bHasLightWarpTexture = IsDefined(LightWarpTexture);
+	bool bBumpLightWarp = bHasLightWarpTexture && !GetBool(LightWarpNoBump);
+
+	// Determine whether we are actually using $Phong
+	bool bHasPhong = false;
+	if (GetBool(Phong))
 	{
-		// If someone uses $NormalTexture now instead of $BumpMap, make sure $BumpMap has some kind of data, so we can actually get WorldLight data!
-		// Note that Phong can be used with $BaseMapAlphaPhongMask and a default BumpMap is used for $LightWarpTexture without $LightWarpNoBump
-		if (IsDefined(BumpMap) || GetBool(Phong) && GetBool(BaseMapAlphaPhongMask) || IsDefined(LightWarpTexture) && !GetBool(LightWarpNoBump))
+		// g_pConfig says "No Phong"? No Phong it is!
+		if (!g_pConfig->UsePhong())
 		{
-			SetString(BumpMap, "..."); // Whats on $Bumpmap doesn't matter, it just has to... exist...
+			bHasPhong = false;
+		}
+		// L4D1 Common Infected Fix:
+		// Can't reproduce the actual Feature but common Infected have broken Phong we can disable when detecting this Parameter.
+		else if (GetBool(ShinyBlood))
+		{
+			bHasPhong = false;
+		}
+		// These are the 3 Methods that bring you to the Phong Shader 
+		else if (bHasBumpMap || bBumpLightWarp || GetBool(BaseMapAlphaPhongMask))
+		{
+			bHasPhong = true;
+			SetBool(UsesPhong, true);
 		}
 	}
 
-	// Only try to undefine if defined...
-	if (IsDefined(LightWarpTexture) && mat_disable_lightwarp.GetBool())
+	// Determine whether we need the bumpmapped Shader after all.
+	bool bBumpedShader = false;
+	if (bHasBumpMap || bBumpLightWarp || bHasPhong)
 	{
-		SetUndefined(LightWarpTexture);
+		bBumpedShader = true;
+		SetBool(UsesBumpedPath, true);
 	}
+
+	// Pretend we have a $BumpMap even when we don't
+	// Only for bumped Paths
+	if(!bHasBumpMap && bBumpedShader)
+		SetString(BumpMap, "...");
+
+	// We still want to land on the $BumpMap or $Phong Path after this, so do this only after we evaluated that
+	if (bHasLightWarpTexture && mat_disable_lightwarp.GetBool())
+		SetUndefined(LightWarpTexture);
 
 	// Default Value is supposed to be 1.0f
 	DefaultFloat(EnvMapSaturation, 1.0f);
@@ -634,7 +665,7 @@ SHADER_INIT_PARAMS()
 		// We ignore DiffuseModulation
 		// So we only need to ensure that by default Lighting gets multiplied with the Sample
 		// Set $EnvMapLightScale to 1.0f!!
-		if (!IsDefined(BumpMap) && !GetBool(Phong) && HasFlag(MATERIAL_VAR_ENVMAPSPHERE))
+		if (!bBumpedShader && HasFlag(MATERIAL_VAR_ENVMAPSPHERE))
 		{
 			DefaultFloat(EnvMapLightScale, 1.0f);
 		}
@@ -686,82 +717,70 @@ SHADER_INIT_PARAMS()
 		SetBool(BlendTintColorOverBase, false);
 	}
 
-	// L4D1 Common Infected Fix:
-	// Can't reproduce the actual Feature but common Infected have broken Phong we can disable when detecting this Parameter.
-	if(GetBool(ShinyBlood) && GetBool(Phong))
-		SetBool(Phong, 0);
-
-	if (IsDefined(Phong) && GetBool(Phong))
+	if (bHasPhong)
 	{
-		// g_pConfig says "No Phong"? No Phong it is!
-		if (!g_pConfig->UsePhong())
-			SetInt(Phong, 0);
+		// By Default, $BaseMapAlphaPhongMask forces a flat Normal even when $BumpMap is used.
+		// Not on ASW, but we allow it with this Parameter so SFM can render the Materials correctly
+		#ifdef ASWSDK
+		if(GetBool(TF2Compatibility))
+		#endif
+		{	
+			if (!GetBool(PhongNewBehaviour) && GetBool(BaseMapAlphaPhongMask))
+				DefaultBool(PhongFlatNormal, true);
+		}
 
-		if (GetBool(BaseMapAlphaPhongMask) || bHasBumpMap || IsDefined(LightWarpTexture) && !GetBool(LightWarpNoBump))
+		// PhongFresnelRanges need this or Fresnel will be 0.0f
+		DefaultFloat3(PhongFresnelRanges, 0.0f, 0.5f, 1.0f);
+		DefaultFloat(PhongAlbedoBoost, 1.0f);
+
+		// ShiroDkxtro2 Instruction Reduction :
+		// On the Shader we'd do < $PhongExponentTexture.x * 149 + 1 >
+		// On SDK2013MP this would be < $PhongExponentTexture.x * $PhongExponentFactor + 1 >
+		// But we will do instead < $PhongExponentTexture.x * $PhongExponentFactor + $PhongExponent >
+		// Without $PhongExponentTexture, this will just end up < $PhongExponent > on the Shader
+		//
+		// Stock Consistency : Override to $PhongExponent when its anything other than 0
+		//
+		// We use DefaultFloat's because maybe someone wants to do some really whacky stuff by combining Parameters 
+		if (IsDefined(PhongExponent) && GetFloat(PhongExponent) > 0.0f)
 		{
-			// By Default, $BaseMapAlphaPhongMask forces a flat Normal even when $BumpMap is used.
-			// Not on ASW, but we allow it with this Parameter so SFM can render the Materials correctly
+			DefaultFloat(PhongExponentFactor, 0.0f);
+		}
+		else if (IsDefined(PhongExponentTexture))
+		{
+			// Default Value is supposed to be ... Well in SDK2013mp it's 0...
+			// It replaces the *149 of the calculation so that is what its default value SHOULD be
+			// NOTE: ASW does 1.0 - .r + .r * 150.0f
+			// The 1.0-r isn't replicated here but the 150* IS
 			#ifdef ASWSDK
-			if(GetBool(TF2Compatibility))
-			#endif
-			{	
-				if (!GetBool(PhongNewBehaviour) && GetBool(BaseMapAlphaPhongMask))
-					DefaultBool(PhongFlatNormal, true);
-			}
-
-			// PhongFresnelRanges need this or Fresnel will be 0.0f
-			DefaultFloat3(PhongFresnelRanges, 0.0f, 0.5f, 1.0f);
-			DefaultFloat(PhongAlbedoBoost, 1.0f);
-
-			// ShiroDkxtro2 Instruction Reduction :
-			// On the Shader we'd do < $PhongExponentTexture.x * 149 + 1 >
-			// On SDK2013MP this would be < $PhongExponentTexture.x * $PhongExponentFactor + 1 >
-			// But we will do instead < $PhongExponentTexture.x * $PhongExponentFactor + $PhongExponent >
-			// Without $PhongExponentTexture, this will just end up < $PhongExponent > on the Shader
-			//
-			// Stock Consistency : Override to $PhongExponent when its anything other than 0
-			//
-			// We use DefaultFloat's because maybe someone wants to do some really whacky stuff by combining Parameters 
-			if (IsDefined(PhongExponent) && GetFloat(PhongExponent) > 0.0f)
+			if (!GetBool(TF2Compatibility))
 			{
-				DefaultFloat(PhongExponentFactor, 0.0f);
-			}
-			else if (IsDefined(PhongExponentTexture))
-			{
-				// Default Value is supposed to be ... Well in SDK2013mp it's 0...
-				// It replaces the *149 of the calculation so that is what its default value SHOULD be
-				// NOTE: ASW does 1.0 - .r + .r * 150.0f
-				// The 1.0-r isn't replicated here but the 150* IS
-				#ifdef ASWSDK
-				if (!GetBool(TF2Compatibility))
-				{
-					DefaultFloat(PhongExponent, 0.0f);
-					DefaultFloat(PhongExponentFactor, 150.0f);
-				}
-				else
-				{
-					// NOTE: We still do the 1-.r but I'm trying to account for that here by not adding +1 at all times
-					DefaultFloat(PhongExponent, 0.0f);
-					DefaultFloat(PhongExponentFactor, 149.0f);
-				}
-				#else
-					DefaultFloat(PhongExponent, 1.0f);
-					DefaultFloat(PhongExponentFactor, 149.0f);
-				#endif
+				DefaultFloat(PhongExponent, 0.0f);
+				DefaultFloat(PhongExponentFactor, 150.0f);
 			}
 			else
 			{
-				#ifdef ASWSDK
-				// In ASW when $PhongExponent == 0.0f ( which is the default Value there )
-				// It will use the $PhongExponentTexture, if you don't have one, a White one will be assigned
-				// Since it does 1-r+r*150, the equivalent for LUX will be setting a $PhongExponent of 150
-				if(!GetBool(TF2Compatibility))
-					DefaultFloat(PhongExponent, 150.0f);
-				else
-				#endif
-					// Default Value is supposed to be 5.0f
-					DefaultFloat(PhongExponent, 5.0f);
+				// NOTE: We still do the 1-.r but I'm trying to account for that here by not adding +1 at all times
+				DefaultFloat(PhongExponent, 0.0f);
+				DefaultFloat(PhongExponentFactor, 149.0f);
 			}
+			#else
+				DefaultFloat(PhongExponent, 1.0f);
+				DefaultFloat(PhongExponentFactor, 149.0f);
+			#endif
+		}
+		else
+		{
+			#ifdef ASWSDK
+			// In ASW when $PhongExponent == 0.0f ( which is the default Value there )
+			// It will use the $PhongExponentTexture, if you don't have one, a White one will be assigned
+			// Since it does 1-r+r*150, the equivalent for LUX will be setting a $PhongExponent of 150
+			if(!GetBool(TF2Compatibility))
+				DefaultFloat(PhongExponent, 150.0f);
+			else
+			#endif
+				// Default Value is supposed to be 5.0f
+				DefaultFloat(PhongExponent, 5.0f);
 		}
 	}
 
@@ -783,7 +802,7 @@ SHADER_INIT_PARAMS()
 	DefaultFloat2(TreeSwayStaticValues, 0.5f, 0.5f);
 
 	// Stock Consistency : Flip the $BaseAlphaEnvMapMask when not using $Phong or $BumpMap
-	bool b1 = !IsDefined(BumpMap);
+	bool b1 = !bBumpedShader;
 	bool b2 = !IsDefined(EnvMapMaskFlip);
 	bool b3 = HasFlag(MATERIAL_VAR_BASEALPHAENVMAPMASK);
 	if (b1 && b2 && b3 && lux_envmap_flipbasealpha.GetBool())
@@ -791,7 +810,7 @@ SHADER_INIT_PARAMS()
 		SetBool(EnvMapMaskFlip, 1);
 	}
 
-	if (IsDefined(BumpMap) || (IsDefined(LightWarpTexture) && !GetBool(LightWarpNoBump)) || (GetBool(Phong) && GetBool(BaseMapAlphaPhongMask)))
+	if (bBumpedShader)
 	{
 		// Required for dynamic Lighting
 		SetFlag2(MATERIAL_VAR2_NEEDS_TANGENT_SPACES);
@@ -894,20 +913,19 @@ SHADER_INIT
 	// Need to load this for the second Pass
 	LoadTexture(SelfIllumTexture, TEXTUREFLAGS_SRGB);
 
-	// Animated Texture Proxies will likely be running on $BumpMap
-	// Load it, if $BumpMap was manually defined. That way it gets the Reference and Frame Params work.
-	if (GetBool(UsesBumpMap))
+	bool bUsesBumpMap = GetBool(UsesBumpMap);
+	bool bBumpedShader = GetBool(UsesBumpedPath);
+	bool bUsesPhong = GetBool(UsesPhong);
+	if(bUsesBumpMap)
 		LoadBumpMap(BumpMap);
 
-	LoadBumpMap(BumpMap);
-
-	if (IsDefined(Compress) && IsDefined(Stretch))
+	if (bUsesPhong && IsDefined(Compress) && IsDefined(Stretch))
 	{
 		LoadTexture(Compress);
 		LoadTexture(Stretch);
 	}
 	
-	if (IsTextureLoaded(BumpMap) && IsDefined(BumpStretch) && IsDefined(BumpCompress))
+	if (bUsesPhong && IsDefined(BumpStretch) && IsDefined(BumpCompress))
 	{
 		LoadTexture(BumpCompress);
 		LoadTexture(BumpStretch);
@@ -930,7 +948,7 @@ SHADER_INIT
 	// Orange Box Code does this.
 	// Unfortunately, it will result in Missing Textures when using "env_cubemap"
 	// The 7th Face on a Cubemap will not end up here :/
-	if (!IsDefined(BumpMap) && !GetBool(Phong) && HasFlag(MATERIAL_VAR_ENVMAPSPHERE))
+	if (!bBumpedShader && HasFlag(MATERIAL_VAR_ENVMAPSPHERE))
 		LoadTexture(EnvMap, 0);
 	else
 		LoadCubeMap(EnvMap, 0);
@@ -950,7 +968,7 @@ SHADER_INIT
 		else
 		{
 			// NormalMapAlphaEnvMapMask takes priority, because its the go to one
-			if (IsDefined(BumpMap) && HasFlag(MATERIAL_VAR_NORMALMAPALPHAENVMAPMASK))
+			if (bUsesBumpMap && HasFlag(MATERIAL_VAR_NORMALMAPALPHAENVMAPMASK))
 			{
 				if (GetTexture(BumpMap)->IsError())
 					ClearFlag(MATERIAL_VAR_NORMALMAPALPHAENVMAPMASK); // No normal map, no masking.
@@ -965,7 +983,7 @@ SHADER_INIT
 		}
 	}
 
-	if (GetBool(Phong))
+	if (bUsesPhong)
 	{
 		LoadTexture(PhongWarpTexture);
 		LoadTexture(PhongExponentTexture);
@@ -1014,7 +1032,7 @@ void LuxVertexLitGeneric_Shader_Draw(IMaterialVar** ppParams, IShaderShadow* pSh
 	bool bDesaturateWithBaseAlpha = !bBlendTintByBaseAlpha && GetBool(DesaturateWithBaseAlpha);
 
 	// Normal Map Variables
-	bool bHasNormalTexture = IsTextureLoaded(BumpMap);
+	bool bHasNormalMap = GetBool(UsesBumpMap) && IsTextureLoaded(BumpMap);
 
 	// Detail Texture Variables
 	// 5 & 6 are now an additive Pass and will no longer be handled here.
@@ -1031,15 +1049,16 @@ void LuxVertexLitGeneric_Shader_Draw(IMaterialVar** ppParams, IShaderShadow* pSh
 	#else
 	bool bHasLightWarpTexture = !bProjTex && IsTextureLoaded(LightWarpTexture); // No Lightwarp under the flashlight
 	#endif
-	bool bHasLightWarpNoBump = bHasLightWarpTexture && GetBool(LightWarpNoBump);
 	
+	// Combination of $BumpMap, $LightWarpTexture and $Phong
+	bool bBumpedShader = GetBool(UsesBumpedPath);
+
 	// Phong Variables, needed before EnvMap because of EnvMapSphere
 	// NOTE: Phong can only be used with
 	// A. $BumpMap
 	// B. $BaseMapAlphaPhongMask
 	// C. $LightWarpTexture
-	bool bHasBaseMapAlphaPhongMask = GetBool(BaseMapAlphaPhongMask);
-	bool bHasPhong = (bHasBaseMapAlphaPhongMask || bHasNormalTexture || bHasLightWarpTexture && !bHasLightWarpNoBump) && GetBool(Phong);
+	bool bHasPhong = GetBool(UsesPhong);
 	bool bHasPhongExponentTexture = bHasPhong && IsTextureLoaded(PhongExponentTexture);
 	bool bHasPhongWarpTexture = bHasPhong && IsTextureLoaded(PhongWarpTexture);
 	bool bHasPhongNewBehaviour = bHasPhong && GetBool(PhongNewBehaviour);
@@ -1049,8 +1068,8 @@ void LuxVertexLitGeneric_Shader_Draw(IMaterialVar** ppParams, IShaderShadow* pSh
 	// Wrinklemapping
 	bool bHasCompress = bHasPhong && IsTextureLoaded(Compress);
 	bool bHasStretch = bHasPhong && IsTextureLoaded(Stretch);
-	bool bHasBumpCompress = bHasPhong && bHasNormalTexture && IsTextureLoaded(BumpCompress);
-	bool bHasBumpStretch = bHasPhong && bHasNormalTexture && IsTextureLoaded(BumpStretch);
+	bool bHasBumpCompress = bHasPhong && bHasNormalMap && IsTextureLoaded(BumpCompress);
+	bool bHasBumpStretch = bHasPhong && bHasNormalMap && IsTextureLoaded(BumpStretch);
 	bool bWrinkleMappingBase = bHasBaseTexture && bHasCompress && bHasStretch; // Need both.
 	bool bWrinkleMappingBump = bHasBumpCompress && bHasBumpStretch; // Need both.
 	bool bAnyWrinkleMapping = bWrinkleMappingBase || bWrinkleMappingBump;
@@ -1058,10 +1077,8 @@ void LuxVertexLitGeneric_Shader_Draw(IMaterialVar** ppParams, IShaderShadow* pSh
 	// EnvMap Variables
 	bool bHasEnvMap = !bProjTex && IsTextureLoaded(EnvMap);
 	bool bHasEnvMapMask = bHasEnvMap && IsTextureLoaded(EnvMapMask);
-	bool bEnvMapSphere = bHasEnvMap && !bHasNormalTexture && !bHasPhong && HasFlag(MATERIAL_VAR_ENVMAPSPHERE);
+	bool bEnvMapSphere = bHasEnvMap && !bBumpedShader && HasFlag(MATERIAL_VAR_ENVMAPSPHERE);
 
-	// We are on the BumpMapping Path if this is the case
-	bool bBumpedShader = bHasPhong || bHasNormalTexture || bHasLightWarpTexture && !bHasLightWarpNoBump;
 	bool bHasVertexColors = HasFlag(MATERIAL_VAR_VERTEXCOLOR) || HasFlag(MATERIAL_VAR_VERTEXALPHA);
 
 #ifndef ASWSDK
@@ -1102,6 +1119,7 @@ void LuxVertexLitGeneric_Shader_Draw(IMaterialVar** ppParams, IShaderShadow* pSh
 		// Exception to this is Half-Lambert, it's a ConVar driven boolean Constant for Phong.
 
 		// Stock Phong has EnvMapFresnel from the PhongFresnelRanges.
+		bool bHasBaseMapAlphaPhongMask = bHasPhong && GetBool(BaseMapAlphaPhongMask);
 		if (bHasPhong && !bHasPhongNewBehaviour)
 		{
 			pContextData->m_bEnvMapFresnel = true;
@@ -1231,7 +1249,7 @@ void LuxVertexLitGeneric_Shader_Draw(IMaterialVar** ppParams, IShaderShadow* pSh
 		int nTexCoords = 1;
 
 		// Uncompressed Verts get Tangent + Binormal Sign through vUserData ( TANGENT Stream )
-		int nUserDataSize = (bProjTex || bHasNormalTexture || bHasPhong) ? 4 : 0;
+		int nUserDataSize = (bProjTex || bHasNormalMap || bHasPhong) ? 4 : 0;
 
 		pShaderShadow->VertexShaderVertexFormat(nFlags, nTexCoords, NULL, nUserDataSize);
 
@@ -1460,7 +1478,7 @@ void LuxVertexLitGeneric_Shader_Draw(IMaterialVar** ppParams, IShaderShadow* pSh
 		if (!bProjTex && bBumpedShader)
 			PI_SetPixelShaderAmbientLightCube(LUX_PS_FLOAT_AMBIENTCUBE);
 
-		if (!bProjTex && !bHasPhong && !bHasNormalTexture)
+		if (!bProjTex && !bBumpedShader)
 			PI_SetVertexShaderAmbientLightCube();
 
 		PI_EndCommandBuffer();
@@ -1504,17 +1522,10 @@ void LuxVertexLitGeneric_Shader_Draw(IMaterialVar** ppParams, IShaderShadow* pSh
 				SemiStaticCmds.BindTexture(SAMPLER_BASETEXTURE, TEXTURE_WHITE);
 		}
 
-		if (!bHasNormalTexture)
+		// No $BumpMap on a bumped Path means flat Normal ( $LightWarpTexture and $BaseMapAlphaPhongMask )
+		if (!bHasNormalMap && bBumpedShader)
 		{
-			// LightWarp forces this without a BumpMap, $LightWarpNoBump allows using Vertex Lighting.
-			if (bHasLightWarpTexture && !bHasLightWarpNoBump)
-			{
-				SemiStaticCmds.BindTexture(SAMPLER_NORMALMAP, TEXTURE_NORMALMAP_FLAT);
-			}
-
-			// This is allowed but we still use the Normal Map Sampler.
-			else if (bHasBaseMapAlphaPhongMask)
-				SemiStaticCmds.BindTexture(SAMPLER_NORMALMAP, TEXTURE_NORMALMAP_FLAT);
+			SemiStaticCmds.BindTexture(SAMPLER_NORMALMAP, TEXTURE_NORMALMAP_FLAT);
 		}
 
 		// When using regular SelfIllum the SelfIllumMask Sampler is on,
@@ -1537,9 +1548,7 @@ void LuxVertexLitGeneric_Shader_Draw(IMaterialVar** ppParams, IShaderShadow* pSh
 			SemiStaticCmds.BindTexture(SHADER_SAMPLER1, BaseTexture, Frame);
 
 		// s2 - $BumpMap
-		// Note that we use NormalTexture here, not $BumpMap.
-		// This will be important later if we get an open-source Bumped Model Lightmapping Implementation
-		if (bHasNormalTexture)
+		if (bHasNormalMap)
 			SemiStaticCmds.BindTexture(SAMPLER_NORMALMAP, BumpMap, BumpFrame);
 
 		// s3 - $Stretch
@@ -1785,8 +1794,8 @@ void LuxVertexLitGeneric_Shader_Draw(IMaterialVar** ppParams, IShaderShadow* pSh
 		int nRegisterShift = 0;
 		if(bBumpedShader)
 		{
-			bool bNormalTextureTransform = HasTransform(true, BumpTransform);
-			if (bNormalTextureTransform)
+			bool bNormalMapTransform = HasTransform(bHasNormalMap, BumpTransform);
+			if (bNormalMapTransform)
 				SemiStaticCmds.SetVertexShaderTextureTransform(LUX_VS_TEXTURETRANSFORM_02, BumpTransform);
 			else
 				SemiStaticCmds.SetVertexShaderTextureTransform(LUX_VS_TEXTURETRANSFORM_02, BaseTextureTransform);
@@ -2111,7 +2120,7 @@ void LuxVertexLitGeneric_Shader_Draw(IMaterialVar** ppParams, IShaderShadow* pSh
 
 		// Dynamic Prop Lighting here refers to dynamic vertex lighting, or ambient cubes via the vertex shader
 		// We shouldn't have that on bumped or phonged models. Same for Static Vertex Lighting
-		if (!bProjTex && !bHasPhong && !bHasNormalTexture)
+		if (!bProjTex && !bBumpedShader)
 		{
 			// LightState varies between SP and MP so we use a function to reinterpret
 			bHasStaticPropLighting = StaticLightVertex(LightState);
@@ -2215,7 +2224,7 @@ void LuxVertexLitGeneric_Shader_Draw(IMaterialVar** ppParams, IShaderShadow* pSh
 #endif
 
 #ifdef LUX_DEBUGCONVARS
-		if (bHasNormalTexture && lux_disablefast_normalmap.GetBool())
+		if (bBumpedShader && bHasNormalMap && lux_disablefast_normalmap.GetBool())
 		{
 			BindTexture(SAMPLER_NORMALMAP, TEXTURE_NORMALMAP_FLAT);
 		}
