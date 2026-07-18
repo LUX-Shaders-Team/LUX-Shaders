@@ -2070,8 +2070,8 @@ void LuxVertexLitGeneric_Shader_Draw(IMaterialVar** ppParams, IShaderShadow* pSh
 
 		// b0
 		// Only have Dynamic Half-Lambert with BumpMapping
-		if(bBumpedShader && bHalfLambert)
-			BBools[LUX_PS_BOOL_HALFLAMBERT] = true;
+		if(bBumpedShader)
+			BBools[LUX_PS_BOOL_HALFLAMBERT] = bHalfLambert;
 
 		// b4, b5, b6, b7, b8, b9, b10, b11
 		if (bHasPhong)
@@ -2089,8 +2089,7 @@ void LuxVertexLitGeneric_Shader_Draw(IMaterialVar** ppParams, IShaderShadow* pSh
 		}
 
 		// b12
-		if(HasFlag(MATERIAL_VAR_VERTEXCOLOR) || HasFlag(MATERIAL_VAR_VERTEXALPHA))
-			BBools[LUX_PS_BOOL_VERTEXCOLOR] = true;
+		BBools[LUX_PS_BOOL_VERTEXCOLOR] = HasFlag(MATERIAL_VAR_VERTEXCOLOR) || HasFlag(MATERIAL_VAR_VERTEXALPHA);
 
 		// b13, b14, b15
 		BBools[LUX_PS_BOOL_HEIGHTFOG] = WriteWaterFogToDestAlpha(pContextData->m_bIsFullyOpaque);
