@@ -107,10 +107,10 @@ void UG_SetupSSAODrawNormalVars(SSAODrawNormalPass_Vars_t& SSAODrawNormalVars)
 SHADER_INIT_PARAMS()
 {
 	if (IsDefined(DistanceAlpha) && GetBool(DistanceAlpha))
-		SetBool(ReceiveProjectedTextures, 0);
+		SetBool(ReceiveProjectedTextures, false);
 	else
 		// Usually don't want it!
-		DefaultInt(ReceiveProjectedTextures, 0);
+		DefaultBool(ReceiveProjectedTextures, false);
 
 	DefaultFloat(HDRColorScale, 1.0f);
 
@@ -385,7 +385,7 @@ SHADER_DRAW
 			nTexCoords = 2;
 
 		int pTexCoordDim[3] = { 2, 2, 3 };
-		int nUserDataSize = bProjTex ? 4 : 0; // Not technically required, we don't use the Tangents.
+		int nUserDataSize = (bProjTex || bHasEnvMap) ? 4 : 0; // Not technically required, we don't use the Tangents.
 
 		pShaderShadow->VertexShaderVertexFormat(nFlags, nTexCoords, pTexCoordDim, nUserDataSize);
 
@@ -1114,12 +1114,16 @@ SHADER_DRAW
 		BOOL BBools[REGISTER_BOOL_MAX] = { false };
 
 		// b3
-		if(HasFlag(MATERIAL_VAR_VERTEXALPHA))
+		if (HasFlag(MATERIAL_VAR_VERTEXALPHA))
 			BBools[UNLITGENERIC_BOOL_VERTEXALPHA] = true;
+		else
+			BBools[UNLITGENERIC_BOOL_VERTEXALPHA] = false;
 
 		// b12
 		if(HasFlag(MATERIAL_VAR_VERTEXCOLOR))
 			BBools[LUX_PS_BOOL_VERTEXCOLOR] = true;
+		else 
+			BBools[LUX_PS_BOOL_VERTEXCOLOR] = false;
 
 		// b13, b14, b15
 #if FIXED_COMMANDBUFFER
