@@ -1,7 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	24.01.2023 DMY
-//	Last Change :	 30.01.2026 DMY
+//	Last Change :	18.07.2026 DMY
 //
 //==========================================================================//
 
@@ -312,6 +312,14 @@ float ComputeRangeFogFactor(const float3 f3WorldPos, const float f1Depth)
 		f1DistanceFactor = f1Depth;	
 	}
 
+	// SDK does FogFactor = (Distance * Range) - FogEndOverRange
+	// ASW does FogFactor = FogEndOverRange + (Distance * Range)
+	// Both then do min(g_f1FogMaxDensity, f1FogFactor)
+	// SDK then does FogFactor *= FogFactor
+#if defined(ASWSDK)
+	f1DistanceFactor *= g_f1FogOORange;
+	f1FogFactor = saturate(min(g_f1FogMaxDensity, g_f1FogEndOverRange + f1DistanceFactor));
+#else
 	// Reciprocal of the Fog Range.
 	// This formats the Distance [Inches] to Linear Values [0..1] for the Lerp
 	// To ensure not going > 1.0f, Saturate() is applied
@@ -321,6 +329,7 @@ float ComputeRangeFogFactor(const float3 f3WorldPos, const float f1Depth)
 	// Stock-Consistency :
 	// "squaring the factor will get the middle range mixing closer to hardware fog" - common_ps_fxc.h
 	f1FogFactor *= f1FogFactor;
+#endif
 
 	return f1FogFactor;
 }
