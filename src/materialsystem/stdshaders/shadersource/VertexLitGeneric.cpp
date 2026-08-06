@@ -2082,7 +2082,7 @@ void LuxVertexLitGeneric_Shader_Draw(IMaterialVar** ppParams, IShaderShadow* pSh
 		// ASW Shaders output only $Alpha when not using Opacity. Instead of Opacity * $Alpha
 		// In SFM the later causes Issues with the Model Browser, as BaseAlpha could be something other than Opacity.
 		// NOTE: BT_ADD does not provide Opacity!! 
-		BBools[LUX_PS_BOOL_ASW_NOOPACITY] = (pContextData->m_nBlendType == BT_NONE || pContextData->m_nBlendType == BT_ADD);
+		BBools[LUX_PS_BOOL_ASW_NOOPACITY] = pContextData->m_bIsFullyOpaque || pContextData->m_nBlendType == BT_ADD;
 #endif
 
 		// b4, b5, b6, b7, b8, b9, b10, b11

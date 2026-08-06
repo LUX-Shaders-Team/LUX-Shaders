@@ -1122,7 +1122,7 @@ SHADER_DRAW
 		// ASW Shaders output only $Alpha when not using Opacity. Instead of Opacity * $Alpha
 		// In SFM the later causes Issues with the Model Browser, as BaseAlpha could be something other than Opacity.
 		// NOTE: BT_ADD does not provide Opacity!! 
-		BBools[LUX_PS_BOOL_ASW_NOOPACITY] = (nBlendType == BT_NONE || nBlendType == BT_ADD);
+		BBools[LUX_PS_BOOL_ASW_NOOPACITY] = (bIsFullyOpaque || nBlendType == BT_ADD);
 #endif
 
 		// b3
