@@ -1,9 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	05.03.2023 DMY
-//	Last Change :	 30.01.2026 DMY
-//
-//	Purpose of this File :	
+//	Last Change :	06.08.2026 DMY
 //
 //==========================================================================//
 
@@ -33,6 +31,7 @@ struct EmissiveBlend_Vars_t
 	int m_nEmissiveBlendTexture;
 	int m_nEmissiveBlendTint;
 	int m_nEmissiveBlendFlowTexture;
+	int m_nEmissiveBlendFlowStrength;
 	int m_nEmissiveBlend_NoFlowTransform;
 	int m_nTime;
 	int m_nMinimumLightAdditivePass;
@@ -52,10 +51,11 @@ struct EmissiveBlend_Vars_t
 		m_nEmissiveBlendTexture = Enabled + 5;
 		m_nEmissiveBlendTint = Enabled + 6;
 		m_nEmissiveBlendFlowTexture = Enabled + 7;
-		m_nEmissiveBlend_NoFlowTransform = Enabled + 8;
-		m_nTime = Enabled + 9;
-		m_nMinimumLightAdditivePass = Enabled + 10;
-		m_nMinimumLightTint  = Enabled + 11;
+		m_nEmissiveBlendFlowStrength = Enabled + 8;
+		m_nEmissiveBlend_NoFlowTransform = Enabled + 9;
+		m_nTime = Enabled + 10;
+		m_nMinimumLightAdditivePass = Enabled + 11;
+		m_nMinimumLightTint  = Enabled + 12;
 	}
 };
 

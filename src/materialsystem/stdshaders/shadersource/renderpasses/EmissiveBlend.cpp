@@ -1,7 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	20.01.2023 DMY
-//	Last Change :	05.03.2026 DMY
+//	Last Change :	06.08.2026 DMY
 //
 //==========================================================================//
 
@@ -30,6 +30,8 @@ void EmissiveBlend_Init_Params(CBaseVSShader* pShader, EmissiveBlend_Vars_t& inf
 
 	// -123 now indicates the use of curtime, instead of 0. This way its possible to set 0
 	pShader->DefaultFloat(info.m_nTime, -123.0f);
+
+	pShader->DefaultFloat2(info.m_nEmissiveBlendFlowStrength, float2(1.0f, 1.0f));
 }
 
 void EmissiveBlend_Shader_Init(CBaseVSShader* pShader, EmissiveBlend_Vars_t& info)
@@ -327,6 +329,7 @@ void EmissiveBlend_Shader_Draw(CBaseVSShader* pShader, IShaderShadow* pShaderSha
 			// Just force the Values from the Parameter
 //			if (pShader->IsDefined(info.m_nEmissiveBlendScrollVector))
 			f4EmissiveScroll.xy = pShader->GetFloat2(info.m_nEmissiveBlendScrollVector);
+			f4EmissiveScroll.zw = pShader->GetFloat2(info.m_nEmissiveBlendFlowStrength);
 
 			// Precompute this, it's the same for all Pixels!
 			f4EmissiveScroll.xy *= f1Time;

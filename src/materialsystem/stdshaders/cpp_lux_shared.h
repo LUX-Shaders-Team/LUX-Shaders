@@ -1,7 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	20.01.2023 DMY
-//	Last Change :	 30.01.2026 DMY
+//	Last Change :	06.08.2026 DMY
 //
 //	Every Shader should include this File!
 //
@@ -664,7 +664,8 @@ SHADER_PARAM(EmissiveBlendScrollVector, SHADER_PARAM_TYPE_VEC2,			"", "A matrix 
 SHADER_PARAM(EmissiveBlendStrength,		SHADER_PARAM_TYPE_FLOAT,		"", "Controls the opacity of the effect. Ranges from 0 to 1; at 0, the effect is invisible, at 1, it is at full strength.")\
 SHADER_PARAM(EmissiveBlendTexture,		SHADER_PARAM_TYPE_TEXTURE,		"", "[RGB] The Texture that scrolls by based on the flowmap and the scrolling speed parameter. Not mapped to a UV.")\
 SHADER_PARAM(EmissiveBlendTint,			SHADER_PARAM_TYPE_COLOR,		"", "Color tint of the effect.")\
-SHADER_PARAM(EmissiveBlendFlowTexture,	SHADER_PARAM_TYPE_TEXTURE,		"", "[RGB] Flowmap used for the $emissiveblendTexture.")\
+SHADER_PARAM(EmissiveBlendFlowTexture,	SHADER_PARAM_TYPE_TEXTURE,		"", "[RG] Flowmap used for the $EmissiveBlendTexture.\n[B] Nothing.\n[A] Nothing.")\
+SHADER_PARAM(EmissiveBlendFlowStrength,	SHADER_PARAM_TYPE_VEC2,			"",	"Intensity Value for the Values derived from $EmissiveBlendFlowTexture.")\
 SHADER_PARAM(EmissiveBlend_NoFlowTransform, SHADER_PARAM_TYPE_MATRIX,	"", "Only usable without flowTexture. Uses actual UV for Emission Texture.")\
 SHADER_PARAM(Time,						SHADER_PARAM_TYPE_FLOAT,		"", "Allows you to hook a custom time based variable to the shader.")\
 SHADER_PARAM(MinimumLightAdditivePass,	SHADER_PARAM_TYPE_BOOL,			"", "Enables Minimum Light Additive Pass.")\
