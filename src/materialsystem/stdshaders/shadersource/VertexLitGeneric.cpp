@@ -1245,6 +1245,11 @@ void LuxVertexLitGeneric_Shader_Draw(IMaterialVar** ppParams, IShaderShadow* pSh
 		if (bHasVertexColors)
 			nFlags |= VERTEX_COLOR;
 
+		#ifdef ASWSDK
+		if(!bBumpedShader)
+			nFlags |= VERTEX_COLOR_STREAM_1;
+		#endif
+
 		// Always just one..
 		int nTexCoords = 1;
 
