@@ -109,8 +109,13 @@ SHADER_INIT_PARAMS()
 	if (IsDefined(DistanceAlpha) && GetBool(DistanceAlpha))
 		SetBool(ReceiveProjectedTextures, false);
 	else
-		// Usually don't want it!
-		DefaultBool(ReceiveProjectedTextures, false);
+	{
+		// UnlitGeneric by default cannot receive proj. Textures.
+		// However our Parameter is supposed to act like a bool and other Shaders expect a default Value of 'true'
+		// This is now set to *2* by CBaseShader so we can identify whether it was set in the VMT or not
+		if(GetInt(ReceiveProjectedTextures) == 2)
+			SetBool(ReceiveProjectedTextures, false);
+	}
 
 	DefaultFloat(HDRColorScale, 1.0f);
 

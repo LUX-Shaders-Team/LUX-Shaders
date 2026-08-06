@@ -337,7 +337,7 @@ static ShaderParamInfo_t s_StandardParams[NUM_SHADER_MATERIAL_VARS] =
 	{
 		"$ReceiveProjectedTextures",
 		"Whether or not the Material should be able to receive/render projected Textures.\nSome Shaders will force this, usually when they are incapable of receiving them.",
-		SHADER_PARAM_TYPE_BOOL,
+		SHADER_PARAM_TYPE_INTEGER,
 		"0",
 		0
 	},
@@ -483,8 +483,10 @@ void CBaseShader::InitShaderParams(IMaterialVar** ppParams, const char *pMateria
 		SetBool(AllowDiffuseModulation, true);
 
 	// Projected Textures can be received unless $ReceiveProjectedTextures is set to 0
+	// NOTE: UnlitGeneric by default cannot have proj. Textures but we already defaulted this here
+	// To identify whether a User set this to 1 for UnlitGeneric Materials, I'm setting this to 2 instead of 1
 	if (!IsDefined(ReceiveProjectedTextures))
-		SetBool(ReceiveProjectedTextures, true);
+		SetInt(ReceiveProjectedTextures, 2);
 
 	if (!IsDefined(ReceiveProjectedTextureShadows))
 		SetBool(ReceiveProjectedTextureShadows, true);
