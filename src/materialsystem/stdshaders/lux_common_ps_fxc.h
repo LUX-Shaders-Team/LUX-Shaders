@@ -312,24 +312,22 @@ float ComputeRangeFogFactor(const float3 f3WorldPos, const float f1Depth)
 		f1DistanceFactor = f1Depth;	
 	}
 
-	// SDK does FogFactor = (Distance * Range) - FogEndOverRange
-	// ASW does FogFactor = FogEndOverRange + (Distance * Range)
-	// Both then do min(g_f1FogMaxDensity, f1FogFactor)
-	// SDK then does FogFactor *= FogFactor
-#if defined(ASWSDK)
+	// Apply Reciprocal of the Fog Range to squeeze this into a linear Range
 	f1DistanceFactor *= g_f1FogOORange;
-	f1FogFactor = saturate(min(g_f1FogMaxDensity, g_f1FogEndOverRange + f1DistanceFactor));
-#else
-	// Reciprocal of the Fog Range.
-	// This formats the Distance [Inches] to Linear Values [0..1] for the Lerp
-	// To ensure not going > 1.0f, Saturate() is applied
-	f1DistanceFactor *= g_f1FogOORange;
-	f1FogFactor = saturate(min(g_f1FogMaxDensity, f1DistanceFactor - g_f1FogEndOverRange));
 
-	// Stock-Consistency :
+#if defined(ASWSDK)
+	// ASW does FogFactor = FogEndOverRange + (Distance * Range)
+	f1FogFactor = min(g_f1FogMaxDensity, saturate(g_f1FogEndOverRange + f1DistanceFactor));
+#else
+	// SDK does FogFactor = (Distance * Range) - FogEndOverRange
+	// TODO: The Saturate here should probably only apply to the actual FogRange since it could be <= 0 and >= 1
+	// That shouldn't be the case for the FogDensity
+	f1FogFactor = saturate(min(g_f1FogMaxDensity, f1DistanceFactor - g_f1FogEndOverRange));
+#endif
+
+	// Stock-Consistency:
 	// "squaring the factor will get the middle range mixing closer to hardware fog" - common_ps_fxc.h
 	f1FogFactor *= f1FogFactor;
-#endif
 
 	return f1FogFactor;
 }
