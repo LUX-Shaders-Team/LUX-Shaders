@@ -2,7 +2,7 @@
 //
 //  Original D. :	07.02.2023 DMY - VLG Simple Earliest Date
 //	Initial D.	:	06.05.2026 DMY
-//	Last Change :	18.05.2026 DMY
+//	Last Change :	06.08.2026 DMY
 //
 //==========================================================================//
 
@@ -581,7 +581,13 @@ float4 main(PS_INPUT i) : COLOR
 	f3CombinedTerms *= f1SSAO;
 #endif
 
-	float f1Alpha = f4BaseTexture.a; // Using $BaseTexture Alpha for transparency & translucency Effects
+	// Using $BaseTexture Alpha for transparency & translucency Effects
+	float f1Alpha = f4BaseTexture.a;
+
+#if defined(ASWSDK)
+	if (g_bNoOpacity)
+		f1Alpha = 1.0f;
+#endif
 	
 	// Needed for Hammer's Shaded Texture Polygons View
 	// NOTE: This will look wrong with Reflections, but Hammer doesn't have Reflections

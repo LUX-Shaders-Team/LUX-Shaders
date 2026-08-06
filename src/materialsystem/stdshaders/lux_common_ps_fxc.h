@@ -1,7 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	24.01.2023 DMY
-//	Last Change :	18.07.2026 DMY
+//	Last Change :	06.08.2026 DMY
 //
 //==========================================================================//
 
@@ -155,6 +155,9 @@ const float4 cDefaultControls							: register(LUX_PS_FLOAT_DEFAULTCONTROLS);
 // Using Macros to then give each Slots a new Name whenever it is needed
 const bool		Bools[16]						: register(b0);
 
+#if defined(ASWSDK)
+#define				g_bNoOpacity				Bools[LUX_PS_BOOL_ASW_NOOPACITY]
+#endif
 
 #define				g_bVertexColor				Bools[LUX_PS_BOOL_VERTEXCOLOR]
 

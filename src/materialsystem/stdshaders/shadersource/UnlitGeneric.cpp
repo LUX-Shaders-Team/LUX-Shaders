@@ -1,7 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	20.01.2023 DMY
-//	Last Change :	04.06.2026 DMY
+//	Last Change :	06.08.2026 DMY
 //
 //==========================================================================//
 
@@ -1117,6 +1117,13 @@ SHADER_DRAW
 
 		// Prepare boolean array, yes we need to use BOOL
 		BOOL BBools[REGISTER_BOOL_MAX] = { false };
+
+#if defined(ASWSDK)
+		// ASW Shaders output only $Alpha when not using Opacity. Instead of Opacity * $Alpha
+		// In SFM the later causes Issues with the Model Browser, as BaseAlpha could be something other than Opacity.
+		// NOTE: BT_ADD does not provide Opacity!! 
+		BBools[LUX_PS_BOOL_ASW_NOOPACITY] = (nBlendType == BT_NONE || nBlendType == BT_ADD);
+#endif
 
 		// b3
 		if (HasFlag(MATERIAL_VAR_VERTEXALPHA))

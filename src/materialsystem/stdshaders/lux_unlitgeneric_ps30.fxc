@@ -2,7 +2,7 @@
 //
 //	Original D. :	28.02.2023 DMY
 //	Initial D.	:	12.06.2025 DMY
-//	Last Change :	22.05.2026 DMY
+//	Last Change :	06.08.2026 DMY
 //
 //==========================================================================//
 
@@ -152,7 +152,7 @@
 // Move EnvMap Registers below c32
 // c2 to c10 is free, usually used for Ambient Cubes
 // But this Shader doesn't have those!
-#if (ENVMAPMODE > 0)
+#if ENVMAP
 	const float4	cEnvMapTint_LightScale		: register(UNLITGENERIC_ENVMAP_TINT); 
 	#define			g_f3EnvMapTint					(cEnvMapTint_LightScale.xyz)
 	#define			g_f1EnvMapLightScale			(cEnvMapTint_LightScale.w)
@@ -359,6 +359,11 @@ float4 main(PS_INPUT i) : COLOR
 	// Pass Basealpha onwards
 	float f1Alpha = f4BaseTexture.a;
 
+#if defined(ASWSDK)
+	if (g_bNoOpacity)
+		f1Alpha = 1.0f;
+#endif
+	
 	// $VertexColor && $VertexAlpha
 	// Only when not seamless as we need the texcoords!
 	if(g_bVertexColor)

@@ -1,7 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	24.09.2025 DMY
-//	Last Change :	 30.01.2026 DMY
+//	Last Change :	06.08.2026 DMY
 //
 //	Purpose of this File : Turns Magic Numbers into Macros
 //
@@ -83,7 +83,7 @@
 
 // Boolean Registers:
 #define LUX_PS_BOOL_HALFLAMBERT					REGISTER_BOOL_00
-// FREE
+#define LUX_PS_BOOL_ASW_NOOPACITY				REGISTER_BOOL_01
 // FREE
 // FREE
 #define LUX_PS_BOOL_PHONG_BASEMAPALPHAMASK		REGISTER_BOOL_04
