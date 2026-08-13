@@ -47,6 +47,27 @@
 // Macro Register Map
 #include "lux_registermap_cpp.h"
 
+#ifdef SFM_COMPATIBILITY
+// ASW ( see RenderParmVector_t in public/renderparm.h )
+// 0 = Global Light Direction
+// 1 = FOW Mins
+// 2 = FOW Maxs
+// 3 = Wind Direction
+
+// SFM
+enum RenderParmVector_SFM_t
+{
+	// ~0x10049AAC
+	// Used in sfm_ambientocclusion_ps30.vcs as 'g_vSphereSamples' on c11, size 16
+	// NOTE: Useless to other Shaders, not set to anything while rendering
+	VECTOR_RENDERPARM_SSAOSPHERESAMPLES = 4,
+
+	// ~0x1003A5B2
+	// Used on ^ Phong Draw Function to get SSAO Tint
+	VECTOR_RENDERPARM_SSAOTINT = 5,
+};
+#endif
+
 //==========================================================================//
 // Available DetailBlendmodes
 //==========================================================================//

@@ -1100,6 +1100,9 @@ SHADER_DRAW
 		pShaderAPI->SetScreenSizeForVPOS(LUX_PS_FLOAT_ASW_SCREENSIZE);
 
 		float4 cSSAOControls = 1.0f;
+#ifdef SFM_COMPATIBILITY
+		cSSAOControls.rgb = reinterpret_cast<const float3&>(pShaderAPI->GetVectorRenderingParameter(VECTOR_RENDERPARM_SSAOTINT));
+#endif
 
 		// Some duplicate Code here, FlashlightState has an Ambient Occlusion Factor, so we have to get it
 		if (bProjTex)
@@ -1108,11 +1111,11 @@ SHADER_DRAW
 			FlashlightState_t FlashlightState;
 			VMatrix xmWorldToTexture;
 			FlashlightState = pShaderAPI->GetFlashlightStateEx(xmWorldToTexture, &pFlashlightDepthTexture);
-			cSSAOControls.x *= FlashlightState.m_flAmbientOcclusion;
+			cSSAOControls.w *= FlashlightState.m_flAmbientOcclusion;
 		}
 
-		cSSAOControls.x *= GetFloat(AmbientOcclusion);
-		cSSAOControls.x = fxsaturate(cSSAOControls.x); // Make sure this doesn't go out of Range
+		cSSAOControls.w *= GetFloat(AmbientOcclusion);
+		cSSAOControls.w = fxsaturate(cSSAOControls.w); // Make sure this doesn't go out of Range
 		pShaderAPI->SetPixelShaderConstant(LUX_PS_FLOAT_ASW_SSAOCONTROLS, cSSAOControls);
 #endif
 

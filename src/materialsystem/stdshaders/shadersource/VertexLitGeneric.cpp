@@ -2041,19 +2041,22 @@ void LuxVertexLitGeneric_Shader_Draw(IMaterialVar** ppParams, IShaderShadow* pSh
 		pShaderAPI->SetScreenSizeForVPOS(LUX_PS_FLOAT_ASW_SCREENSIZE);
 
 		float4 cSSAOControls = 1.0f;
+#ifdef SFM_COMPATIBILITY
+		cSSAOControls.rgb = reinterpret_cast<const float3&>(pShaderAPI->GetVectorRenderingParameter(VECTOR_RENDERPARM_SSAOTINT));
+#endif
 
 		// Some duplicate Code here, FlashlightState has an Ambient Occlusion Factor, so we have to get it
-		if(bProjTex)
+		if (bProjTex)
 		{
 			ITexture* pFlashlightDepthTexture;
 			FlashlightState_t FlashlightState;
 			VMatrix xmWorldToTexture;
 			FlashlightState = pShaderAPI->GetFlashlightStateEx(xmWorldToTexture, &pFlashlightDepthTexture);
-			cSSAOControls.x *= FlashlightState.m_flAmbientOcclusion;
+			cSSAOControls.w *= FlashlightState.m_flAmbientOcclusion;
 		}
 
-		cSSAOControls.x *= GetFloat(AmbientOcclusion);
-		cSSAOControls.x = fxsaturate(cSSAOControls.x); // Make sure this doesn't go out of Range
+		cSSAOControls.w *= GetFloat(AmbientOcclusion);
+		cSSAOControls.w = fxsaturate(cSSAOControls.w); // Make sure this doesn't go out of Range
 		pShaderAPI->SetPixelShaderConstant(LUX_PS_FLOAT_ASW_SSAOCONTROLS, cSSAOControls);
 #endif
 
@@ -2082,7 +2085,7 @@ void LuxVertexLitGeneric_Shader_Draw(IMaterialVar** ppParams, IShaderShadow* pSh
 		// ASW Shaders output only $Alpha when not using Opacity. Instead of Opacity * $Alpha
 		// In SFM the later causes Issues with the Model Browser, as BaseAlpha could be something other than Opacity.
 		// NOTE: BT_ADD does not provide Opacity!! 
-		BBools[LUX_PS_BOOL_ASW_NOOPACITY] = pContextData->m_bIsFullyOpaque || pContextData->m_nBlendType == BT_ADD;
+		BBools[LUX_PS_BOOL_ASW_NOOPACITY] = (pContextData->m_bIsFullyOpaque || pContextData->m_nBlendType == BT_ADD);
 #endif
 
 		// b4, b5, b6, b7, b8, b9, b10, b11

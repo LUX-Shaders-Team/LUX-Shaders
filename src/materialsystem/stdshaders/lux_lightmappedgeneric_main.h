@@ -127,7 +127,8 @@
 	#define g_f2ScreenHalfTexel (cScreenSizes.zw)
 
 	const float4 cSSAOControls		: register(LUX_PS_FLOAT_ASW_SSAOCONTROLS);
-	#define g_f1SSAOStrength (cSSAOControls.x)
+	#define g_f3SSAOTint	 (cSSAOControls.rgb)
+	#define g_f1SSAOStrength (cSSAOControls.w)
 
 	sampler Sampler_SSAO			: register(s12);
 #endif
@@ -459,7 +460,7 @@ float4 main(PS_INPUT i) : COLOR
 	// Make it less strong if that is desired
 	f1SSAO = lerp(1.0f, f1SSAO, g_f1SSAOStrength);
 
-	f3CombinedTerms *= f1SSAO;
+	f3CombinedTerms *= lerp(g_f3SSAOTint, 1.0f, f1SSAO);
 #endif
 
 	float f1Alpha = f4BaseTexture.a; // Using $BaseTexture Alpha for transparency & translucency Effects
