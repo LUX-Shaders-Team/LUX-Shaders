@@ -1,7 +1,7 @@
 //===================== File of the LUX Shader Project =====================//
 //
 //	Initial D.	:	20.01.2023 DMY
-//	Last Change :	06.08.2026 DMY
+//	Last Change :	18.08.2026 DMY
 //
 //==========================================================================//
 
@@ -276,8 +276,9 @@ void EmissiveBlend_Shader_Draw(CBaseVSShader* pShader, IShaderShadow* pShaderSha
 
 		if(bMinimumLight)
 		{
-			float4 f4MinimumLight = 0.0f;
-			f4MinimumLight.rgb = pShader->GetFloat3(info.m_nMinimumLightTint);
+			float4 cMinimumLight = 0.0f;
+			cMinimumLight.rgb = pShader->GetFloat3(info.m_nMinimumLightTint);
+			pShaderAPI->SetPixelShaderConstant(REGISTER_FLOAT_032, cMinimumLight);
 		}
 
 		// c33, c34
