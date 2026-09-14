@@ -10,7 +10,7 @@
 
 // Version Number used to be based on amount of commits
 // Since v1.00 its arbitrary
-ConVar lux_version("lux_version", "1.90d");
+ConVar lux_version("lux_version", "1.96d");
 ConVar lux_oldshaders("lux_oldshaders", "0", FCVAR_RELOAD_MATERIALS);
 
 //==========================================================================//
