@@ -190,12 +190,7 @@ BEGIN_SHADER_PARAMS
 	// c23 - Ambient Cube - Flashlight Matrix
 	// c24 - Ambient Cube - Flashlight Matrix
 	// c25 - Ambient Cube - Flashlight Matrix
-	// c26 - Diffuse Modulation
-	// c27 - Eye Pos
-	// c28 - Fog Params
-	// c29 - LinearFogColor
-	// c30 - cLightScale
-	// c31 - LightmapData ( rcp Resolution and LightmapScaleFactor )
+	// c26 to c31 - Default Data
 
 	// sm3.0 Registers
 	SHADER_PARAM(psreg_c32, SHADER_PARAM_TYPE_VEC4, "", "[x y z w] for c32")
@@ -1434,32 +1429,34 @@ SHADER_DRAW
 		}
 
 		// c26
-		// LUX Considers $NoTint and $AllowDiffuseModulation within ComputeModulationColor
-		// If you are porting this elsewhere, account for it on your End. Thank you.
-		// Also I'm doing LightmapScaleFactor later.
-		// Multiplying it into DiffuseModulation breaks a bunch of stuff that no one ever bothered to consider
-		ComputeModulationColor(cSingleConstant);
-		pShaderAPI->SetPixelShaderConstant(REGISTER_FLOAT_026, cSingleConstant);
-
-		// c27
 		if (GetBool(Shader_EyePos))
 		{
 			pShaderAPI->GetWorldSpaceCameraPosition(cSingleConstant);
-			pShaderAPI->SetPixelShaderConstant(REGISTER_FLOAT_027, cSingleConstant);
+			pShaderAPI->SetPixelShaderConstant(LUX_PS_FLOAT_CAMERAPOSITION, cSingleConstant);
 		}
 
-		// c28
+		// c27
 		if (GetBool(Shader_FogData))
-			pShaderAPI->SetPixelShaderFogParams(REGISTER_FLOAT_028);
+			pShaderAPI->SetPixelShaderFogParams(LUX_PS_FLOAT_FOGPARAMETERS);
+
+		// c28
+#ifndef ASWSDK
+		SetModulationConstant(false, pShaderAPI->GetLightMapScaleFactor());
+#else
+		SetModulationConstant(false, pContextData->f1LightmapScaleFactor);
+#endif
 
 		// c29 is (apparently) set automatically ( FogColor and OO_DESTALPHA_DEPTH_RANGE )
-
 		// c30 is (apparently) set automatically ( cLightScale )
-		
+
 		// c31
+		ComputeModulationColor(cSingleConstant);
+		pShaderAPI->SetPixelShaderConstant(LUX_PS_FLOAT_DEFAULTCONTROLS, cSingleConstant);
+		
+		// c32
 		if (bParticleDepthBlend)
 		{
-			pShaderAPI->SetDepthFeatheringPixelShaderConstant(REGISTER_FLOAT_031, GetFloat(Shader_Particle_DepthBlendScale));
+			pShaderAPI->SetDepthFeatheringPixelShaderConstant(REGISTER_FLOAT_032, GetFloat(Shader_Particle_DepthBlendScale));
 		}
 		else if (bIsModel)
 		{
@@ -1485,7 +1482,7 @@ SHADER_DRAW
 					// Bumped Model Lightmap Scale and Offset
 					cSingleConstant.z = 1.0f / 3.0f;
 					cSingleConstant.w = 0.0f;
-					pShaderAPI->SetPixelShaderConstant(REGISTER_FLOAT_031, cSingleConstant);
+					pShaderAPI->SetPixelShaderConstant(REGISTER_FLOAT_032, cSingleConstant);
 				}
 			}
 		}
@@ -1495,57 +1492,47 @@ SHADER_DRAW
 			pShaderAPI->GetLightmapDimensions(&nWidth, &nHeight);
 			cSingleConstant.x = 1.0f / (float)nWidth;
 			cSingleConstant.y = 1.0f / (float)nHeight;
-#ifndef ASWSDK
-			cSingleConstant.z = pShaderAPI->GetLightMapScaleFactor();
-#else
-			cSingleConstant.z = pContextData->f1LightmapScaleFactor;
-#endif
+			cSingleConstant.z = 1.0f;
 			cSingleConstant.w = 0.0f; // Free
-			pShaderAPI->SetPixelShaderConstant(REGISTER_FLOAT_031, cSingleConstant);
-
+			pShaderAPI->SetPixelShaderConstant(REGISTER_FLOAT_032, cSingleConstant);
 		}
 
-		// If this isn't supported and you try to set >c31,
-		// the game *will* crash *if* the registers aren't enabled in the ShaderAPI
-		// It doesn't matter for setting .vcs, they will just be invisible apparently
-#ifndef ASWSDK
-		if (g_pHardwareConfig->SupportsShaderModel_3_0())
-#endif
+		if(true)
 		{
-			// 32 Parameters, Size of 4
-			float4 cPixelConstants[32] = { 0.0f };
-			cPixelConstants[ 0] = GetFloat4(psreg_c32);
-			cPixelConstants[ 1] = GetFloat4(psreg_c33);
-			cPixelConstants[ 2] = GetFloat4(psreg_c34);
-			cPixelConstants[ 3] = GetFloat4(psreg_c35);
-			cPixelConstants[ 4] = GetFloat4(psreg_c36);
-			cPixelConstants[ 5] = GetFloat4(psreg_c37);
-			cPixelConstants[ 6] = GetFloat4(psreg_c38);
-			cPixelConstants[ 7] = GetFloat4(psreg_c39);
-			cPixelConstants[ 8] = GetFloat4(psreg_c40);
-			cPixelConstants[ 9] = GetFloat4(psreg_c41);
-			cPixelConstants[10] = GetFloat4(psreg_c42);
-			cPixelConstants[11] = GetFloat4(psreg_c43);
-			cPixelConstants[12] = GetFloat4(psreg_c44);
-			cPixelConstants[13] = GetFloat4(psreg_c45);
-			cPixelConstants[14] = GetFloat4(psreg_c46);
-			cPixelConstants[15] = GetFloat4(psreg_c47);
-			cPixelConstants[16] = GetFloat4(psreg_c48);
-			cPixelConstants[17] = GetFloat4(psreg_c49);
-			cPixelConstants[18] = GetFloat4(psreg_c50);
-			cPixelConstants[19] = GetFloat4(psreg_c51);
-			cPixelConstants[20] = GetFloat4(psreg_c52);
-			cPixelConstants[21] = GetFloat4(psreg_c53);
-			cPixelConstants[22] = GetFloat4(psreg_c54);
-			cPixelConstants[23] = GetFloat4(psreg_c55);
-			cPixelConstants[24] = GetFloat4(psreg_c56);
-			cPixelConstants[25] = GetFloat4(psreg_c57);
-			cPixelConstants[26] = GetFloat4(psreg_c58);
-			cPixelConstants[27] = GetFloat4(psreg_c59);
-			cPixelConstants[28] = GetFloat4(psreg_c60);
-			cPixelConstants[29] = GetFloat4(psreg_c61);
-			cPixelConstants[30] = GetFloat4(psreg_c62);
-			cPixelConstants[31] = GetFloat4(psreg_c63);
+			// 31 Parameters, Size of 4
+			float4 cPixelConstants[31] = { 0.0f };
+			cPixelConstants[ 0] = GetFloat4(psreg_c33);
+			cPixelConstants[ 1] = GetFloat4(psreg_c34);
+			cPixelConstants[ 2] = GetFloat4(psreg_c35);
+			cPixelConstants[ 3] = GetFloat4(psreg_c36);
+			cPixelConstants[ 4] = GetFloat4(psreg_c37);
+			cPixelConstants[ 5] = GetFloat4(psreg_c38);
+			cPixelConstants[ 6] = GetFloat4(psreg_c39);
+			cPixelConstants[ 7] = GetFloat4(psreg_c40);
+			cPixelConstants[ 8] = GetFloat4(psreg_c41);
+			cPixelConstants[ 9] = GetFloat4(psreg_c42);
+			cPixelConstants[10] = GetFloat4(psreg_c43);
+			cPixelConstants[11] = GetFloat4(psreg_c44);
+			cPixelConstants[12] = GetFloat4(psreg_c45);
+			cPixelConstants[13] = GetFloat4(psreg_c46);
+			cPixelConstants[14] = GetFloat4(psreg_c47);
+			cPixelConstants[15] = GetFloat4(psreg_c48);
+			cPixelConstants[16] = GetFloat4(psreg_c49);
+			cPixelConstants[17] = GetFloat4(psreg_c50);
+			cPixelConstants[18] = GetFloat4(psreg_c51);
+			cPixelConstants[19] = GetFloat4(psreg_c52);
+			cPixelConstants[20] = GetFloat4(psreg_c53);
+			cPixelConstants[21] = GetFloat4(psreg_c54);
+			cPixelConstants[22] = GetFloat4(psreg_c55);
+			cPixelConstants[23] = GetFloat4(psreg_c56);
+			cPixelConstants[24] = GetFloat4(psreg_c57);
+			cPixelConstants[25] = GetFloat4(psreg_c58);
+			cPixelConstants[26] = GetFloat4(psreg_c59);
+			cPixelConstants[27] = GetFloat4(psreg_c60);
+			cPixelConstants[28] = GetFloat4(psreg_c61);
+			cPixelConstants[29] = GetFloat4(psreg_c62);
+			cPixelConstants[30] = GetFloat4(psreg_c63);
+			pShaderAPI->SetPixelShaderConstant(REGISTER_FLOAT_033, cPixelConstants[0], 31);
 		}
 
 		//==========================================================================//
