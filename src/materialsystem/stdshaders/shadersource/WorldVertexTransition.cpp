@@ -670,11 +670,10 @@ SHADER_DRAW
 
 		EnableSampler(bHasBlendModulateTexture, SHADER_SAMPLER8, false);
 
-		// Stock-Consistency: EnvMapMasks are sRGB
 		if (bAnyEnvMapMask)
 		{
-			EnableSampler(SHADER_SAMPLER9, true);
-			EnableSampler(SHADER_SAMPLER10, true);
+			EnableSampler(SHADER_SAMPLER9, false);
+			EnableSampler(SHADER_SAMPLER10, false);
 		}
 
 		// LDR needs sRGB Lightmaps
