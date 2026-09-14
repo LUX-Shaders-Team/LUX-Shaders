@@ -12,8 +12,10 @@
 #include "SSAODrawNormalPass.h"
 
 // Includes for Shaderfiles...
+#ifdef ASWSDK
 #include "lux_ssao_drawnormal_vs30.inc"
 #include "lux_ssao_drawnormal_ps30.inc"
+#endif
 
 void SSAONormalPass_Shader_Draw(CBaseVSShader* pShader, IShaderShadow* pShaderShadow, IShaderDynamicAPI* pShaderAPI, SSAODrawNormalPass_Vars_t& info)
 {
