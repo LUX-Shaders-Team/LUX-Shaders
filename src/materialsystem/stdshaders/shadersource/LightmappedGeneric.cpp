@@ -1060,6 +1060,7 @@ SHADER_DRAW
 		// NOTE: If an Object is not opaque it should not have AO ( it will get the AO of the Surfaces behind it )
 		// Projected Textures are additive by Nature ( bIsFullyOpaque will be false )
 		// In that Case, we have to determine if the Original Pass was additive or translucent.
+		// Also, $PretendTranslucent causes the Material to not write AO, same Issue there.
 		bool bBasePassNotOpaque;
 		if (bProjTex)
 		{
@@ -1070,7 +1071,7 @@ SHADER_DRAW
 		else
 			bBasePassNotOpaque = !pContextData->m_bIsFullyOpaque;
 
-		if (bBasePassNotOpaque)
+		if (bBasePassNotOpaque || GetBool(PretendTranslucent))
 		{
 			pShaderAPI->BindStandardTexture(SHADER_SAMPLER12, TEXTURE_WHITE);
 		}
