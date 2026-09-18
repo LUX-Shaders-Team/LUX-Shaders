@@ -551,7 +551,7 @@ SHADER_DRAW
 		FogToFogColor();
 
 		// We always need this
-		pShaderShadow->EnableAlphaWrites(pContextData->m_bIsFullyOpaque);
+		pShaderShadow->EnableAlphaWrites(!bHasFlashlight && pContextData->m_bIsFullyOpaque);
 
 		// Weird name, what it actually means : We output linear values
 		pShaderShadow->EnableSRGBWrite(true);

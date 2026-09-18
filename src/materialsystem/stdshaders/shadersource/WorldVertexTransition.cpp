@@ -575,7 +575,7 @@ SHADER_DRAW
 		EnableTransparency(pContextData->m_nBlendType);
 
 		// We always need this
-		pShaderShadow->EnableAlphaWrites(pContextData->m_bIsFullyOpaque);
+		pShaderShadow->EnableAlphaWrites(!bProjTex && pContextData->m_bIsFullyOpaque);
 
 		// Weird name, what it actually means : We output linear Values
 		bool bSRGBWrite = !GetBool(LinearWrite); // Stock Consistency

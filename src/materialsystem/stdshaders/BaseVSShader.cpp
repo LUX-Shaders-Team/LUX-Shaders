@@ -1632,7 +1632,19 @@ void CBaseVSShader::EnableTransparency(BlendType_t nBlendType)
 
 bool CBaseVSShader::IsFullyOpaque(BlendType_t nBlendType)
 {
-	// This is better than checking for all other 3 BT Modes..
-	// BT_ADD is Flashlight so we got that covered here too. ( As long as you use the ComputeBlendType Function )
-	return (nBlendType == BT_NONE) && !HasFlag(MATERIAL_VAR_ALPHATEST);
+	if(HasFlag(MATERIAL_VAR_ADDITIVE) || HasFlag(MATERIAL_VAR_ALPHATEST) || HasFlag(MATERIAL_VAR_TRANSLUCENT))
+		return false;
+
+	// Some Shaders may set these without the use of $Translucent
+	// Both of them require Opacity and are therefore not opaque
+	if (nBlendType == BT_BLEND || nBlendType == BT_BLENDADD)
+		return false;
+
+	// FIXME:
+	// Projected Texture Passes rendering on-top of opaque Passes use BT_ADD
+	// BT_ADD is considered opaque right now. And this is actually necessary for SFM.
+	// If the Base-Pass is opaque, SSAO is available for projected Texture Passes
+	// As a consequence Shaders have to manually ensure that proj. Tex.'s don't write Alpha
+	// This could be determined automatically with a dedicated BT_ Mode for projected Textures
+	return true;
 }

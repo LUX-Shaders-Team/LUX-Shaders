@@ -428,7 +428,7 @@ void DrawEyes(IShaderShadow* pShaderShadow, IShaderDynamicAPI* pShaderAPI, CBase
 		DefaultFog();
 	
 		// Usually need it for DepthToDestAlpha
-		pShaderShadow->EnableAlphaWrites(bIsFullyOpaque);
+		pShaderShadow->EnableAlphaWrites(!bProjTex && bIsFullyOpaque);
 	
 		// By default we write linear Values and need them converted to sRGB
 		pShaderShadow->EnableSRGBWrite(true);

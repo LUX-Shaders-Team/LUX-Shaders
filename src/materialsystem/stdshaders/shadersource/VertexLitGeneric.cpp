@@ -1227,7 +1227,7 @@ void LuxVertexLitGeneric_Shader_Draw(IMaterialVar** ppParams, IShaderShadow* pSh
 		EnableTransparency(pContextData->m_nBlendType);
 
 		// We always need this
-		pShaderShadow->EnableAlphaWrites(pContextData->m_bIsFullyOpaque);
+		pShaderShadow->EnableAlphaWrites(!bProjTex && pContextData->m_bIsFullyOpaque);
 
 		// Weird name, what it actually means : We output linear values
 		pShaderShadow->EnableSRGBWrite(true);
@@ -1856,18 +1856,8 @@ void LuxVertexLitGeneric_Shader_Draw(IMaterialVar** ppParams, IShaderShadow* pSh
 		// Ambient occlusion
 		// NOTE: If an Object is not opaque it should not have AO ( it will get the AO of the Surfaces behind it )
 		// Projected Textures are additive by Nature ( bIsFullyOpaque will be false )
-		// In that Case, we have to determine if the Original Pass was additive or translucent.
 		// Also, $PretendTranslucent causes the Material to not write AO, same Issue there.
-		bool bBasePassNotOpaque;
-		if (bProjTex)
-		{
-			// $Translucent will put us on BT_BLENDADD so we can check that
-			// Otherwise we need to see if $Additive is set
-			bBasePassNotOpaque = pContextData->m_nBlendType == BT_BLENDADD || HasFlag(MATERIAL_VAR_ADDITIVE);
-		}
-		else
-			bBasePassNotOpaque = !pContextData->m_bIsFullyOpaque;
-
+		bool bBasePassNotOpaque = !pContextData->m_bIsFullyOpaque;
 		if (bBasePassNotOpaque || GetBool(PretendTranslucent))
 		{
 			pShaderAPI->BindStandardTexture(SHADER_SAMPLER11, TEXTURE_WHITE);
@@ -2085,8 +2075,7 @@ void LuxVertexLitGeneric_Shader_Draw(IMaterialVar** ppParams, IShaderShadow* pSh
 #if defined(ASWSDK)
 		// ASW Shaders output only $Alpha when not using Opacity. Instead of Opacity * $Alpha
 		// In SFM the later causes Issues with the Model Browser, as BaseAlpha could be something other than Opacity.
-		// NOTE: BT_ADD does not provide Opacity!! 
-		BBools[LUX_PS_BOOL_ASW_NOOPACITY] = (pContextData->m_bIsFullyOpaque || pContextData->m_nBlendType == BT_ADD);
+		BBools[LUX_PS_BOOL_ASW_NOOPACITY] = pContextData->m_bIsFullyOpaque;
 #endif
 
 		// b4, b5, b6, b7, b8, b9, b10, b11

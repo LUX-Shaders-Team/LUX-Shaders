@@ -574,7 +574,7 @@ SHADER_DRAW
 		EnableTransparency(pContextData->m_nBlendType);
 
 		// We always need this
-		pShaderShadow->EnableAlphaWrites(pContextData->m_bIsFullyOpaque);
+		pShaderShadow->EnableAlphaWrites(!bProjTex && pContextData->m_bIsFullyOpaque);
 
 		// Weird name, what it actually means : We output linear Values
 		bool bSRGBWrite = !GetBool(LinearWrite); // Stock Consistency
@@ -1059,18 +1059,8 @@ SHADER_DRAW
 		// Ambient occlusion
 		// NOTE: If an Object is not opaque it should not have AO ( it will get the AO of the Surfaces behind it )
 		// Projected Textures are additive by Nature ( bIsFullyOpaque will be false )
-		// In that Case, we have to determine if the Original Pass was additive or translucent.
 		// Also, $PretendTranslucent causes the Material to not write AO, same Issue there.
-		bool bBasePassNotOpaque;
-		if (bProjTex)
-		{
-			// $Translucent will put us on BT_BLENDADD so we can check that
-			// Otherwise we need to see if $Additive is set
-			bBasePassNotOpaque = pContextData->m_nBlendType == BT_BLENDADD || HasFlag(MATERIAL_VAR_ADDITIVE);
-		}
-		else
-			bBasePassNotOpaque = !pContextData->m_bIsFullyOpaque;
-
+		bool bBasePassNotOpaque = !pContextData->m_bIsFullyOpaque;
 		if (bBasePassNotOpaque || GetBool(PretendTranslucent))
 		{
 			pShaderAPI->BindStandardTexture(SHADER_SAMPLER12, TEXTURE_WHITE);

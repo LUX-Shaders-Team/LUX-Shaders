@@ -326,7 +326,7 @@ SHADER_DRAW
 		EnableTransparency(nBlendType);
 
 		// We want AlphaWrites for DepthToDestAlpha and WaterFogToDestAlpha
-		pShaderShadow->EnableAlphaWrites(bIsFullyOpaque);
+		pShaderShadow->EnableAlphaWrites(!bProjTex && bIsFullyOpaque);
 
 		// We output linear Values that need to be converted
 		pShaderShadow->EnableSRGBWrite(true);

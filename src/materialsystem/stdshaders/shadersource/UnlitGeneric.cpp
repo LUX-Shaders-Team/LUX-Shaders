@@ -363,7 +363,7 @@ SHADER_DRAW
 		EnableTransparency(nBlendType);
 
 		// We always need this
-		pShaderShadow->EnableAlphaWrites(bIsFullyOpaque);
+		pShaderShadow->EnableAlphaWrites(!bProjTex && bIsFullyOpaque);
 #endif
 
 		// Weird name, what it actually means : We output linear Values
