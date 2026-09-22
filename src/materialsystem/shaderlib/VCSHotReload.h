@@ -14,7 +14,6 @@
 
 // FIXME: Filesystem Support
 #include "../stdshaders/lux_common_defines.h"
-#ifndef ASWSDK
 #include <string>
 #include <vector>
 
@@ -110,5 +109,3 @@ extern bool g_bHotReloadCacheEnabled;
 extern CShaderReload g_ShaderReload;
 
 #endif // !ASWSDK
-
-#endif // SHADERSPEW_H

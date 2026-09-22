@@ -17,10 +17,8 @@
 #include "tier1/tier1.h"
 #include "color.h"
 #include "../stdshaders/lux_common_defines.h"
-#ifndef ASWSDK
 #include "filesystem.h"
 #include <tier2/tier2.h>
-#endif
 #include <vector>
 #include <array>
 #include "tier0/icommandline.h"
@@ -199,9 +197,6 @@ void CShaderDLL::InsertShader( IShader *pShader )
 }
 
 
-// Everything below only on the SDK due to FileSystem not being accounted for ( FIXME )
-#ifndef ASWSDK
-
 //-----------------------------------------------------------------------------
 //  When we find a "\n" we replace it with "  \n" for markdown formated strings 
 //-----------------------------------------------------------------------------
@@ -286,16 +281,16 @@ CON_COMMAND_F(lux_help_shaders, "Returns all Shader Names in the Custom Shader D
 	const int uiShaderCount = s_pShaderDLL->ShaderCount();
 	for (int i = 0; i < uiShaderCount; i++)
 	{
-		if (IShader* pCur = s_pShaderDLL->GetShader(i))
+		if (CBaseShader* pCur = (CBaseShader*)s_pShaderDLL->GetShader(i))
 		{
 			const char* pszName = pCur->GetName();
-			int nCategory = 0;
+			int nCurCategory = 0;
 
-			for (int i = 1; i < V_ARRAYSIZE(s_ShaderCategories); i++)
+			for (int nCategory = 1; nCategory < V_ARRAYSIZE(s_ShaderCategories); nCategory++)
 			{
-				if (V_strstr(pszName, s_ShaderCategories[i].pszPrefix))
+				if (V_strstr(pszName, s_ShaderCategories[nCategory].pszPrefix))
 				{
-					nCategory = i;
+					nCurCategory = nCategory;
 					break;
 				}
 			}
@@ -309,7 +304,7 @@ CON_COMMAND_F(lux_help_shaders, "Returns all Shader Names in the Custom Shader D
 			pListEntry = &vecShaders.Tail();
 #endif
 			pListEntry->pszName = pszName;
-			pListEntry->nCategory = nCategory;
+			pListEntry->nCategory = nCurCategory;
 		}
 	}
 
@@ -500,7 +495,7 @@ CON_COMMAND_F(lux_dump_shaderparamhelp, "Enter Shader Name and Name of the Param
 {
 	for (int nShader = 0; nShader < s_pShaderDLL->ShaderCount(); nShader++)
 	{
-		IShader* Cur = s_pShaderDLL->GetShader(nShader);
+		CBaseShader* Cur = (CBaseShader*)s_pShaderDLL->GetShader(nShader);
 		if (Cur)
 		{
 			if (!V_stricmp(Cur->GetName(), args[1]))
@@ -604,14 +599,14 @@ CON_COMMAND_F(lux_generate_github_wiki, "Generates a wiki in markdown format. (m
 		#else
 			g_pFullFileSystem->GetSearchPath("GAME", false, szGamePath, MAX_PATH);
 		#endif
-		V_sprintf_safe(szLuxDumpDir, "%s%s", strtok(szGamePath, ";"), LUX_GITHUB_WIKI_DIR);
+		V_snprintf(szLuxDumpDir, sizeof(szLuxDumpDir), "%s%s", strtok(szGamePath, ";"), LUX_GITHUB_WIKI_DIR);
 		g_pFullFileSystem->CreateDirHierarchy(szLuxDumpDir);
 	}
 
 	// Unusuario2, Base of the wiki.
 	{
 		char szLuxBaseWiki[MAX_PATH];
-		V_sprintf_safe(szLuxBaseWiki, "%s\\%s", szLuxDumpDir, LUX_GITHUB_FILE_DUMP);
+		V_snprintf(szLuxBaseWiki, sizeof(szLuxBaseWiki), "%s\\%s", szLuxDumpDir, LUX_GITHUB_FILE_DUMP);
 
 		FILE* pLuxGithubWikiDump = fopen(szLuxBaseWiki, "w");
 		if (!pLuxGithubWikiDump)
@@ -670,7 +665,7 @@ CON_COMMAND_F(lux_generate_github_wiki, "Generates a wiki in markdown format. (m
 				if (!V_stricmp(Cur->GetName(), ShaderName.data()))
 				{
 					char szShaderWikiDumpPath[MAX_PATH];
-					V_sprintf_safe(szShaderWikiDumpPath, "%s\\%s.md", szLuxDumpDir, ShaderName.data());
+					V_snprintf(szShaderWikiDumpPath, sizeof(szShaderWikiDumpPath), "%s\\%s.md", szLuxDumpDir, ShaderName.data());
 
 					// Unusuario2 TODO: use CUltBuffer/tier1 file stuff instead of C funtions! 
 					FILE* pLuxGithubWikiDump = fopen(szShaderWikiDumpPath, "w");
@@ -782,8 +777,6 @@ CON_COMMAND_F(lux_generate_github_wiki, "Generates a wiki in markdown format. (m
 	}
 
 	Msg("done\n");
-	Msg("Github Wiki file dump at: %s", szLuxDumpDir);
+	Msg("Github Wiki file dump at: %s\n", szLuxDumpDir);
 }
-
-#endif // !ASWSDK
 #endif // NOLUX

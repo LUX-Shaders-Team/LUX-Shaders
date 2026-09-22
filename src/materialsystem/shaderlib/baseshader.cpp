@@ -595,11 +595,11 @@ void CBaseShader::DrawElements( IMaterialVar **ppParams, int nModulationFlags,
 	// Only Spew when bDebugSpew and $Debug_True
 	s_ShaderSpew.Start(CurrentShaderName(), CurrentMaterialName(), bDebug && g_bDebugSpew);
 #endif
+#endif
 
 	// Send the MaterialName towards the vcs Reload Class
 	if(g_bHotReloadEnabled)
 		g_ShaderReload.SetMaterialName(CurrentMaterialName());
-#endif
 
 	if (IsSnapshotting())
 	{
@@ -635,7 +635,7 @@ void CBaseShader::DrawElements( IMaterialVar **ppParams, int nModulationFlags,
 	m_ppInstanceDataPtr = NULL;
 	m_pCurrentInstanceCommandBuffer = NULL;
 	m_nCurrentPass = 0;
-#else
+#endif
 
 	// Reset the Proxies.
 	// Ensures that the next Draw() doesn't get dangling Pointers
@@ -645,6 +645,7 @@ void CBaseShader::DrawElements( IMaterialVar **ppParams, int nModulationFlags,
 		s_ProxyShaderAPI.ResetShaderAPI();	
 	}
 	
+#ifndef ASWSDK
 #ifdef DEBUG
 	// End Point for ShaderSpew, this is where printing happens
 	s_ShaderSpew.End();

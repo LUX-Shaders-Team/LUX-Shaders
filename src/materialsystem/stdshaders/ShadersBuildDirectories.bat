@@ -22,6 +22,9 @@ rem The two SDK's LUX is targeted at ( SP and TF2SDK )
 set PROCESS_LIST=%PROCESS_LIST% hl2.exe
 set PROCESS_LIST=%PROCESS_LIST% hl2_win64.exe
 
+rem Addons for the SFM Workshop can make use of this now
+set PROCESS_LIST=%PROCESS_LIST% sfm.exe
+
 rem Mod Projects using LUX
 set PROCESS_LIST=%PROCESS_LIST% tf2classified_win64.exe
 set PROCESS_LIST=%PROCESS_LIST% fc_tfsdk_win64.exe

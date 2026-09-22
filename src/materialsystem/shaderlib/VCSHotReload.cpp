@@ -9,9 +9,6 @@
 #include "BaseShader.h"
 #include "VCSHotReload.h"
 
-// FIXME: Filesystem Support
-#ifndef ASWSDK
-
 // Need this for String Mod Stuff
 #include "filesystem.h"
 #include "strtools.h"
@@ -113,7 +110,7 @@ VCSReferences_t* CShaderReload::CreateReference(const char* ccVCS)
 	pResult->m_strIndexed = ccVCS; // No Index
 
 	// Create the full Name and Path to the .vcs File
-	V_sprintf_safe(m_cOriginalFilePath, "%s%s%s", m_cShadersPath, ccVCS, ".vcs");
+	V_snprintf(m_cOriginalFilePath, sizeof(m_cOriginalFilePath), "%s%s%s", m_cShadersPath, ccVCS, ".vcs");
 
 	// Store this so we don't have to use sprintf all the Time
 	pResult->m_strFullPath = m_cOriginalFilePath;
@@ -149,7 +146,7 @@ bool CShaderReload::IndexShader(VCSReferences_t* pShader)
 
 	// Make the Full FilePath to the NEW File
 	// We expect: shaders/fxc/originalname_000temp.vcs
-	V_sprintf_safe(m_cIndexedFilePath, "%s%s_%03dtemp.vcs", m_cShadersPath, pShader->m_strVCS.c_str(), pShader->m_nLastLoadedIndex);
+	V_snprintf(m_cIndexedFilePath, sizeof(m_cIndexedFilePath), "%s%s_%03dtemp.vcs", m_cShadersPath, pShader->m_strVCS.c_str(), pShader->m_nLastLoadedIndex);
 
 	// Store the File we just loaded under the NEW Name
 	if (!g_pFullFileSystem->WriteFile(m_cIndexedFilePath, "GAME", utlBuffer))
@@ -160,7 +157,7 @@ bool CShaderReload::IndexShader(VCSReferences_t* pShader)
 
 	// We have to do the same Thing again but without the Shaders Path..
 	// We expect: originalname_000temp ( no Suffix and no FilePath )
-	V_sprintf_safe(m_cIndexedFilePath, "%s_%03dtemp", pShader->m_strVCS.c_str(), pShader->m_nLastLoadedIndex);
+	V_snprintf(m_cIndexedFilePath, sizeof(m_cIndexedFilePath), "%s_%03dtemp", pShader->m_strVCS.c_str(), pShader->m_nLastLoadedIndex);
 	pShader->m_strIndexed = m_cIndexedFilePath; // Store that
 
 	// Everything worked!
@@ -207,7 +204,7 @@ void CShaderReload::CleanIndexedShaderFiles()
 	char cShadersFilter[MAX_PATH];
 
 	// Construct the full Path to shaders/fxc/ with wildcard
-	V_sprintf_safe(cShadersFilter, "%s*.vcs", m_cShadersPath);
+	V_snprintf(cShadersFilter, sizeof(cShadersFilter), "%s*.vcs", m_cShadersPath);
 
 	// All Files with the _%03dtemp.vcs Suffix
 	std::vector<std::string> TempFileNames;
@@ -239,7 +236,7 @@ void CShaderReload::CleanIndexedShaderFiles()
 	// Nuke all Files that have the temp.vcs Suffix
 	for(size_t n = 0; n < TempFileNames.size(); ++n)
 	{
-		V_sprintf_safe(m_cIndexedFilePath, "%s%s", m_cShadersPath, TempFileNames[n].c_str());
+		V_snprintf(m_cIndexedFilePath, sizeof(m_cIndexedFilePath), "%s%s", m_cShadersPath, TempFileNames[n].c_str());
 
 		// Make sure it exists, then remove it
 		if(g_pFullFileSystem->FileExists(m_cIndexedFilePath, "GAME"))
@@ -280,8 +277,18 @@ void CShaderReload::Init()
 	// This is probably not necessary
 	V_StripTrailingSlash(szGamePath);
 
+#ifdef SFM_COMPATIBILITY
+	// On SFM we put Shaders in game/workshop/ ( technically in the GAME Path )
+	// Right now we should be in game/../ ( probably game/usermod/ )
+	// Go back to game/
+	V_StripLastDir(szGamePath, sizeof(szGamePath));
+
+	// Add workshop/
+	V_snprintf(szGamePath, sizeof(szGamePath), "%s%s", szGamePath, "workshop");
+#endif
+
 	// Append /shaders/fxc/
-	V_sprintf_safe(m_cShadersPath, "%s%s", szGamePath, "\\shaders\\fxc\\");
+	V_snprintf(m_cShadersPath, sizeof(m_cShadersPath), "%s%s", szGamePath, "\\shaders\\fxc\\");
 	m_bInitialised = true;
 }
 
@@ -562,4 +569,3 @@ CON_COMMAND_F(lux_vcshotreloads_clear, "Debug ConCommand to read the List of VCS
 
 	g_ShaderReload.ClearReferenceList();
 }
-#endif

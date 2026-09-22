@@ -45,11 +45,16 @@ extern bool g_bWaterAlienSwarmFogFactor;
 //-----------------------------------------------------------------------------
 // Helper Function for dll loading
 //-----------------------------------------------------------------------------
-#ifndef ASWSDK
 template<typename T>
+#ifdef ASWSDK
+inline T* LoadInterface(const char* module, const char* version)
+{
+	CSysModule* pModule = Sys_LoadModule(module);
+#else
 inline T *LoadInterface( const char *module, const char *version, Sys_Flags flags = SYS_NOFLAGS )
 {
     CSysModule *pModule = Sys_LoadModule( module, flags );
+#endif
     if ( pModule != nullptr )
     {
         CreateInterfaceFn factory = Sys_GetFactory( pModule );
@@ -61,7 +66,6 @@ inline T *LoadInterface( const char *module, const char *version, Sys_Flags flag
 
     return nullptr;
 }
-#endif
 
 //-----------------------------------------------------------------------------
 // Forward declarations
