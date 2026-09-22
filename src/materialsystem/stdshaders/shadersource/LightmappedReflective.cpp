@@ -499,9 +499,6 @@ SHADER_DRAW
 		//==================================================================================================
 		// Set Dynamic Shaders
 		//==================================================================================================
-		DECLARE_DYNAMIC_VERTEX_SHADER(lux_brush_vs30);
-		SET_DYNAMIC_VERTEX_SHADER(lux_brush_vs30);
-
 		if (bHasFlashlight)
 		{
 			DECLARE_DYNAMIC_VERTEX_SHADER(lux_brush_vs30);
