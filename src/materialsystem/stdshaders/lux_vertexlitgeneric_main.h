@@ -226,7 +226,8 @@ float4 main(PS_INPUT i) : COLOR
 		float3 f3NormalWS = i.Normal.xyz;
 
 		// Fix inverted Normals with $NoCull
-		f3NormalWS *= i.vFace;
+		if (g_bNoCull)
+			f3NormalWS *= i.vFace;
 	#else
 		// TEXC00RD1
 		float2 f2BaseUV = i.TexCoords1.xy;
@@ -349,7 +350,8 @@ float4 main(PS_INPUT i) : COLOR
 		float3 f3NormalWS = normalize(mul(f3NormalTS, TBN_Matrix));
 
 		// Fix inverted Normals with $NoCull
-		f3NormalWS *= i.vFace;
+		if (g_bNoCull)
+			f3NormalWS *= i.vFace;
 
 		// Special Path for proj. Tex.'s
 		#if PROJTEX

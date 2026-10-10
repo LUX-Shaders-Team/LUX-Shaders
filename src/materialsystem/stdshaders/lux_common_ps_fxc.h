@@ -159,6 +159,7 @@ const bool		Bools[16]						: register(b0);
 #define				g_bNoOpacity				Bools[LUX_PS_BOOL_ASW_NOOPACITY]
 #endif
 
+#define				g_bNoCull					Bools[LUX_PS_BOOL_NOCULL]
 #define				g_bVertexColor				Bools[LUX_PS_BOOL_VERTEXCOLOR]
 
 // The Shader need to consider $AlphaTest, $Translucent, etc. here.

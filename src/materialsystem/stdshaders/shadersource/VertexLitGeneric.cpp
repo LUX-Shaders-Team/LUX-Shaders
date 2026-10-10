@@ -2078,6 +2078,9 @@ void LuxVertexLitGeneric_Shader_Draw(IMaterialVar** ppParams, IShaderShadow* pSh
 		BBools[LUX_PS_BOOL_ASW_NOOPACITY] = pContextData->m_bIsFullyOpaque;
 #endif
 
+		// b2
+		BBools[LUX_PS_BOOL_NOCULL] = HasFlag(MATERIAL_VAR_NOCULL);
+
 		// b4, b5, b6, b7, b8, b9, b10, b11
 		if (bHasPhong)
 		{
